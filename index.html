@@ -2671,40 +2671,50 @@ function quickAddSmartItem(menuId) {
 function parseOrderText(text) {
   if (!text.trim()) return [];
   const results = [];
-  // Normalise
-  let t = text.toLowerCase()
-    .replace(/\band\b/g, ',')
-    .replace(/\bwith\b/g, ',')
-    .replace(/\bplus\b/g, ',')
-    .replace(/\bone\b/g, '1')
-    .replace(/\btwo\b/g, '2')
-    .replace(/\bthree\b/g, '3')
-    .replace(/\bfour\b/g, '4')
-    .replace(/\bfive\b/g, '5')
-    .replace(/\bsix\b/g, '6')
-    .replace(/\bseven\b/g, '7')
-    .replace(/\beight\b/g, '8')
-    .replace(/\bnine\b/g, '9')
-    .replace(/\bten\b/g, '10');
 
-  // Split on commas or newlines
+  // ── Step 1: Normalize numbers (Hindi + English) ──────
+  let t = text.toLowerCase()
+    // Hindi number words
+    .replace(/\bek\b/g, '1').replace(/\bdo\b/g, '2').replace(/\bteen\b/g, '3')
+    .replace(/\bchar\b/g, '4').replace(/\bpaanch\b/g, '5').replace(/\bchheh\b/g, '6')
+    .replace(/\bsaat\b/g, '7').replace(/\baath\b/g, '8').replace(/\bnau\b/g, '9')
+    .replace(/\bdas\b/g, '10')
+    // English number words
+    .replace(/\bone\b/g, '1').replace(/\btwo\b/g, '2').replace(/\bthree\b/g, '3')
+    .replace(/\bfour\b/g, '4').replace(/\bfive\b/g, '5').replace(/\bsix\b/g, '6')
+    .replace(/\bseven\b/g, '7').replace(/\beight\b/g, '8').replace(/\bnine\b/g, '9')
+    .replace(/\bten\b/g, '10')
+    // Separators
+    .replace(/\band\b/g, ',').replace(/\baur\b/g, ',')
+    .replace(/\bwith\b/g, ',').replace(/\bplus\b/g, ',')
+    .replace(/\bor\b/g, ',');
+
+  // ── Step 2: Smart split — handles voice without commas ──
+  // Voice input: "2 butter chicken 1 naan 3 lassi" (no commas!)
+  // Split before any digit that follows a non-digit word
+  // e.g. "2 butter chicken 1 naan" → ["2 butter chicken", "1 naan"]
+  t = t.replace(/\s+(\d+)\s+/g, (match, num, offset) => {
+    // Don't split if digit is at start of string
+    if (offset === 0) return match;
+    return ', ' + num + ' ';
+  });
+
+  // ── Step 3: Split on commas/newlines ─────────────────
   const segments = t.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
 
   segments.forEach(seg => {
-    // Try to extract quantity and item name
-    // Patterns: "2 butter chicken", "butter chicken x2", "butter chicken 2"
     let qty = 1;
     let name = seg;
 
-    const leadMatch = seg.match(/^(\d+)\s+(.+)/);       // "2 butter chicken"
-    const trailMatch = seg.match(/^(.+?)\s+x?(\d+)$/i); // "butter chicken 2" or "butter chicken x2"
-    const xMatch = seg.match(/^(.+?)\s*x(\d+)$/i);      // "butter chicken x2"
+    const leadMatch  = seg.match(/^(\d+)\s+(.+)/);        // "2 butter chicken"
+    const trailMatch = seg.match(/^(.+?)\s+x?(\d+)$/i);   // "butter chicken 2"
+    const xMatch     = seg.match(/^(.+?)\s*x(\d+)$/i);    // "butter chicken x2"
 
-    if (xMatch) { name = xMatch[1].trim(); qty = parseInt(xMatch[2]); }
-    else if (leadMatch) { qty = parseInt(leadMatch[1]); name = leadMatch[2].trim(); }
+    if (xMatch)       { name = xMatch[1].trim();    qty = parseInt(xMatch[2]); }
+    else if (leadMatch)  { qty = parseInt(leadMatch[1]); name = leadMatch[2].trim(); }
     else if (trailMatch) { name = trailMatch[1].trim(); qty = parseInt(trailMatch[2]); }
 
-    // Find best matching menu item using fuzzy search
+    if (!name) return;
     const match = fuzzyFindMenu(name);
     results.push({ input: seg, qty, name, match });
   });
