@@ -1,0 +1,3785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="BillBlitz"/>
+<meta name="theme-color" content="#FFD700"/>
+<meta name="msapplication-TileColor" content="#0F1923"/>
+<!-- PWA Manifest inline -->
+<link rel="manifest" href="data:application/json;charset=utf-8,%7B%20%20%22name%22%3A%20%22BillBlitz%20Restaurant%20Manager%22%2C%20%20%22short_name%22%3A%20%22BillBlitz%22%2C%20%20%22description%22%3A%20%22Smart%20Restaurant%20Billing%20&%20Management%22%2C%20%20%22start_url%22%3A%20%22.%22%2C%20%20%22display%22%3A%20%22standalone%22%2C%20%20%22background_color%22%3A%20%22#0A0F1A%22%2C%20%20%22theme_color%22%3A%20%22#FFD700%22%2C%20%20%22orientation%22%3A%20%22any%22%2C%20%20%22icons%22%3A%20%5B%20%20%20%20%7B%20%20%20%20%20%20%22src%22%3A%20%22data%3Aimage/svg+xml%2C<svg%20xmlns=%27http%3A//www.w3.org/2000/svg%27%20viewBox=%270%200%20512%20512%27><rect%20width=%27512%27%20height=%27512%27%20rx=%27100%27%20fill=%27%230F1923%27/><text%20y=%27360%27%20x=%2760%27%20font-size=%27380%27%20font-family=%27Arial%27>⚡</text></svg>%22%2C%20%20%20%20%20%20%22sizes%22%3A%20%22any%22%2C%20%20%20%20%20%20%22type%22%3A%20%22image/svg+xml%22%2C%20%20%20%20%20%20%22purpose%22%3A%20%22any%20maskable%22%20%20%20%20%7D%20%20%5D%7D"/>
+<!-- Apple touch icons (inline SVG) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230F1923'/><text y='360' x='60' font-size='380'>⚡</text></svg>"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>⚡ BillBlitz — Restaurant Manager</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"/>
+<!-- Firebase SDK -->
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{font-size:16px;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(160deg,#EEF2FF 0%,#F0F7FF 50%,#E8F0FE 100%);color:#1A2B3C;min-height:100vh;overflow-x:hidden;}
+
+/* ── HEADER ── */
+.header{background:linear-gradient(135deg,#0F1923 0%,#1A2B3C 60%,#1E3A5F 100%);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:200;box-shadow:0 4px 24px rgba(15,25,35,0.6),0 1px 0 rgba(255,215,0,0.15);}
+.logo{color:#FFD700;font-size:1.3rem;font-weight:700;font-family:Georgia,serif;text-shadow:0 0 24px rgba(255,215,0,0.5);}
+.logo small{display:block;font-size:0.68rem;color:rgba(255,215,0,0.4);font-family:sans-serif;letter-spacing:0.05em;}
+.header-right{display:flex;align-items:center;gap:6px;}
+.hdr-time{color:rgba(255,255,255,0.5);font-size:0.7rem;font-family:sans-serif;}
+.hdr-btn{background:linear-gradient(135deg,#FFD700,#FF8C42);color:#0F1923;border:none;padding:9px 16px;border-radius:10px;font-weight:800;font-size:0.9rem;cursor:pointer;box-shadow:0 3px 10px rgba(255,140,66,0.5);}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(180deg,#101820,#0A1018);display:flex;z-index:300;box-shadow:0 -3px 20px rgba(0,0,0,0.6);border-top:1px solid rgba(255,215,0,0.1);}
+.bnav{flex:1;border:none;background:none;color:rgba(255,255,255,0.3);padding:11px 2px 9px;font-size:0.62rem;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:all 0.2s;text-transform:uppercase;letter-spacing:0.02em;}
+.bnav span{font-size:1.35rem;}
+.bnav.active{color:#FFD700;text-shadow:0 0 12px rgba(255,215,0,0.6);}
+
+/* ── CONTENT ── */
+.content{padding:16px 14px 90px;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* ── PAGE TITLES ── */
+.page-title{font-family:Georgia,serif;font-size:1.7rem;margin-bottom:16px;color:#0F1923;font-weight:700;}
+.section-lbl{font-size:0.78rem;font-weight:700;color:#6B7A99;text-transform:uppercase;letter-spacing:0.06em;margin:14px 0 7px;}
+
+/* ── STAT CARDS ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.stat-card{background:linear-gradient(135deg,#fff,#F7F9FF);border-radius:16px;padding:18px 15px;border:1px solid #E2E8F5;box-shadow:0 6px 20px rgba(37,99,235,0.1);position:relative;overflow:hidden;}
+.stat-icon{font-size:1.7rem;margin-bottom:6px;}
+.stat-val{font-size:1.75rem;font-weight:800;line-height:1;}
+.stat-lbl{font-size:0.75rem;color:#6B7A99;margin-top:4px;font-weight:600;}
+
+/* ── CARDS ── */
+.card{background:#fff;border-radius:16px;border:1px solid #E2E8F5;overflow:hidden;margin-bottom:12px;box-shadow:0 6px 20px rgba(37,99,235,0.08);}
+.card-header{padding:14px 16px;background:linear-gradient(135deg,#F7F9FF,#EEF2FF);border-bottom:1px solid #E2E8F5;display:flex;justify-content:space-between;align-items:center;}
+.card-title{font-weight:700;font-size:1rem;color:#0F1923;}
+.card-body{padding:14px 16px;}
+
+/* ── ALERTS ── */
+.alert{border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:0.88rem;}
+.alert-red{background:#FFE8E8;border:1.5px solid #FF6B35;color:#FF6B35;}
+.alert-yellow{background:#FEF9C3;border:1.5px solid #FFD700;color:#92400E;}
+.alert-green{background:#DCFCE7;border:1.5px solid #00A878;color:#00A878;}
+.alert strong{display:block;margin-bottom:4px;font-size:0.82rem;}
+
+/* ── BUTTONS ── */
+.btn{padding:14px 18px;border-radius:12px;border:none;font-weight:700;font-size:1rem;cursor:pointer;font-family:inherit;transition:all 0.2s;}
+.btn:active{transform:scale(0.97);opacity:0.9;}
+.btn-primary{background:linear-gradient(135deg,#FF6B35,#FF4500);color:#fff;box-shadow:0 4px 14px rgba(255,107,53,0.45);}
+.btn-green{background:linear-gradient(135deg,#00A878,#00C896);color:#fff;box-shadow:0 4px 14px rgba(0,168,120,0.4);}
+.btn-gold{background:linear-gradient(135deg,#FFD700,#FFA500);color:#0F1923;box-shadow:0 4px 14px rgba(255,165,0,0.4);}
+.btn-outline{background:none;border:1.5px solid #A5B4FC;color:#6B7A99;}
+.btn-red{background:#FFE8E8;color:#FF6B35;border:none;}
+.btn-blue{background:linear-gradient(135deg,#2563EB,#4A90E2);color:#fff;box-shadow:0 4px 14px rgba(37,99,235,0.4);}
+.btn-sm{padding:8px 14px;font-size:0.82rem;border-radius:9px;}
+.btn-row{display:flex;gap:8px;margin-top:12px;}
+.btn-full{width:100%;}
+.btn:disabled{background:#E2E8F5;color:#A0AEC0;cursor:not-allowed;box-shadow:none;}
+
+/* ── FORMS ── */
+.form-group{margin-bottom:14px;}
+.form-label{display:block;font-size:0.8rem;font-weight:700;color:#6B7A99;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px;}
+.form-inp{width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid #E2E8F5;background:#F7F9FF;font-size:1rem;color:#1A2B3C;font-family:inherit;transition:all 0.2s;}
+.form-inp:focus{outline:none;border-color:#A5B4FC;background:#fff;box-shadow:0 0 0 3px rgba(165,180,252,0.2);}
+.form-select{width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid #A5B4FC;background:#F7F9FF;font-size:1rem;color:#1A2B3C;font-family:inherit;}
+.form-ta{width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid #A5B4FC;background:#F7F9FF;font-size:1rem;color:#1A2B3C;height:80px;resize:vertical;font-family:inherit;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+/* ── MODAL ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:none;align-items:flex-end;}
+.overlay.open{display:flex;}
+.modal{background:linear-gradient(180deg,#FFFFFF,#F7F9FF);border-radius:24px 24px 0 0;padding:22px 18px 36px;width:100%;max-height:93vh;overflow-y:auto;}
+.modal-handle{width:36px;height:4px;background:#A5B4FC;border-radius:2px;margin:0 auto 14px;}
+.modal-title{font-family:Georgia,serif;font-size:1.25rem;color:#0F1923;margin-bottom:14px;}
+.modal-tabs{display:flex;gap:3px;background:#EEF2FF;border-radius:8px;padding:3px;margin-bottom:13px;}
+.mtab{flex:1;border:none;background:none;padding:9px 6px;border-radius:8px;font-weight:700;font-size:0.82rem;cursor:pointer;color:#6B7A99;}
+.mtab.active{background:#FF6B35;color:#fff;}
+
+/* ── SEARCH ── */
+.search-inp{width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid #A5B4FC;background:#fff;font-size:1rem;color:#1A2B3C;margin-bottom:14px;box-shadow:0 2px 8px rgba(165,180,252,0.15);}
+
+/* ── LIST ROWS ── */
+.list-row{display:flex;align-items:center;gap:12px;background:#fff;border-radius:16px;padding:14px 16px;margin-bottom:10px;border:1px solid #E2E8F5;cursor:pointer;box-shadow:0 2px 10px rgba(37,99,235,0.06);transition:box-shadow 0.2s;}
+.list-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;}
+.list-main{flex:1;min-width:0;}
+.list-title{font-weight:700;font-size:1rem;}
+.list-sub{font-size:0.8rem;color:#6B7A99;margin-top:2px;}
+.list-right{text-align:right;flex-shrink:0;}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto;border-radius:12px;border:1px solid #E2E8F5;}
+table{width:100%;border-collapse:collapse;font-size:0.88rem;min-width:420px;}
+thead tr{background:#F7F9FF;}
+th{padding:10px 12px;text-align:left;font-size:0.75rem;font-weight:700;color:#6B7A99;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1.5px solid #E2E8F5;}
+td{padding:10px 12px;border-bottom:1px solid #E2E8F5;color:#1A2B3C;}
+tr:last-child td{border-bottom:none;}
+tr:nth-child(even) td{background:#FFFFFF;}
+
+/* ── BADGES ── */
+.badge{padding:4px 12px;border-radius:20px;font-size:0.78rem;font-weight:700;}
+.badge-green{background:#DCFCE7;color:#00A878;}
+.badge-red{background:#FFE8E8;color:#FF6B35;}
+.badge-yellow{background:linear-gradient(135deg,#FEF9C3,#FDE68A);color:#92400E;}
+.badge-blue{background:#DBEAFE;color:#2563EB;}
+
+/* ── POS ── */
+.menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;}
+.menu-item-btn{background:linear-gradient(135deg,#fff,#F7F9FF);border:1.5px solid #E2E8F5;border-radius:14px;padding:16px 10px;cursor:pointer;text-align:center;transition:all 0.15s;box-shadow:0 3px 10px rgba(37,99,235,0.07);}
+.menu-item-btn:active{background:linear-gradient(135deg,#FFF5F0,#FFE8E0);border-color:#FF6B35;transform:scale(0.96);}
+.menu-item-btn .mi-icon{font-size:1.8rem;margin-bottom:5px;}
+.menu-item-btn .mi-name{font-size:0.78rem;font-weight:700;color:#0F1923;}
+.menu-item-btn .mi-price{font-size:0.85rem;color:#FF6B35;font-weight:700;margin-top:2px;}
+.menu-cat-tabs{display:flex;gap:5px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;scrollbar-width:none;}
+.menu-cat-tabs::-webkit-scrollbar{display:none;}
+.cat-tab{border:none;background:#fff;border:1.5px solid #E2E8F5;border-radius:20px;padding:9px 16px;font-size:0.85rem;font-weight:700;cursor:pointer;white-space:nowrap;color:#4B5EAA;box-shadow:0 2px 8px rgba(165,180,252,0.15);}
+.cat-tab.active{background:linear-gradient(135deg,#FF6B35,#FF4500);color:#fff;border-color:#FF6B35;box-shadow:0 4px 12px rgba(255,107,53,0.4);}
+
+/* ORDER ITEMS */
+.order-item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #E2E8F5;}
+.order-item:last-child{border-bottom:none;}
+.oi-name{flex:1;font-size:0.98rem;font-weight:600;}
+.oi-qty{display:flex;align-items:center;gap:6px;}
+.qty-btn{width:36px;height:36px;border-radius:50%;border:none;background:#EEF2FF;color:#1A2B3C;font-size:1.2rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+.oi-price{font-size:0.98rem;font-weight:700;color:#FF6B35;min-width:60px;text-align:right;}
+
+/* BILL SUMMARY */
+.bill-row{display:flex;justify-content:space-between;padding:8px 0;font-size:0.95rem;}
+.bill-total{display:flex;justify-content:space-between;padding:12px 0;font-size:1.15rem;font-weight:800;border-top:2px solid #E2E8F5;margin-top:4px;}
+
+/* STAMP CARD (MINI) */
+.stamp-card-mini{background:linear-gradient(135deg,#1A2B3C,#1E3A5F);border-radius:12px;padding:13px;color:#F7F9FF;}
+.sc-stamps{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
+.sc-dot{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.sc-dot.on{background:linear-gradient(135deg,#FFD700,#FF8C42);}
+.sc-dot.off{background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.3);}
+
+/* INVENTORY */
+.stock-bar-wrap{background:#E2E8F5;border-radius:4px;height:6px;margin-top:4px;}
+.stock-bar{height:6px;border-radius:4px;transition:width 0.3s;}
+
+/* TOAST */
+.toast{position:fixed;bottom:85px;left:50%;transform:translateX(-50%);padding:13px 24px;border-radius:28px;font-size:0.95rem;color:#fff;font-weight:700;font-size:0.83rem;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:9999;display:none;white-space:nowrap;max-width:90vw;text-align:center;}
+.toast.show{display:block;animation:fadeup 0.3s ease;}
+@keyframes fadeup{from{opacity:0;transform:translateX(-50%) translateY(10px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+
+/* REPORT TABS */
+.rep-tabs{display:flex;gap:4px;margin-bottom:13px;}
+.rep-tab{flex:1;padding:7px;border-radius:8px;border:1.5px solid #E2E8F5;background:#fff;font-weight:700;font-size:0.75rem;cursor:pointer;color:#6B7A99;text-align:center;}
+.rep-tab.active{background:#2563EB;color:#fff;border-color:#2563EB;}
+
+/* LOYALTY mini integration */
+.loyalty-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:linear-gradient(135deg,#F7F9FF,#EEF2FF);border-radius:12px;border:1px solid #E2E8F5;margin-bottom:8px;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,0.06);}
+.loy-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.8rem;flex-shrink:0;}
+
+/* CHIPS */
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.chip{padding:6px 13px;border-radius:20px;font-size:0.82rem;font-weight:700;cursor:pointer;}
+.chip-red{background:#FF6B35;color:#fff;}
+.chip-yellow{background:#FFD700;color:#1A2B3C;}
+
+/* EMPTY */
+.empty{text-align:center;padding:2.5rem 1rem;color:#6B7A99;opacity:0.6;font-size:0.88rem;}
+
+/* SMART ORDER INPUT */
+.smart-input-wrap{background:linear-gradient(135deg,#0F1923,#1E3A5F);border-radius:14px;padding:14px;margin-bottom:12px;border:2px solid #FFD700;}
+.smart-label{color:#FFD700;font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.smart-label span{font-size:1rem;}
+.smart-inp-row{display:flex;gap:6px;align-items:center;}
+.smart-inp{flex:1;padding:13px 14px;border-radius:12px;border:none;background:rgba(255,255,255,0.12);color:#fff;font-size:1rem;font-family:inherit;outline:none;}
+.smart-inp::placeholder{color:rgba(255,255,255,0.4);}
+.smart-inp:focus{background:rgba(255,255,255,0.18);}
+.voice-btn{width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF6B35,#FF8C42);color:#fff;font-size:1.4rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.2s;}
+.voice-btn.listening{background:linear-gradient(135deg,#FF6B35,#FF6B35);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(200,75,49,0.5);}50%{box-shadow:0 0 0 10px rgba(200,75,49,0);}}
+.smart-go-btn{padding:13px 16px;border-radius:12px;border:none;background:linear-gradient(135deg,#FFD700,#FFA500);color:#0F1923;font-weight:800;font-size:0.95rem;cursor:pointer;flex-shrink:0;}
+.smart-suggestions{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.smart-sug{padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);font-size:0.72rem;cursor:pointer;border:none;font-family:inherit;}
+.smart-sug:active{background:rgba(245,200,66,0.3);}
+.smart-result{margin-top:10px;background:rgba(255,255,255,0.08);border-radius:10px;padding:10px;display:none;}
+.smart-result.show{display:block;}
+.smart-result-item{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-size:0.82rem;color:#fff;}
+.smart-result-item:last-child{border-bottom:none;}
+.smart-result-item .sr-found{color:#4ADE80;}
+.smart-result-item .sr-notfound{color:#F87171;}
+.smart-result-title{color:rgba(255,255,255,0.5);font-size:0.7rem;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;}
+
+
+/* DIVIDER */
+.divider{height:1px;background:#E2E8F5;margin:12px 0;}
+
+/* AVATAR */
+.avatar{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1rem;flex-shrink:0;}
+
+/* PURCHASE STATUS */
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;}
+
+/* LOGIN SCREEN */
+.login-screen{position:fixed;inset:0;background:linear-gradient(160deg,#0A0F1A 0%,#0F1923 40%,#1A2B3C 100%);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+.login-logo{color:#FFD700;font-size:2.2rem;font-family:Georgia,serif;font-weight:700;margin-bottom:6px;text-align:center;}
+.login-sub{color:rgba(245,200,66,0.5);font-size:0.75rem;margin-bottom:32px;text-align:center;}
+.login-card{background:linear-gradient(180deg,#FFFFFF,#F7F9FF);border-radius:20px;padding:22px 18px;width:100%;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.4),0 0 0 1px rgba(255,215,0,0.1);}
+.login-title{font-family:Georgia,serif;font-size:1.1rem;color:#0F1923;margin-bottom:4px;text-align:center;}
+.login-hint{font-size:0.72rem;color:#6B7A99;text-align:center;margin-bottom:16px;}
+.role-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.role-btn{padding:13px 8px;border-radius:14px;border:2px solid #E2E8F5;background:linear-gradient(135deg,#F7F9FF,#EEF2FF);cursor:pointer;text-align:center;transition:all 0.2s;width:100%;}
+.role-btn.selected{border-color:#FF6B35;background:linear-gradient(135deg,#FFF5F0,#FFE8E0);box-shadow:0 4px 14px rgba(255,107,53,0.25);}
+.role-btn .rb-icon{font-size:2rem;margin-bottom:6px;}
+.role-btn .rb-name{font-size:0.8rem;font-weight:700;color:#0F1923;}
+.role-btn .rb-desc{font-size:0.63rem;color:#6B7A99;}
+.pin-dots{display:flex;justify-content:center;gap:14px;margin:18px 0;}
+.pin-dot{width:16px;height:16px;border-radius:50%;background:#E2E8F5;transition:background 0.2s;}
+.pin-dot.filled{background:#FF6B35;}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+.pin-key{padding:18px;border-radius:14px;border:1.5px solid #E2E8F5;background:linear-gradient(135deg,#fff,#F7F9FF);box-shadow:0 3px 10px rgba(0,0,0,0.08);font-size:1.3rem;font-weight:700;cursor:pointer;text-align:center;color:#0F1923;transition:all 0.15s;font-family:inherit;}
+.pin-key:active{background:#EEF2FF;border-color:#FF6B35;}
+.pin-key.zero{grid-column:2;}
+.pin-key.del{background:#FFE8E8;color:#FF6B35;border-color:#F0C0B0;}
+.login-error{color:#FF6B35;font-size:0.78rem;text-align:center;margin-top:8px;min-height:18px;}
+
+/* ROLE BADGE IN HEADER */
+.role-badge{padding:5px 11px;border-radius:20px;font-size:0.75rem;font-weight:700;}
+.role-owner{background:linear-gradient(135deg,#FEF9C3,#FDE68A);color:#92400E;}
+.role-cashier{background:#DCFCE7;color:#00A878;}
+
+/* PRINT */
+@media print {
+  .header,.bottom-nav,.smart-input-wrap,.btn-row,.modal,.toast,
+  .voice-btn,.smart-go-btn,.menu-cat-tabs,.menu-grid,.login-screen,
+  #pos-cat-tabs,.card-header button { display:none!important; }
+  body{background:#fff;}
+  .content{padding:0;}
+  @page{margin:8mm;}
+}
+
+/* ══════════════════════════════════════════
+   LICENSE / TRIAL SYSTEM STYLES
+══════════════════════════════════════════ */
+.lic-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,#0A0F1A 0%,#0F1923 50%,#1A2B3C 100%);}
+.lic-box{width:100%;max-width:360px;text-align:center;}
+
+/* Trial active badge */
+.trial-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#FFD700,#FFA500);color:#0F1923;padding:6px 16px;border-radius:20px;font-size:0.75rem;font-weight:800;margin-bottom:20px;box-shadow:0 4px 16px rgba(255,165,0,0.5);}
+
+/* Logo on license screen */
+.lic-logo{color:#FFD700;font-size:2.5rem;font-family:Georgia,serif;font-weight:700;text-shadow:0 0 30px rgba(255,215,0,0.6);margin-bottom:6px;}
+.lic-tagline{color:rgba(255,255,255,0.4);font-size:0.72rem;margin-bottom:28px;letter-spacing:0.05em;}
+
+/* Trial card */
+.lic-card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:24px 20px;backdrop-filter:blur(10px);margin-bottom:16px;}
+.lic-card-title{color:#fff;font-size:1.1rem;font-weight:700;margin-bottom:8px;}
+.lic-card-sub{color:rgba(255,255,255,0.5);font-size:0.85rem;line-height:1.6;margin-bottom:18px;}
+
+/* Trial countdown ring */
+.trial-ring-wrap{display:flex;justify-content:center;margin-bottom:16px;}
+.trial-ring{width:90px;height:90px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;}
+.trial-ring-num{font-size:2rem;font-weight:800;color:#FFD700;line-height:1;}
+.trial-ring-lbl{font-size:0.6rem;color:rgba(255,255,255,0.5);font-weight:600;text-transform:uppercase;}
+.trial-ring-svg{position:absolute;top:0;left:0;transform:rotate(-90deg);}
+
+/* Key input */
+.lic-key-inp{width:100%;padding:15px 16px;border-radius:14px;font-size:1.05rem;border:1.5px solid rgba(255,215,0,0.3);background:rgba(255,255,255,0.08);color:#fff;font-size:0.95rem;font-family:'Courier New',monospace;text-align:center;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px;outline:none;}
+.lic-key-inp::placeholder{color:rgba(255,255,255,0.25);letter-spacing:0.05em;font-family:sans-serif;text-transform:none;}
+.lic-key-inp:focus{border-color:#FFD700;box-shadow:0 0 0 3px rgba(255,215,0,0.15);}
+.lic-activate-btn{width:100%;padding:16px;border-radius:14px;font-size:1rem;border:none;background:linear-gradient(135deg,#FFD700,#FFA500);color:#0F1923;font-weight:800;font-size:0.95rem;cursor:pointer;box-shadow:0 6px 20px rgba(255,165,0,0.5);margin-bottom:10px;font-family:inherit;}
+.lic-activate-btn:active{transform:scale(0.97);}
+.lic-wa-btn{width:100%;padding:14px;border-radius:14px;border:1.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);font-weight:600;font-size:0.92rem;cursor:pointer;font-family:inherit;}
+.lic-wa-btn:active{background:rgba(255,255,255,0.1);}
+
+/* Lock screen */
+.lic-expired-icon{font-size:3.5rem;margin-bottom:12px;}
+.lic-expired-title{color:#FF6B35;font-size:1.2rem;font-weight:800;margin-bottom:8px;}
+.lic-expired-sub{color:rgba(255,255,255,0.5);font-size:0.8rem;line-height:1.6;margin-bottom:20px;}
+
+/* Status bar */
+.lic-status{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:0.65rem;font-weight:700;position:fixed;top:56px;right:10px;z-index:199;}
+.lic-status.trial{background:rgba(255,215,0,0.15);color:#FFD700;border:1px solid rgba(255,215,0,0.3);}
+.lic-status.active{background:rgba(0,168,120,0.15);color:#00C896;border:1px solid rgba(0,168,120,0.3);}
+.lic-status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+/* Checking overlay */
+.lic-checking{color:rgba(255,255,255,0.6);font-size:0.82rem;margin-top:10px;}
+.lic-spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.2);border-top-color:#FFD700;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.print-area{font-family:'Courier New',monospace;font-size:12px;}
+.pr-center{text-align:center;}
+.pr-line{border-top:1px dashed #000;margin:6px 0;}
+.pr-row{display:flex;justify-content:space-between;margin:2px 0;}
+.pr-total{display:flex;justify-content:space-between;font-weight:700;border-top:2px solid #000;padding-top:5px;margin-top:3px;font-size:14px;}
+.pr-bold{font-weight:700;}
+
+/* BACKUP/SYNC */
+/* SYNC INDICATOR */
+.sync-indicator{position:fixed;top:56px;left:10px;z-index:198;display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:0.62rem;font-weight:700;background:rgba(0,200,150,0.12);border:1px solid rgba(0,200,150,0.25);color:#00C896;transition:all 0.3s;}
+.sync-indicator.syncing{background:rgba(255,215,0,0.12);border-color:rgba(255,215,0,0.3);color:#FFD700;}
+.sync-indicator.error{background:rgba(255,107,53,0.12);border-color:rgba(255,107,53,0.3);color:#FF6B35;}
+.sync-indicator.offline{background:rgba(107,122,153,0.12);border-color:rgba(107,122,153,0.3);color:#6B7A99;}
+.sync-dot{width:5px;height:5px;border-radius:50%;background:currentColor;}
+.sync-dot.pulse{animation:blink 1.5s infinite;}
+/* ANNOUNCEMENT */
+.ann-banner{background:linear-gradient(135deg,#2563EB,#4A90E2);color:#fff;padding:8px 14px;font-size:0.78rem;font-weight:600;display:none;align-items:center;gap:8px;position:sticky;top:48px;z-index:190;}
+.ann-banner.show{display:flex;}
+.ann-close{margin-left:auto;background:none;border:none;color:#fff;font-size:1rem;cursor:pointer;opacity:0.7;}
+
+.sync-card{background:linear-gradient(135deg,#2563EB,#4A90E2);border-radius:14px;padding:16px;color:#fff;margin-bottom:12px;}
+.sync-title{font-size:0.95rem;font-weight:700;margin-bottom:4px;}
+.sync-sub{font-size:0.7rem;opacity:0.75;margin-bottom:12px;line-height:1.4;}
+.sync-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.sync-btn{padding:12px 16px;border-radius:10px;border:none;font-weight:700;font-size:0.88rem;cursor:pointer;font-family:inherit;}
+.sync-btn-white{background:#fff;color:#2563EB;}
+.sync-btn-outline{background:rgba(255,255,255,0.15);color:#fff;border:1.5px solid rgba(255,255,255,0.35);}
+/* ═══════════════════════════════════════════════════════
+   DESKTOP / LAPTOP RESPONSIVE LAYOUT
+   768px+ = Sidebar nav, wider layout, multi-column
+═══════════════════════════════════════════════════════ */
+
+/* DESKTOP SIDEBAR */
+.sidebar{display:none;}
+.desktop-header{display:none;}
+
+@media (min-width: 768px) {
+  /* Hide mobile elements */
+  .bottom-nav{display:none!important;}
+  .header{display:none!important;}
+
+  /* Show desktop layout */
+  .desktop-header{
+    display:flex;align-items:center;justify-content:space-between;
+    background:linear-gradient(135deg,#0F1923,#1A2B3C,#1E3A5F);
+    padding:0 24px;height:58px;position:fixed;top:0;left:240px;right:0;z-index:200;
+    box-shadow:0 2px 16px rgba(0,0,0,0.4);border-bottom:1px solid rgba(255,215,0,0.1);
+  }
+  .dh-left{display:flex;align-items:center;gap:12px;}
+  .dh-page-title{color:#fff;font-size:1rem;font-weight:700;}
+  .dh-right{display:flex;align-items:center;gap:10px;}
+  .dh-time{color:rgba(255,255,255,0.45);font-size:0.78rem;}
+  .dh-btn{background:linear-gradient(135deg,#FFD700,#FF8C42);color:#0F1923;border:none;padding:8px 16px;border-radius:9px;font-weight:800;font-size:0.82rem;cursor:pointer;box-shadow:0 3px 10px rgba(255,140,66,0.45);}
+  .dh-role{padding:4px 12px;border-radius:20px;font-size:0.7rem;font-weight:700;}
+
+  /* Sidebar */
+  .sidebar{
+    display:flex;flex-direction:column;
+    position:fixed;left:0;top:0;bottom:0;width:240px;
+    background:linear-gradient(180deg,#0A1018,#0F1923,#0A1018);
+    border-right:1px solid rgba(255,215,0,0.08);
+    z-index:300;overflow-y:auto;
+  }
+  .sb-logo{padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,0.06);}
+  .sb-logo-text{color:#FFD700;font-size:1.2rem;font-weight:700;font-family:Georgia,serif;text-shadow:0 0 20px rgba(255,215,0,0.4);}
+  .sb-logo-sub{font-size:0.62rem;color:rgba(255,215,0,0.35);letter-spacing:0.06em;margin-top:2px;}
+  .sb-section{padding:14px 12px 4px;font-size:0.6rem;font-weight:700;color:rgba(255,255,255,0.2);text-transform:uppercase;letter-spacing:0.08em;}
+  .sb-nav{padding:4px 10px;}
+  .sb-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;color:rgba(255,255,255,0.45);font-size:0.85rem;font-weight:600;transition:all 0.2s;border:none;background:none;width:100%;text-align:left;font-family:inherit;}
+  .sb-item:hover{background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.8);}
+  .sb-item.active{background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,140,66,0.08));color:#FFD700;box-shadow:inset 2px 0 0 #FFD700;}
+  .sb-item .sb-icon{font-size:1.1rem;width:22px;text-align:center;}
+  .sb-item .sb-badge{margin-left:auto;background:rgba(255,107,53,0.25);color:#FF6B35;border-radius:20px;padding:1px 7px;font-size:0.64rem;font-weight:700;}
+  .sb-footer{margin-top:auto;padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);}
+  .sb-user{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.04);}
+  .sb-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#FFD700,#FF8C42);display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:800;color:#0F1923;}
+  .sb-user-info{flex:1;}
+  .sb-user-name{font-size:0.78rem;font-weight:700;color:#fff;}
+  .sb-user-role{font-size:0.62rem;color:rgba(255,255,255,0.35);}
+  .sb-logout{background:none;border:none;color:rgba(255,255,255,0.35);cursor:pointer;font-size:0.82rem;padding:4px;}
+
+  /* Main content shift */
+  .content{
+    margin-left:240px;margin-top:58px;
+    padding:24px 28px 40px;
+    min-height:calc(100vh - 58px);
+  }
+
+  /* Wider layouts */
+  .stats-grid{grid-template-columns:repeat(4,1fr)!important;}
+  .form-row{grid-template-columns:1fr 1fr;}
+  .menu-grid{grid-template-columns:repeat(4,1fr)!important;}
+  .modal{border-radius:16px!important;max-width:520px;}
+  .overlay{align-items:center!important;}
+
+  /* POS split layout */
+  .pos-layout{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start;}
+  .pos-left{} /* menu side */
+  .pos-right{position:sticky;top:80px;} /* order side */
+
+  /* Reports wider table */
+  table{min-width:auto!important;}
+
+  /* Page title */
+  .page-title{font-size:1.8rem!important;}
+
+  /* Cards grid on dashboard */
+  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .dash-full{grid-column:1/-1;}
+
+  /* List rows hover */
+  .list-row:hover{box-shadow:0 6px 20px rgba(37,99,235,0.12);transform:translateY(-1px);transition:all 0.2s;}
+
+  /* Inventory grid */
+  .inv-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  /* Loyalty grid */
+  .loyalty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+}
+
+@media (min-width: 1200px) {
+  .sidebar{width:260px;}
+  .desktop-header{left:260px;}
+  .content{margin-left:260px;padding:28px 36px 40px;}
+  .stats-grid{grid-template-columns:repeat(4,1fr)!important;}
+  .menu-grid{grid-template-columns:repeat(5,1fr)!important;}
+  .loyalty-grid{grid-template-columns:repeat(4,1fr);}
+}
+
+/* ══ FIREBASE LAYOUT CONTROL ══════════════════════════════
+   Firebase Console: clients → {licenseKey} → layoutMode
+   Values: "auto" | "mobile" | "desktop"
+══════════════════════════════════════════════════════════ */
+body[data-layout=mobile] .bottom-nav{display:flex!important;}
+body[data-layout=mobile] .sidebar{display:none!important;}
+body[data-layout=mobile] .main-wrap{margin-left:0!important;}
+body[data-layout=mobile] .pos-split{flex-direction:column!important;}
+body[data-layout=mobile] .pos-right{width:100%!important;}
+body[data-layout=desktop] .bottom-nav{display:none!important;}
+body[data-layout=desktop] .sidebar{display:flex!important;width:240px!important;}
+body[data-layout=desktop] .main-wrap{margin-left:240px!important;}
+body[data-layout=desktop] .stats-grid{grid-template-columns:repeat(4,1fr)!important;}
+body[data-layout=desktop] .pos-split{flex-direction:row!important;gap:20px!important;}
+body[data-layout=desktop] .pos-right{width:360px!important;flex-shrink:0!important;}
+body[data-layout=desktop] .menu-grid{grid-template-columns:repeat(3,1fr)!important;}
+.layout-badge{position:fixed;top:12px;right:12px;z-index:9999;background:rgba(37,99,235,0.92);color:#fff;font-size:0.7rem;font-weight:700;padding:5px 12px;border-radius:20px;display:none;gap:5px;align-items:center;}
+.layout-badge.show{display:flex;}
+
+/* ══ BLUETOOTH PRINTER UI ══════════════════════════════════ */
+.bt-bar{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#0F1923,#162030);border:1px solid rgba(255,215,0,0.2);border-radius:14px;padding:12px 14px;margin-bottom:12px;}
+.bt-status{width:10px;height:10px;border-radius:50%;background:#6B7A99;flex-shrink:0;transition:all 0.3s;}
+.bt-status.connected{background:#00C896;box-shadow:0 0 8px #00C896;}
+.bt-status.connecting{background:#FFD700;animation:pulse 1s infinite;}
+.bt-status.error{background:#FF6B35;}
+.bt-info{flex:1;}
+.bt-name{font-size:0.82rem;font-weight:700;color:#fff;}
+.bt-sub{font-size:0.72rem;color:rgba(255,255,255,0.4);}
+.bt-btn{padding:8px 14px;border-radius:10px;border:none;font-weight:700;font-size:0.8rem;cursor:pointer;font-family:inherit;transition:all 0.2s;}
+.bt-btn-connect{background:linear-gradient(135deg,#2563EB,#4A90E2);color:#fff;}
+.bt-btn-disconnect{background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.3);}
+.bt-print-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.bt-print-btn{flex:1;min-width:100px;padding:10px 8px;border-radius:10px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;text-align:center;transition:all 0.2s;border:1px solid rgba(255,255,255,0.08);}
+.bt-print-btn:active{background:rgba(255,215,0,0.15);color:#FFD700;}
+.bt-print-btn.loading{opacity:0.5;pointer-events:none;}
+.bt-settings-row{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);}
+.bt-paper-select{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:7px 10px;border-radius:8px;font-size:0.8rem;font-family:inherit;flex:1;}
+.bt-paper-select option{background:#1A2B3C;color:#fff;}
+
+</style>
+
+<!-- DESKTOP SIDEBAR (hidden on mobile) -->
+<div class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-text">⚡ BillBlitz</div>
+    <div class="sb-logo-sub">RESTAURANT MANAGER</div>
+  </div>
+  <div class="sb-section">Main Menu</div>
+  <div class="sb-nav">
+    <button class="sb-item active" id="sb-dashboard" onclick="setPage('dashboard')"><span class="sb-icon">🏠</span> Dashboard</button>
+    <button class="sb-item" id="sb-billing" onclick="setPage('billing')"><span class="sb-icon">🧾</span> Billing / POS</button>
+    <button class="sb-item" id="sb-menu" onclick="setPage('menu')"><span class="sb-icon">🍜</span> Menu</button>
+  </div>
+  <div class="sb-section">Operations</div>
+  <div class="sb-nav">
+    <button class="sb-item" id="sb-inventory" onclick="setPage('inventory')"><span class="sb-icon">📦</span> Inventory <span class="sb-badge" id="sb-lowstock-badge" style="display:none">!</span></button>
+    <button class="sb-item" id="sb-purchases" onclick="setPage('purchases')"><span class="sb-icon">🛒</span> Purchases</button>
+    <button class="sb-item" id="sb-loyalty" onclick="setPage('loyalty')"><span class="sb-icon">⭐</span> Loyalty</button>
+  </div>
+  <div class="sb-section">Analytics</div>
+  <div class="sb-nav">
+    <button class="sb-item" id="sb-reports" onclick="setPage('reports')"><span class="sb-icon">📊</span> Reports</button>
+    <button class="sb-item" id="sb-settings" onclick="setPage('settings')"><span class="sb-icon">⚙️</span> Settings</button>
+  </div>
+  <div class="sb-footer">
+    <div class="sb-user">
+      <div class="sb-avatar" id="sb-avatar">?</div>
+      <div class="sb-user-info">
+        <div class="sb-user-name" id="sb-role-name">Owner</div>
+        <div class="sb-user-role" id="sb-lic-info">Loading...</div>
+      </div>
+      <button class="sb-logout" onclick="logoutConfirm()" title="Logout">🔒</button>
+    </div>
+  </div>
+</div>
+
+<!-- DESKTOP HEADER -->
+<div class="desktop-header" id="desktop-header">
+  <div class="dh-left">
+    <div class="dh-page-title" id="dh-page-title">🏠 Dashboard</div>
+  </div>
+  <div class="dh-right">
+    <div class="dh-time" id="dh-time"></div>
+    <div id="dh-sync" style="font-size:0.72rem;color:rgba(255,255,255,0.4)"></div>
+    <span id="dh-role-badge" class="dh-role role-owner">👑 Owner</span>
+    <button class="dh-btn" onclick="quickBill()">+ New Bill</button>
+  </div>
+</div>
+<!-- END DESKTOP -->
+</head>
+<body>
+
+<!-- ══════════ LICENSE / TRIAL OVERLAY ══════════ -->
+<div class="lic-overlay" id="lic-overlay">
+  <div class="lic-box">
+    <div class="lic-logo">⚡ BillBlitz</div>
+    <div class="lic-tagline">RESTAURANT MANAGER</div>
+
+    <!-- TRIAL ACTIVE STATE -->
+    <div id="lic-trial-view" style="display:none">
+      <div class="trial-badge">🎁 FREE TRIAL ACTIVE</div>
+      <div class="lic-card">
+        <div class="trial-ring-wrap">
+          <div class="trial-ring" id="trial-ring">
+            <svg class="trial-ring-svg" width="90" height="90">
+              <circle cx="45" cy="45" r="38" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
+              <circle cx="45" cy="45" r="38" fill="none" stroke="#FFD700" stroke-width="6"
+                stroke-dasharray="239" id="trial-arc" stroke-linecap="round"/>
+            </svg>
+            <div class="trial-ring-num" id="trial-days-left">30</div>
+            <div class="trial-ring-lbl">Days Left</div>
+          </div>
+        </div>
+        <div class="lic-card-title">Trial Period Chal Raha Hai</div>
+        <div class="lic-card-sub">Aapka free trial chal raha hai. License key activate karein for unlimited access.</div>
+        <input class="lic-key-inp" id="lic-key-inp" placeholder="License key darj karein (optional)" maxlength="20"/>
+        <button class="lic-activate-btn" onclick="activateLicense()">🔑 License Activate Karein</button>
+        <button class="lic-wa-btn" onclick="trialContinue()">▶ Trial Se Continue Karein</button>
+      </div>
+      <div id="lic-msg" style="color:#FF6B35;font-size:0.78rem;margin-top:8px;min-height:20px;"></div>
+    </div>
+
+    <!-- EXPIRED / LOCK STATE -->
+    <div id="lic-expired-view" style="display:none">
+      <div class="lic-card">
+        <div class="lic-expired-icon">🔒</div>
+        <div class="lic-expired-title">Trial Khatam Ho Gaya!</div>
+        <div class="lic-expired-sub">Aapka 30 din ka free trial expire ho gaya hai.<br>App use karne ke liye license key activate karein.</div>
+        <input class="lic-key-inp" id="lic-key-exp" placeholder="License key yahan darj karein" maxlength="20"/>
+        <button class="lic-activate-btn" onclick="activateLicenseExpired()">🔑 Activate &amp; Unlock</button>
+        <button class="lic-wa-btn" onclick="contactWhatsApp()">📲 WhatsApp Par Key Maangein</button>
+      </div>
+      <div id="lic-msg2" style="color:#FF6B35;font-size:0.78rem;margin-top:10px;min-height:20px;"></div>
+    </div>
+
+    <!-- CHECKING STATE -->
+    <div id="lic-checking-view" style="display:none">
+      <div class="lic-card">
+        <div style="font-size:2.5rem;margin-bottom:12px">⏳</div>
+        <div class="lic-card-title">Checking License...</div>
+        <div class="lic-checking"><span class="lic-spinner"></span>Please wait...</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Status badge (shown in app) -->
+<div class="lic-status trial" id="lic-status-badge" style="display:none">
+  <span class="lic-status-dot"></span>
+  <span id="lic-status-text">Trial</span>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="login-screen">
+  <div class="login-logo">⚡ BillBlitz</div>
+  <div class="login-sub">Restaurant Management System</div>
+  <div class="login-card">
+    <div class="login-title">Welcome Back 👋</div>
+    <div class="login-hint">Select your role and enter PIN to continue</div>
+    <div class="role-btns">
+      <button class="role-btn selected" id="role-owner" onclick="selectRole('owner')">
+        <div class="rb-icon">👑</div>
+        <div class="rb-name">Owner</div>
+        <div class="rb-desc">Full access</div>
+      </button>
+      <button class="role-btn" id="role-cashier" onclick="selectRole('cashier')">
+        <div class="rb-icon">🧾</div>
+        <div class="rb-name">Cashier</div>
+        <div class="rb-desc">Billing only</div>
+      </button>
+    </div>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key zero" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div style="text-align:center;margin-top:10px;font-size:0.68rem;color:#6B7A99">Default PIN — Owner: <b>1234</b> · Cashier: <b>0000</b></div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">⚡ BillBlitz <small>Restaurant Manager</small></div>
+  <div class="header-right">
+    <span id="role-display" class="role-badge role-owner">👑 Owner</span>
+    <div class="hdr-time" id="live-time"></div>
+    <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
+    <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="logoutConfirm()">🔒</button>
+  </div>
+</div>
+
+<!-- SYNC INDICATOR -->
+<div class="sync-indicator" id="sync-indicator" style="display:none">
+  <div class="sync-dot pulse" id="sync-dot"></div>
+  <span id="sync-text">Synced</span>
+</div>
+
+<!-- ANNOUNCEMENT BANNER -->
+<div class="ann-banner" id="ann-banner">
+  <span>📢</span>
+  <span id="ann-text"></span>
+  <button class="ann-close" onclick="document.getElementById('ann-banner').classList.remove('show')">×</button>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="content">
+
+  <!-- ══════════════ DASHBOARD ══════════════ -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-title">Good <span id="greet-time"></span> 👋</div>
+    <div class="stats-grid" id="dash-stats"></div>
+    <div id="dash-alerts"></div>
+    <div class="section-lbl">Today's Orders</div>
+    <div id="dash-orders"></div>
+    <div class="section-lbl">Low Stock Items</div>
+    <div id="dash-lowstock"></div>
+    <div class="section-lbl">Loyalty — Ready to Redeem</div>
+    <div id="dash-loyalty"></div>
+  </div>
+
+  <!-- ══════════════ POS / BILLING ══════════════ -->
+  <div class="page" id="page-billing">
+    <div class="page-title">🧾 New Bill</div>
+    <div class="pos-layout">
+    <div class="pos-left">
+    <!-- Smart Order Input -->
+    <div class="smart-input-wrap">
+      <div class="smart-label"><span>🤖</span> Smart Order — Type ya Bolo</div>
+      <div class="smart-inp-row">
+        <input class="smart-inp" id="smart-inp" placeholder='Type karein: "2 butter chicken, 1 naan" ya mic se bolein...' onkeydown="if(event.key==='Enter') processSmartOrder()"/>
+        <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Boliye order">🎤</button>
+        <button class="smart-go-btn" onclick="processSmartOrder()">Add →</button>
+      </div>
+      <!-- Quick Menu Chips -->
+      <div class="smart-suggestions" id="smart-chips"></div>
+      <div class="smart-result" id="smart-result">
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin-bottom:4px">Order Result:</div>
+        <div id="smart-result-items"></div>
+      </div>
+    </div>
+
+    <!-- Customer select -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-body" style="padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1">
+            <div class="form-label">Customer (Loyalty)</div>
+            <select class="form-select" id="pos-customer" style="margin-top:2px">
+              <option value="">— Walk-in (No loyalty) —</option>
+            </select>
+          </div>
+          <div style="text-align:center;font-size:0.72rem;color:#6B7A99;padding-top:16px">
+            <div id="pos-cust-stamps" style="font-size:1.1rem;font-weight:800;color:#FF6B35"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Category tabs -->
+    <div class="menu-cat-tabs" id="pos-cat-tabs"></div>
+    <!-- Menu items -->
+    <div class="menu-grid" id="pos-menu-grid"></div>
+    </div><!-- end pos-left -->
+    <!-- Order -->
+    <div class="pos-right">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Current Order</div><button class="btn btn-sm btn-outline" onclick="clearOrder()">Clear</button></div>
+      <div class="card-body">
+        <div id="order-items-list"><div class="empty" style="padding:1rem">No items added yet.</div></div>
+        <div class="divider"></div>
+        <div class="bill-row"><span>Subtotal</span><span id="bill-subtotal">₹0.00</span></div>
+        <div class="bill-row">
+          <span>Tax (<span id="tax-pct-lbl">0</span>%)</span>
+          <input type="number" id="bill-tax-pct" value="0" min="0" max="30" style="width:44px;padding:2px 4px;border-radius:5px;border:1px solid #A5B4FC;font-size:0.82rem;text-align:center" onchange="recalcBill()">
+          <span id="bill-tax-amt">₹0.00</span>
+        </div>
+        <div class="bill-row">
+          <span>Discount (₹)</span>
+          <input type="number" id="bill-discount" value="0" min="0" style="width:55px;padding:2px 4px;border-radius:5px;border:1px solid #A5B4FC;font-size:0.82rem;text-align:center" onchange="recalcBill()">
+        </div>
+        <div class="bill-total"><span>TOTAL</span><span id="bill-total-amt">₹0.00</span></div>
+        <div class="btn-row">
+          <button class="btn btn-green btn-full" onclick="completeBill('cash')">💵 Cash</button>
+          <button class="btn btn-blue btn-full" onclick="completeBill('card')">💳 Card</button>
+        </div>
+        <div style="margin-top:7px">
+          <button class="btn btn-outline btn-full" onclick="completeBill('other')">📱 Other / QR</button>
+        </div>
+      </div>
+    </div>
+    </div><!-- end pos-right -->
+    </div><!-- end pos-layout -->
+  </div>
+
+  <!-- ══════════════ MENU MANAGEMENT ══════════════ -->
+  <div class="page" id="page-menu">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="page-title" style="margin:0">🍜 Menu</div>
+      <button class="btn btn-primary btn-sm" onclick="openMenuModal()">+ Add Item</button>
+    </div>
+    <input class="search-inp" id="menu-search" placeholder="🔍 Search menu items…" oninput="renderMenuPage()"/>
+    <div id="menu-list"></div>
+  </div>
+
+  <!-- ══════════════ INVENTORY ══════════════ -->
+  <div class="page" id="page-inventory">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="page-title" style="margin:0">📦 Inventory</div>
+      <button class="btn btn-primary btn-sm" onclick="openInventoryModal()">+ Add Item</button>
+    </div>
+    <input class="search-inp" id="inv-search" placeholder="🔍 Search inventory…" oninput="renderInventoryPage()"/>
+    <div id="inv-alerts"></div>
+    <div id="inv-list"></div>
+  </div>
+
+  <!-- ══════════════ PURCHASES ══════════════ -->
+  <div class="page" id="page-purchases">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="page-title" style="margin:0">🛒 Purchases</div>
+      <button class="btn btn-primary btn-sm" onclick="openPurchaseModal()">+ Record</button>
+    </div>
+    <div id="purchase-list"></div>
+  </div>
+
+  <!-- ══════════════ REPORTS ══════════════ -->
+  <div class="page" id="page-reports">
+    <div class="page-title">📊 Reports</div>
+    <div class="rep-tabs">
+      <button class="rep-tab active" id="rep-today" onclick="setRepTab('today')">Today</button>
+      <button class="rep-tab" id="rep-week" onclick="setRepTab('week')">This Week</button>
+      <button class="rep-tab" id="rep-month" onclick="setRepTab('month')">This Month</button>
+      <button class="rep-tab" id="rep-all" onclick="setRepTab('all')">All Time</button>
+    </div>
+    <div id="report-content"></div>
+  </div>
+
+  <!-- ══════════════ LOYALTY ══════════════ -->
+  <div class="page" id="page-loyalty">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="page-title" style="margin:0">⭐ Loyalty</div>
+      <button class="btn btn-primary btn-sm" onclick="openLoyaltyAddModal()">+ Add Member</button>
+    </div>
+    <div class="modal-tabs" id="loyalty-tabs">
+      <button class="mtab active" onclick="setLoyaltyTab('all')">All Members</button>
+      <button class="mtab" onclick="setLoyaltyTab('redeem')">🎁 Redeem</button>
+      <button class="mtab" onclick="setLoyaltyTab('bday')">🎂 Birthdays</button>
+    </div>
+    <input class="search-inp" id="loyalty-search" placeholder="🔍 Search members…" oninput="renderLoyaltyPage()"/>
+    <div id="loyalty-list"></div>
+  </div>
+
+  <!-- ══════════════ SETTINGS ══════════════ -->
+  <div class="page" id="page-settings">
+    <div class="page-title">⚙️ Settings</div>
+
+    <!-- Backup & Restore -->
+    <div class="sync-card">
+      <div class="sync-title">☁️ Backup & Restore Data</div>
+      <div class="sync-sub">Export your data as a file to keep it safe. Import to restore or transfer to another phone.</div>
+      <div class="sync-btns">
+        <button class="sync-btn sync-btn-white" onclick="exportData()">⬇️ Export Backup</button>
+        <button class="sync-btn sync-btn-outline" onclick="document.getElementById('import-file').click()">⬆️ Import Backup</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"/>
+      </div>
+    </div>
+
+    <!-- Change PINs -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">🔐 Change PINs</div></div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">👑 Owner PIN</label>
+            <input class="form-inp" id="set-owner-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">🧾 Cashier PIN</label>
+            <input class="form-inp" id="set-cashier-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="savePINs()">Save PINs</button>
+      </div>
+    </div>
+
+    <!-- Restaurant Info & Logo -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <div class="card-title">🍽️ Restaurant Info & Bill Design</div>
+        <button class="btn btn-sm btn-blue" onclick="showBillPreview()">👁 Preview</button>
+      </div>
+      <div class="card-body">
+
+        <!-- LOGO UPLOAD -->
+        <div class="form-group">
+          <label class="form-label">🖼️ Restaurant Logo (Bill pe dikhega)</label>
+          <div class="logo-upload-box" id="logo-upload-box" onclick="document.getElementById('logo-file-inp').click()">
+            <img id="logo-preview-img" src="" style="display:none"/>
+            <div id="logo-upload-placeholder">
+              <div class="logo-upload-icon">📷</div>
+              <div class="logo-upload-text">Logo upload karein</div>
+              <div class="logo-upload-hint">PNG / JPG — Bill pe print hoga</div>
+            </div>
+          </div>
+          <input type="file" id="logo-file-inp" accept="image/png,image/jpeg,image/jpg,image/webp" style="display:none" onchange="handleLogoUpload(event)"/>
+          <div class="logo-actions" id="logo-actions" style="display:none">
+            <button class="btn btn-sm btn-outline" onclick="removeLogo()">🗑️ Logo Hatao</button>
+            <button class="btn btn-sm btn-green" onclick="document.getElementById('logo-file-inp').click()">🔄 Change</button>
+          </div>
+        </div>
+
+        <div class="settings-divider">Basic Info</div>
+
+        <div class="form-group">
+          <label class="form-label">Restaurant Name *</label>
+          <input class="form-inp" id="set-rest-name" placeholder="e.g. Spice Garden Restaurant"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tagline / Slogan</label>
+          <input class="form-inp" id="set-rest-tagline" placeholder="e.g. Taste the Tradition"/>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input class="form-inp" id="set-rest-phone" type="tel" placeholder="Contact number"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">GST Number</label>
+            <input class="form-inp" id="set-rest-gst" placeholder="29XXXXX"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Address</label>
+          <input class="form-inp" id="set-rest-addr" placeholder="Shop, Street, Area"/>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">City</label>
+            <input class="form-inp" id="set-rest-city" placeholder="e.g. Delhi"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Pincode</label>
+            <input class="form-inp" id="set-rest-pin" placeholder="110001"/>
+          </div>
+        </div>
+
+        <div class="settings-divider">Bill Messages</div>
+
+        <div class="form-group">
+          <label class="form-label">Bill Header Message</label>
+          <input class="form-inp" id="set-bill-header" placeholder="e.g. Welcome! Aapka swagat hai 🙏"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Thank You Message (Footer)</label>
+          <input class="form-inp" id="set-rest-msg" placeholder="e.g. Thank you! Dobara aana 😊"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Offer / Extra Line</label>
+          <input class="form-inp" id="set-bill-offer" placeholder="e.g. Next visit 10% off! Follow @myrestaurant"/>
+        </div>
+
+        <div class="settings-divider">Bill Options</div>
+
+        <div class="bill-opts-grid">
+          <label class="bill-opt-item">
+            <input type="checkbox" id="opt-show-logo" checked/>
+            <span class="bill-opt-label">Logo dikhao</span>
+          </label>
+          <label class="bill-opt-item">
+            <input type="checkbox" id="opt-show-gst" checked/>
+            <span class="bill-opt-label">GST number</span>
+          </label>
+          <label class="bill-opt-item">
+            <input type="checkbox" id="opt-show-tagline" checked/>
+            <span class="bill-opt-label">Tagline</span>
+          </label>
+          <label class="bill-opt-item">
+            <input type="checkbox" id="opt-show-offer"/>
+            <span class="bill-opt-label">Offer line</span>
+          </label>
+        </div>
+
+        <button class="btn btn-primary btn-full" onclick="saveRestInfo()">💾 Save & Apply to Bills</button>
+        <button class="bill-preview-btn" onclick="showBillPreview()">👁 Bill Preview Dekho</button>
+      </div>
+    </div>
+
+
+    <!-- Bluetooth Printer -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <div class="card-title">🖨️ Bluetooth Printer</div>
+        <span class="badge badge-blue">ESC/POS</span>
+      </div>
+      <div class="card-body">
+        <div class="bt-bar">
+          <div class="bt-status" id="bt-status-dot"></div>
+          <div class="bt-info">
+            <div class="bt-name" id="bt-printer-name">Not connected</div>
+            <div class="bt-sub" id="bt-printer-sub">Tap Connect to pair printer</div>
+          </div>
+          <button class="bt-btn bt-btn-connect" id="bt-connect-btn" onclick="connectBluetooth()">🔵 Connect</button>
+        </div>
+        <!-- Paper size -->
+        <div class="bt-settings-row">
+          <span style="font-size:0.82rem;font-weight:700;color:rgba(255,255,255,0.5)">📄 Paper Size:</span>
+          <select class="bt-paper-select" onchange="btSetPaperWidth(this.value)">
+            <option value="58">58mm (Pocket printer)</option>
+            <option value="80">80mm (Standard)</option>
+          </select>
+          <button class="bt-btn bt-btn-connect" onclick="showBtHelp()" style="padding:7px 10px;font-size:0.75rem">❓ Help</button>
+        </div>
+        <!-- Quick Print Buttons (shown when connected) -->
+        <div class="bt-print-row" id="bt-print-row" style="display:none">
+          <button class="bt-print-btn" onclick="btPrintDailyReport()">📊 Sales Report</button>
+          <button class="bt-print-btn" onclick="btPrintInventoryReport()">📦 Inventory</button>
+        </div>
+      </div>
+    </div>
+    <!-- Cashier Access Control -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">👁️ Cashier Access Control</div><span class="badge badge-yellow">Owner Only</span></div>
+      <div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:10px" id="access-controls"></div>
+        <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="saveAccessControls()">Save Access</button>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="card" style="margin-bottom:10px;border:1.5px solid #FF6B35">
+      <div class="card-header" style="background:#FFF0F0"><div class="card-title" style="color:#FF6B35">⚠️ Danger Zone</div></div>
+      <div class="card-body">
+        <div style="font-size:0.8rem;color:#6B7A99;margin-bottom:10px">These actions cannot be undone. Be careful!</div>
+        <div class="btn-row">
+          <button class="btn btn-red btn-full" onclick="clearOrders()">🗑️ Clear All Orders</button>
+          <button class="btn btn-red btn-full" onclick="resetAll()">💥 Reset Everything</button>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:center;color:#6B7A99;font-size:0.72rem;padding:8px">BillBlitz v1.0</div>
+  </div>
+
+</div><!-- end .content -->
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+  <button class="bnav active" id="nav-dashboard" onclick="setPage('dashboard')"><span>🏠</span>Home</button>
+  <button class="bnav" id="nav-billing" onclick="setPage('billing')"><span>🧾</span>Billing</button>
+  <button class="bnav" id="nav-menu" onclick="setPage('menu')"><span>🍜</span>Menu</button>
+  <button class="bnav" id="nav-inventory" onclick="setPage('inventory')"><span>📦</span>Stock</button>
+  <button class="bnav" id="nav-purchases" onclick="setPage('purchases')"><span>🛒</span>Purchase</button>
+  <button class="bnav" id="nav-reports" onclick="setPage('reports')"><span>📊</span>Reports</button>
+  <button class="bnav" id="nav-loyalty" onclick="setPage('loyalty')"><span>⭐</span>Loyalty</button>
+  <button class="bnav" id="nav-settings" onclick="setPage('settings')"><span>⚙️</span>Settings</button>
+</div>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay" onclick="closeModalOnBg(event)">
+  <div class="modal"><div class="modal-handle"></div><div id="modal-body"></div></div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ╔══════════════════════════════════════════════════════╗
+// ║                    DATA & STORAGE                    ║
+// ╚══════════════════════════════════════════════════════╝
+const STAMP_GOAL = 10;
+const TAX_DEFAULT = 0;
+const AVATAR_COLORS = ["#FF6B35","#FF8C42","#00A878","#2563EB","#6B2D8B","#B7410E","#145A32","#1A5276"];
+const CATS = ["All","Food","Beverage","Dessert","Snacks","Special"];
+
+let db = {
+  menu: [],        // {id,name,price,category,icon,description}
+  inventory: [],   // {id,name,unit,qty,minQty,costPrice}
+  purchases: [],   // {id,date,supplier,items:[{name,qty,unit,cost}],total,status}
+  orders: [],      // {id,date,items:[],subtotal,tax,discount,total,payment,customerId}
+  customers: [],   // loyalty customers
+};
+
+function save(){ try{ localStorage.setItem('bb-db-v1', JSON.stringify(db)); }catch(e){} }
+function load(){
+  try{
+    const d = localStorage.getItem('bb-db-v1');
+    if(d){ db = JSON.parse(d); }
+    else { seedDemo(); }
+  }catch(e){ seedDemo(); }
+}
+
+function seedDemo(){
+  db.menu = [
+    {id:'m1',name:'Butter Chicken',price:280,category:'Food',icon:'🍛',description:'Creamy tomato curry'},
+    {id:'m2',name:'Biryani',price:320,category:'Food',icon:'🍚',description:'Fragrant rice dish'},
+    {id:'m3',name:'Naan',price:40,category:'Food',icon:'🫓',description:'Fresh baked bread'},
+    {id:'m4',name:'Masala Tea',price:60,category:'Beverage',icon:'🍵',description:'Spiced milk tea'},
+    {id:'m5',name:'Mango Lassi',price:80,category:'Beverage',icon:'🥤',description:'Sweet mango yogurt drink'},
+    {id:'m6',name:'Gulab Jamun',price:120,category:'Dessert',icon:'🍮',description:'Soft milk dumplings'},
+    {id:'m7',name:'Samosa',price:70,category:'Snacks',icon:'🥟',description:'Fried pastry with filling'},
+    {id:'m8',name:'Dal Makhani',price:240,category:'Food',icon:'🫕',description:'Creamy black lentils'},
+  ];
+  db.inventory = [
+    {id:'i1',name:'Chicken',unit:'kg',qty:8,minQty:3,costPrice:220},
+    {id:'i2',name:'Basmati Rice',unit:'kg',qty:15,minQty:5,costPrice:80},
+    {id:'i3',name:'Tomatoes',unit:'kg',qty:2,minQty:3,costPrice:40},
+    {id:'i4',name:'Onions',unit:'kg',qty:10,minQty:4,costPrice:30},
+    {id:'i5',name:'Milk',unit:'L',qty:6,minQty:4,costPrice:55},
+    {id:'i6',name:'Flour',unit:'kg',qty:1.5,minQty:3,costPrice:35},
+    {id:'i7',name:'Cooking Oil',unit:'L',qty:4,minQty:2,costPrice:120},
+    {id:'i8',name:'Spice Mix',unit:'pack',qty:8,minQty:3,costPrice:150},
+  ];
+  db.purchases = [];
+  db.orders = [];
+  db.customers = [
+    {id:'c1',name:'Ahmed Ali',phone:'050-1234567',email:'ahmed@email.com',birthday:'1990-03-15',stamps:7,visits:[],joinedAt:new Date(Date.now()-30*86400000).toISOString(),remarks:'Regular - loves biryani'},
+    {id:'c2',name:'Fatima Khan',phone:'055-9876543',email:'',birthday:'1988-07-22',stamps:10,visits:[],joinedAt:new Date(Date.now()-60*86400000).toISOString(),remarks:''},
+    {id:'c3',name:'Omar Sheikh',phone:'056-1122334',email:'',birthday:'',stamps:3,visits:[],joinedAt:new Date(Date.now()-10*86400000).toISOString(),remarks:'Prefers veg'},
+  ];
+  save();
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                   HELPERS                            ║
+// ╚══════════════════════════════════════════════════════╝
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmt(n){ return '₹'+(+n||0).toFixed(2); }
+function fmtDate(d){ if(!d) return '—'; return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtTime(d){ if(!d) return ''; return new Date(d).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
+function isBdayMonth(b){ if(!b) return false; return new Date(b).getMonth()===new Date().getMonth(); }
+function initials(n){ return (n||'?').split(' ').map(x=>x[0]).join('').toUpperCase().slice(0,2); }
+function avatarColor(n){ let s=0; for(let c of (n||'')) s+=c.charCodeAt(0); return AVATAR_COLORS[s%AVATAR_COLORS.length]; }
+function isToday(d){ const t=new Date(); const dd=new Date(d); return dd.toDateString()===t.toDateString(); }
+function isThisWeek(d){ const now=new Date(); const dd=new Date(d); const diff=(now-dd)/(86400000); return diff>=0&&diff<7; }
+function isThisMonth(d){ const now=new Date(); const dd=new Date(d); return dd.getMonth()===now.getMonth()&&dd.getFullYear()===now.getFullYear(); }
+
+function toast(msg,color='#00A878'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.background=color;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ── Live clock ──
+function updateClock(){
+  const now=new Date();
+  const timeStr=now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  const el=document.getElementById('live-time'); if(el) el.textContent=timeStr;
+  const dht=document.getElementById('dh-time');
+  if(dht) dht.textContent=now.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'})+' · '+timeStr;
+  const h=now.getHours();
+  const greet=document.getElementById('greet-time');
+  if(greet) greet.textContent=h<12?'Morning':h<17?'Afternoon':'Evening';
+}
+setInterval(updateClock,1000); updateClock();
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║           FIREBASE CLOUD SYNC & CONTROL SYSTEM              ║
+// ║  • Client ka data aapke paas bhi rahega                     ║
+// ║  • Subscription control — ek click mein block/extend        ║
+// ║  • Real-time updates — menu, prices, announcements          ║
+// ║  • Offline bhi kaam karta hai (auto-sync when online)       ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+// ── FIREBASE CONFIG — Apna config yahan daalo ─────────────────
+// Firebase Console → Project Settings → Your Apps → Config copy karo
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCbCj22kdy5bba2s0-yMHAmeqLSbN4Ri3A",
+  authDomain: "billblitz-a17dd.firebaseapp.com",
+  projectId: "billblitz-a17dd",
+  storageBucket: "billblitz-a17dd.firebasestorage.app",
+  messagingSenderId: "382739343519",
+  appId: "1:382739343519:web:6216fcc628d1c4afad9aaa",
+  measurementId: "G-MDSK1N9TL8"
+};
+
+// ── FIREBASE STATE ─────────────────────────────────────────────
+let firebaseApp = null;
+let firestoreDb = null;
+let fbAuth = null;
+let cloudListeners = [];
+let isFirebaseReady = false;
+let restaurantId = null; // = license key (unique per client)
+let syncQueue = [];
+let isSyncing = false;
+
+// ── INIT FIREBASE ──────────────────────────────────────────────
+function initFirebase() {
+  try {
+    if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
+      console.log('Firebase not configured — running in local mode');
+      return false;
+    }
+    firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+    firestoreDb = firebase.firestore();
+    fbAuth = firebase.auth();
+    // Enable offline persistence
+    firestoreDb.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+    isFirebaseReady = true;
+    const ind = document.getElementById('sync-indicator');
+    if(ind) ind.style.display = 'flex';
+    setSyncStatus('syncing', 'Connecting...');
+    return true;
+  } catch(e) {
+    console.error('Firebase init failed:', e);
+    return false;
+  }
+}
+
+// ── SYNC STATUS UI ─────────────────────────────────────────────
+function setSyncStatus(state, text) {
+  const ind = document.getElementById('sync-indicator');
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  if (!ind) return;
+  ind.style.display = 'flex';
+  ind.className = 'sync-indicator ' + state;
+  if (dot) dot.className = 'sync-dot' + (state === 'syncing' ? ' pulse' : '');
+  if (txt) txt.textContent = text;
+}
+
+// ── AUTHENTICATE CLIENT ────────────────────────────────────────
+async function authenticateClient(licKey) {
+  if (!isFirebaseReady) return;
+  restaurantId = licKey.replace(/[^A-Z0-9]/g, '').toLowerCase();
+  try {
+    // Try anonymous auth first, if fails skip auth and use direct Firestore
+    try {
+      await fbAuth.signInAnonymously();
+    } catch(authErr) {
+      console.log('Auth skipped (Anonymous auth not enabled) — using direct Firestore');
+    }
+    setSyncStatus('', 'Synced ✓');
+    // Make sure indicator is visible
+    const ind = document.getElementById('sync-indicator');
+    if(ind) ind.style.display = 'flex';
+    startCloudSync();
+    listenToLicenseControl(licKey);
+    listenToAnnouncements();
+    pushAllDataToCloud();
+  } catch(e) {
+    console.error('Client auth error:', e);
+    setSyncStatus('error', 'Sync Error');
+  }
+}
+
+// ── LISTEN TO LICENSE CONTROL (Real-time block/extend) ─────────
+function listenToLicenseControl(licKey) {
+  if (!isFirebaseReady || !firestoreDb) return;
+  const ref = firestoreDb.collection('licenses').doc(licKey.toUpperCase());
+  const unsub = ref.onSnapshot(doc => {
+    if (!doc.exists) return;
+    const data = doc.data();
+    // Real-time block
+    if (data.status === 'blocked') {
+      blockedScreen(data.blockReason || 'Aapka license block kar diya gaya hai. Support se contact karein.');
+      document.getElementById('lic-overlay').style.display = 'flex';
+      return;
+    }
+    // Expiry check
+    if (data.expiryDate) {
+      const exp = data.expiryDate.toDate ? data.expiryDate.toDate() : new Date(data.expiryDate);
+      if (exp < new Date()) {
+        showExpiredScreen();
+        document.getElementById('lic-overlay').style.display = 'flex';
+        return;
+      }
+      // Update badge
+      const badge = document.getElementById('lic-status-badge');
+      const badgeText = document.getElementById('lic-status-text');
+      if (badge && badgeText) {
+        badge.className = 'lic-status active';
+        badgeText.textContent = `✓ ${exp.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'})}`;
+      }
+    }
+    // Real-time settings from owner (e.g., tax rate, theme)
+    if (data.remoteSettings) {
+      applyRemoteSettings(data.remoteSettings);
+    }
+  }, () => {});
+  cloudListeners.push(unsub);
+}
+
+// ── LISTEN TO ANNOUNCEMENTS ────────────────────────────────────
+function listenToAnnouncements() {
+  if (!isFirebaseReady || !firestoreDb) return;
+  const ref = firestoreDb.collection('appConfig').doc('announcement');
+  const unsub = ref.onSnapshot(doc => {
+    if (!doc.exists) return;
+    const data = doc.data();
+    if (data.active && data.message) {
+      const banner = document.getElementById('ann-banner');
+      const annText = document.getElementById('ann-text');
+      if (banner && annText) {
+        annText.textContent = data.message;
+        banner.classList.add('show');
+      }
+    }
+  }, () => {});
+  cloudListeners.push(unsub);
+}
+
+// ── APPLY REMOTE SETTINGS (owner pushes changes) ───────────────
+function applyRemoteSettings(settings) {
+  if (settings.taxRate !== undefined) {
+    const taxInp = document.getElementById('bill-tax-pct');
+    if (taxInp) taxInp.value = settings.taxRate;
+  }
+  if (settings.announcement) toast('📢 ' + settings.announcement, '#2563EB');
+}
+
+// ── PUSH ALL LOCAL DATA TO CLOUD ───────────────────────────────
+async function pushAllDataToCloud() {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  setSyncStatus('syncing', 'Syncing...');
+  try {
+    const restRef = firestoreDb.collection('restaurants').doc(restaurantId);
+    // Push in chunks to avoid timeout
+    await Promise.all([
+      restRef.collection('meta').doc('info').set({
+        lastSync: new Date(),
+        orderCount: db.orders.length,
+        customerCount: db.customers.length,
+        todaySales: db.orders.filter(o => isToday(o.date)).reduce((s,o) => s+o.total, 0),
+        restaurantName: db.settings?.restInfo?.name || 'Unknown',
+        phone: db.settings?.restInfo?.phone || '',
+      }),
+    ]);
+    // Sync recent orders (last 100)
+    const recentOrders = db.orders.slice(0, 100);
+    for (const order of recentOrders.slice(0, 20)) {
+      await restRef.collection('orders').doc(order.id).set({...order, _synced: new Date()});
+    }
+    // Sync customers
+    for (const cust of db.customers.slice(0, 50)) {
+      await restRef.collection('customers').doc(cust.id).set({...cust, _synced: new Date()});
+    }
+    // Sync menu & inventory
+    await restRef.collection('meta').doc('menu').set({ items: db.menu, _synced: new Date() });
+    await restRef.collection('meta').doc('inventory').set({ items: db.inventory, _synced: new Date() });
+    setSyncStatus('', 'Synced ✓');
+  } catch(e) {
+    setSyncStatus('error', 'Sync Failed');
+  }
+}
+
+// ── CLOUD SAVE (called after every important action) ───────────
+async function cloudSave(collection, docId, data) {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  try {
+    setSyncStatus('syncing', 'Saving...');
+    await firestoreDb
+      .collection('restaurants').doc(restaurantId)
+      .collection(collection).doc(docId)
+      .set({...data, _synced: new Date()});
+    setSyncStatus('', 'Synced ✓');
+  } catch(e) {
+    setSyncStatus('error', 'Save Failed');
+    // Queue for retry
+    syncQueue.push({ collection, docId, data });
+  }
+}
+
+// ── START BACKGROUND SYNC ──────────────────────────────────────
+function startCloudSync() {
+  // Sync every 5 minutes
+  setInterval(() => {
+    if (navigator.onLine && restaurantId) pushAllDataToCloud();
+  }, 300000);
+  // Online/offline detection
+  window.addEventListener('online', () => {
+    setSyncStatus('syncing', 'Reconnecting...');
+    setTimeout(() => pushAllDataToCloud(), 1000);
+    // Retry queued saves
+    retryQueue();
+  });
+  window.addEventListener('offline', () => setSyncStatus('offline', 'Offline'));
+}
+
+async function retryQueue() {
+  while (syncQueue.length > 0) {
+    const item = syncQueue.shift();
+    await cloudSave(item.collection, item.docId, item.data);
+  }
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║               UPDATE INIT — FIREBASE                ║
+// ╚══════════════════════════════════════════════════════╝
+// ║   Control karein Google Sheets se — kisi ka bhi access       ║
+// ║   band karein ya extend karein ek click mein!                ║
+// ╚══════════════════════════════════════════════════════════════╝
+const LICENSE_SERVER_URL = ''; // Set this when you setup Firebase
+const SUPPORT_WHATSAPP = '91XXXXXXXXXX';
+const TRIAL_DAYS = 30;
+const OFFLINE_GRACE_DAYS = 3;
+
+let licenseState = { status:'trial', key:null, clientName:null, expiryDate:null, installDate:null, daysLeft:0, lastChecked:null };
+
+function initLicense() {
+  // INSTANT - no network, works 100% offline
+  document.getElementById('lic-overlay').style.display = 'flex';
+  const saved = loadLicenseState();
+  if (saved.key && saved.status === 'active') {
+    // Already activated before - let in immediately
+    activationSuccess({ key:saved.key, clientName:saved.clientName||'', expiryDate:saved.expiryDate||'', status:'active', offline:true });
+  } else {
+    checkTrialMode(saved);
+  }
+}
+
+function saveLicenseState(state) { try{ localStorage.setItem('bb-lic-v1', JSON.stringify(state)); }catch(e){} }
+function loadLicenseState() {
+  try { const d=localStorage.getItem('bb-lic-v1'); if(d) return JSON.parse(d); } catch(e){}
+  const fresh={key:null,installDate:new Date().toISOString(),lastChecked:null,status:'trial'};
+  saveLicenseState(fresh); return fresh;
+}
+
+function checkTrialMode(saved) {
+  const installDate = new Date(saved.installDate||new Date());
+  const daysPassed = Math.floor((new Date()-installDate)/86400000);
+  const daysLeft = Math.max(0, TRIAL_DAYS - daysPassed);
+  licenseState.status = daysLeft>0?'trial':'expired';
+  licenseState.daysLeft = daysLeft;
+  if(daysLeft>0) showTrialActive(daysLeft);
+  else showExpiredScreen();
+}
+
+// Also called from trial screen "Continue" button
+function trialContinue() {
+  document.getElementById('lic-overlay').style.display='none';
+  const badge=document.getElementById('lic-status-badge');
+  if(badge){
+    badge.style.display='inline-flex';
+    badge.className='lic-status trial';
+    document.getElementById('lic-status-text').textContent=`⏳ Trial: ${licenseState.daysLeft}d`;
+  }
+  document.getElementById('login-screen').style.display='flex';
+  selectRole('owner');
+  loadSavedLayout();
+  // Connect Firebase with device ID — retry multiple times
+  const syncId = 'trial-' + getDeviceId();
+  function tryFirebaseConnect() {
+    if(isFirebaseReady) {
+      authenticateClient(syncId);
+    } else {
+      // Retry every second for 10 seconds
+      let attempts = 0;
+      const retry = setInterval(() => {
+        attempts++;
+        if(isFirebaseReady) {
+          clearInterval(retry);
+          authenticateClient(syncId);
+        } else if(attempts >= 10) {
+          clearInterval(retry);
+          console.log('Firebase not ready after 10s');
+        }
+      }, 1000);
+    }
+  }
+  tryFirebaseConnect();
+}
+
+function showTrialActive(daysLeft) {
+  showLicView('trial');
+  document.getElementById('trial-days-left').textContent = daysLeft;
+  const pct = daysLeft/TRIAL_DAYS;
+  const arc = document.getElementById('trial-arc');
+  if(arc){
+    arc.style.strokeDashoffset = 239*(1-pct);
+    arc.style.stroke = daysLeft<=5?'#FF6B35':daysLeft<=10?'#FFD700':'#00C896';
+  }
+}
+
+async function verifyKeyOnline(key, saved) {
+  const deviceId = getDeviceId();
+  if(!LICENSE_SERVER_URL||LICENSE_SERVER_URL==='YOUR_GOOGLE_APPS_SCRIPT_URL_HERE'){ offlineVerify(key,saved); return; }
+  try {
+    showLicView('checking');
+    const res = await fetch(`${LICENSE_SERVER_URL}?key=${encodeURIComponent(key)}&device=${encodeURIComponent(deviceId)}&action=verify`,{signal:AbortSignal.timeout(6000)});
+    const data = await res.json();
+    if(data.status==='active') activationSuccess({key,clientName:data.clientName,expiryDate:data.expiryDate,status:'active'});
+    else if(data.status==='blocked') blockedScreen(data.message||'Aapka license block kar diya gaya hai.');
+    else if(data.status==='expired') { saveLicenseState({...saved,key:null,status:'expired'}); showExpiredScreen(); }
+    else { saveLicenseState({...saved,key:null}); checkTrialMode(saved); }
+  } catch(e) { offlineVerify(key,saved); }
+}
+
+function offlineVerify(key,saved) {
+  const lastChecked=saved.lastChecked?new Date(saved.lastChecked):null;
+  const daysSince=lastChecked?Math.floor((new Date()-lastChecked)/86400000):999;
+  if(daysSince<=OFFLINE_GRACE_DAYS) activationSuccess({key,clientName:saved.clientName,expiryDate:saved.expiryDate,status:'active',offline:true});
+  else checkTrialMode(saved);
+}
+
+async function activateLicense() {
+  const key=(document.getElementById('lic-key-inp').value||'').trim().toUpperCase();
+  if(!key){setLicMsg('⚠️ Pehle license key darj karein','lic-msg');return;}
+  await processActivation(key,'lic-msg');
+}
+
+async function activateLicenseExpired() {
+  const key=(document.getElementById('lic-key-exp').value||'').trim().toUpperCase();
+  if(!key){setLicMsg('⚠️ Pehle license key darj karein','lic-msg2');return;}
+  await processActivation(key,'lic-msg2');
+}
+
+async function processActivation(key,msgId) {
+  setLicMsg('<span class="lic-spinner"></span> Verify ho raha hai...',msgId,true);
+  const deviceId=getDeviceId();
+  if(!LICENSE_SERVER_URL||LICENSE_SERVER_URL==='YOUR_GOOGLE_APPS_SCRIPT_URL_HERE'){
+    if(key.startsWith('TG-')&&key.length>=8){
+      const exp=new Date(); exp.setFullYear(exp.getFullYear()+1);
+      activationSuccess({key,clientName:'Client',expiryDate:exp.toISOString(),status:'active'});
+    } else { setLicMsg('❌ Invalid key! Format: TG-XXXX-XXXX',msgId); }
+    return;
+  }
+  try {
+    const res=await fetch(`${LICENSE_SERVER_URL}?key=${encodeURIComponent(key)}&device=${encodeURIComponent(deviceId)}&action=activate`,{signal:AbortSignal.timeout(8000)});
+    const data=await res.json();
+    if(data.status==='active') activationSuccess({key,clientName:data.clientName,expiryDate:data.expiryDate,status:'active'});
+    else if(data.status==='blocked') setLicMsg('🚫 Yeh license blocked hai. Support se contact karein.',msgId);
+    else if(data.status==='device_mismatch') setLicMsg('📱 Yeh key kisi aur device pe register hai.',msgId);
+    else setLicMsg('❌ Invalid key! Support se check karein.',msgId);
+  } catch(e){ setLicMsg('🌐 Internet check karein aur dobara try karein.',msgId); }
+}
+
+function activationSuccess(data){
+  licenseState={...licenseState,...data,lastChecked:new Date().toISOString()};
+  saveLicenseState(licenseState);
+  document.getElementById('lic-overlay').style.display='none';
+  const badge=document.getElementById('lic-status-badge');
+  const badgeText=document.getElementById('lic-status-text');
+  badge.style.display='inline-flex';
+  if(data.status==='trial'){
+    badge.className='lic-status trial';
+    badgeText.textContent=`⏳ Trial: ${licenseState.daysLeft}d`;
+  } else {
+    badge.className='lic-status active';
+    const exp=data.expiryDate?new Date(data.expiryDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}):'';
+    badgeText.textContent=`✓ Licensed${exp?' · '+exp:''}`;
+  }
+  document.getElementById('login-screen').style.display='flex';
+  selectRole('owner');
+  if(!data.offline) toast(`✅ ${data.clientName?data.clientName+' — ':''}License Active!`,'#00A878');
+  // ☁️ Start Firebase cloud sync — use device ID as restaurant ID if no key
+  const syncId = data.key || ('trial-' + getDeviceId());
+  authenticateClient(syncId);
+  // 📐 Load saved layout + start Firebase layout listener
+  loadSavedLayout();
+  setTimeout(() => startLayoutListener(syncId), 1500);
+}
+
+function closeLicenseScreen(){
+  licenseState.status='trial';
+  document.getElementById('lic-overlay').style.display='none';
+  const badge=document.getElementById('lic-status-badge');
+  badge.style.display='inline-flex';
+  badge.className='lic-status trial';
+  document.getElementById('lic-status-text').textContent=`⏳ Trial: ${licenseState.daysLeft}d`;
+  document.getElementById('login-screen').style.display='flex';
+  selectRole('owner');
+  loadSavedLayout();
+  const syncId = 'trial-' + getDeviceId();
+  if(isFirebaseReady) authenticateClient(syncId);
+  else setTimeout(() => { if(isFirebaseReady) authenticateClient(syncId); }, 2000);
+}
+
+function blockedScreen(msg){
+  showLicView('expired');
+  document.getElementById('lic-expired-view').innerHTML=`
+    <div class="lic-card">
+      <div class="lic-expired-icon">🚫</div>
+      <div class="lic-expired-title">Access Blocked!</div>
+      <div class="lic-expired-sub">${msg}<br><br>Support se contact karein.</div>
+      <button class="lic-wa-btn" onclick="contactWhatsApp()">📲 WhatsApp Support</button>
+    </div>`;
+}
+
+function showExpiredScreen(){ showLicView('expired'); }
+
+function showLicView(view){
+  ['checking','trial','expired'].forEach(v=>{
+    const el=document.getElementById('lic-'+v+'-view');
+    if(el) el.style.display=v===view?'block':'none';
+  });
+}
+
+function setLicMsg(msg,id,isHtml=false){
+  const el=document.getElementById(id); if(!el) return;
+  if(isHtml) el.innerHTML=msg; else el.textContent=msg;
+}
+
+function getDeviceId(){
+  let id=localStorage.getItem('bb-did');
+  if(!id){ id='DEV-'+Math.random().toString(36).slice(2,10).toUpperCase()+'-'+Date.now().toString(36).toUpperCase(); localStorage.setItem('bb-did',id); }
+  return id;
+}
+
+function contactWhatsApp(){
+  const deviceId=getDeviceId();
+  const msg=`Namaste! Mujhe BillBlitz ke liye license key chahiye.\n\nDevice ID: ${deviceId}`;
+  window.open(`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(msg)}`,'_blank');
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                  LOGIN / AUTH SYSTEM                 ║
+// ╚══════════════════════════════════════════════════════╝
+let currentRole = null;
+let pinBuffer = '';
+let selectedLoginRole = 'owner';
+
+const DEFAULT_PINS = { owner: '1234', cashier: '0000' };
+const CASHIER_BLOCKED_PAGES = ['reports','settings','purchases'];
+const ACCESS_LABELS = {
+  menu: '🍜 Edit Menu',
+  inventory: '📦 View Inventory',
+  purchases: '🛒 Purchases',
+  reports: '📊 Reports',
+  loyalty: '⭐ Loyalty Module',
+  discount: '💰 Apply Discounts',
+};
+
+function getPin(role){ return (db.settings&&db.settings.pins&&db.settings.pins[role]) || DEFAULT_PINS[role]; }
+function getCashierAccess(){ return (db.settings&&db.settings.cashierAccess) || {menu:false,inventory:true,purchases:false,reports:false,loyalty:true,discount:false}; }
+
+function selectRole(r){
+  selectedLoginRole = r;
+  pinBuffer = '';
+  updatePinDots();
+  document.getElementById('login-error').textContent = '';
+  document.getElementById('role-owner').classList.toggle('selected', r==='owner');
+  document.getElementById('role-cashier').classList.toggle('selected', r==='cashier');
+}
+
+function pinKey(k){
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += k;
+  updatePinDots();
+  if(pinBuffer.length === 4) setTimeout(()=>checkPin(), 150);
+}
+
+function pinDel(){
+  pinBuffer = pinBuffer.slice(0,-1);
+  updatePinDots();
+  document.getElementById('login-error').textContent = '';
+}
+
+function updatePinDots(){
+  for(let i=0;i<4;i++){
+    document.getElementById('pd'+i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+function checkPin(){
+  const correct = getPin(selectedLoginRole);
+  if(pinBuffer === correct){
+    currentRole = selectedLoginRole;
+    document.getElementById('login-screen').style.display = 'none';
+    // Mobile header badge
+    const badge = document.getElementById('role-display');
+    badge.textContent = currentRole==='owner' ? '👑 Owner' : '🧾 Cashier';
+    badge.className = 'role-badge ' + (currentRole==='owner'?'role-owner':'role-cashier');
+    // Desktop sidebar user
+    const sbAvatar=document.getElementById('sb-avatar');
+    const sbRoleName=document.getElementById('sb-role-name');
+    const dhRoleBadge=document.getElementById('dh-role-badge');
+    const restName=db.settings?.restInfo?.name||'My Restaurant';
+    if(sbAvatar) sbAvatar.textContent=currentRole==='owner'?'👑':'🧾';
+    if(sbRoleName){ sbRoleName.textContent=currentRole==='owner'?'Owner':'Cashier'; }
+    if(dhRoleBadge){
+      dhRoleBadge.textContent=currentRole==='owner'?'👑 Owner':'🧾 Cashier';
+      dhRoleBadge.className='dh-role '+(currentRole==='owner'?'role-owner':'role-cashier');
+    }
+    // Update sidebar license info
+    const sbLic=document.getElementById('sb-lic-info');
+    if(sbLic) sbLic.textContent=licenseState.status==='active'?'✓ Licensed':'⏳ Trial';
+    applyRoleRestrictions();
+    renderDashboard();
+  } else {
+    document.getElementById('login-error').textContent = '❌ Wrong PIN. Try again.';
+    pinBuffer = '';
+    updatePinDots();
+  }
+}
+
+function applyRoleRestrictions(){
+  if(currentRole === 'owner') {
+    document.querySelectorAll('.bnav,.sb-item').forEach(b=>b.style.display='');
+    return;
+  }
+  const access = getCashierAccess();
+  ['menu','inventory','purchases','reports','settings'].forEach(p=>{
+    const allowed = access[p] !== undefined ? access[p] : !CASHIER_BLOCKED_PAGES.includes(p);
+    const nb=document.getElementById('nav-'+p); if(nb) nb.style.display=allowed?'':'none';
+    const sb=document.getElementById('sb-'+p); if(sb) sb.style.display=allowed?'':'none';
+  });
+}
+
+function logoutConfirm(){
+  if(confirm('Logout and lock the app?')){
+    currentRole = null; pinBuffer = '';
+    updatePinDots();
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('login-error').textContent = '';
+    selectRole('owner');
+  }
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                   BILL PRINTING                      ║
+// ╚══════════════════════════════════════════════════════╝
+function printBill(orderId){
+  const o = db.orders.find(x=>x.id===orderId); if(!o) return;
+  const info = db.settings?.restInfo || {};
+  const opts = db.settings?.billOpts || {};
+  const cust = o.customerId ? db.customers.find(x=>x.id===o.customerId) : null;
+  const printWin = window.open('','_blank','width=420,height=700');
+  const logoHtml = (opts.showLogo!==false&&info.logo) ?
+    '<div style="text-align:center;margin-bottom:8px"><img src="'+info.logo+'" style="max-height:60px;max-width:180px;object-fit:contain"/></div>' : '';
+  const taglineHtml = (opts.showTagline!==false&&info.tagline) ?
+    '<div style="text-align:center;font-size:10px">'+esc(info.tagline)+'</div>' : '';
+  const gstHtml = (opts.showGst!==false&&info.gst) ?
+    '<div style="text-align:center;font-size:10px;font-weight:700">GST: '+esc(info.gst)+'</div>' : '';
+  const headerHtml = info.billHeader ?
+    '<div style="border:1px solid #000;padding:4px;text-align:center;font-weight:700;font-size:11px;margin:5px 0">'+esc(info.billHeader)+'</div>' : '';
+  const offerHtml = (opts.showOffer&&info.billOffer) ?
+    '<div style="border:1px dashed #aaa;padding:5px;text-align:center;font-weight:700;margin:5px 0">\uD83C\uDF89 '+esc(info.billOffer)+'</div>' : '';
+  const itemRows = o.items.map(function(i){
+    return '<div style="display:flex;margin:2px 0"><span style="flex:1">'+esc(i.name)+'</span><span style="width:28px;text-align:center;color:#666">'+i.qty+'</span><span style="width:65px;text-align:right">&#8377;'+(i.price*i.qty).toFixed(2)+'</span></div>';
+  }).join('');
+  const html = '<!DOCTYPE html><html><head><title>Bill</title>'
+    + '<style>'
+    + '*{box-sizing:border-box;}'
+    + 'body{font-family:Courier New,monospace;font-size:12px;max-width:310px;margin:0 auto;padding:12px;}'
+    + '.c{text-align:center;}.b{font-weight:700;}'
+    + '.line{border-top:1px dashed #888;margin:7px 0;}'
+    + '.dbl{border-top:2px solid #000;margin:7px 0;}'
+    + '.row{display:flex;justify-content:space-between;margin:2px 0;}'
+    + '.total{display:flex;justify-content:space-between;font-weight:800;font-size:14px;}'
+    + '@media print{@page{margin:3mm;}}'
+    + '</style></head>'
+    + '<body onload="window.print();setTimeout(function(){window.close();},1200)">'
+    + logoHtml
+    + '<div class="c b" style="font-size:15px">'+esc(info.name||'My Restaurant')+'</div>'
+    + taglineHtml
+    + (info.addr ? '<div class="c" style="font-size:10px">'+esc(info.addr)+(info.city?', '+esc(info.city):'')+(info.pin?' '+esc(info.pin):'')+'</div>' : '')
+    + (info.phone ? '<div class="c" style="font-size:10px">'+esc(info.phone)+'</div>' : '')
+    + gstHtml
+    + headerHtml
+    + '<div class="line"></div>'
+    + '<div class="row"><span class="b">RECEIPT</span><span>#'+o.id.slice(-4).toUpperCase()+'</span></div>'
+    + '<div class="row"><span>'+fmtDate(o.date)+'</span><span>'+fmtTime(o.date)+'</span></div>'
+    + (cust ? '<div class="row"><span>Customer:</span><span>'+esc(cust.name)+'</span></div>' : '')
+    + '<div class="line"></div>'
+    + '<div class="row b" style="font-size:11px"><span>Item</span><span>Qty</span><span>Amt</span></div>'
+    + itemRows
+    + '<div class="line"></div>'
+    + '<div class="row"><span>Subtotal</span><span>&#8377;'+o.subtotal.toFixed(2)+'</span></div>'
+    + (o.tax ? '<div class="row"><span>Tax</span><span>&#8377;'+o.tax.toFixed(2)+'</span></div>' : '')
+    + (o.discount ? '<div class="row"><span>Discount</span><span>-&#8377;'+o.discount.toFixed(2)+'</span></div>' : '')
+    + '<div class="dbl"></div>'
+    + '<div class="total"><span>TOTAL</span><span>&#8377;'+o.total.toFixed(2)+'</span></div>'
+    + '<div class="row"><span>Payment</span><span>'+o.payment.toUpperCase()+'</span></div>'
+    + '<div class="line"></div>'
+    + '<div class="c">'+esc(info.msg||'Thank you! Visit again \uD83D\uDE0A')+'</div>'
+    + offerHtml
+    + '<div class="c" style="margin-top:8px;font-size:9px;color:#aaa">Powered by BillBlitz</div>'
+    + '</body></html>';
+  printWin.document.write(html);
+  printWin.document.close();
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                 WHATSAPP BILL SEND                   ║
+// ╚══════════════════════════════════════════════════════╝
+
+// ── WHATSAPP REPORT SHARE ────────────────────────────────
+function whatsappReport() {
+  let orders = db.orders;
+  if(repTab==='today')  orders = orders.filter(o=>isToday(o.date));
+  else if(repTab==='week')  orders = orders.filter(o=>isThisWeek(o.date));
+  else if(repTab==='month') orders = orders.filter(o=>isThisMonth(o.date));
+
+  const total = orders.reduce((s,o)=>s+o.total,0);
+  const info  = db.settings?.restInfo || {};
+  const name  = info.name || 'My Restaurant';
+  const period = repTab==='today'?'Today':repTab==='week'?'This Week':repTab==='month'?'This Month':'All Time';
+
+  // Item wise
+  const itemCount = {};
+  orders.forEach(o=>o.items.forEach(i=>{ itemCount[i.name]=(itemCount[i.name]||0)+i.qty; }));
+  const topItems = Object.entries(itemCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Payment breakdown
+  const cash  = orders.filter(o=>o.payment==='cash').reduce((s,o)=>s+o.total,0);
+  const card  = orders.filter(o=>o.payment==='card').reduce((s,o)=>s+o.total,0);
+  const other = orders.filter(o=>o.payment==='other').reduce((s,o)=>s+o.total,0);
+
+  const purch = repTab==='today'?db.purchases.filter(p=>isToday(p.date)):
+    repTab==='week'?db.purchases.filter(p=>isThisWeek(p.date)):
+    repTab==='month'?db.purchases.filter(p=>isThisMonth(p.date)):db.purchases;
+  const purchTotal = purch.reduce((s,p)=>s+p.total,0);
+
+  let msg = `📊 *${name} — Sales Report*\n`;
+  msg += `📅 *${period}*\n`;
+  msg += `🕐 ${new Date().toLocaleString('en-IN')}\n\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `💰 *Total Revenue: ₹${total.toFixed(2)}*\n`;
+  msg += `🧾 Total Orders: ${orders.length}\n`;
+  msg += `📈 Avg Order: ₹${orders.length?(total/orders.length).toFixed(2):'0.00'}\n\n`;
+  msg += `💳 *Payment Breakdown:*\n`;
+  if(cash)  msg += `  💵 Cash: ₹${cash.toFixed(2)}\n`;
+  if(card)  msg += `  💳 Card: ₹${card.toFixed(2)}\n`;
+  if(other) msg += `  📱 UPI/Other: ₹${other.toFixed(2)}\n`;
+  if(topItems.length){
+    msg += `\n🏆 *Top Items:*\n`;
+    topItems.forEach(([n,q],i)=>{ msg += `  ${i+1}. ${n} — ${q} sold\n`; });
+  }
+  if(purchTotal>0){
+    msg += `\n💸 Purchase Cost: ₹${purchTotal.toFixed(2)}\n`;
+    msg += `✅ *Net Profit: ₹${(total-purchTotal).toFixed(2)}*\n`;
+  }
+  msg += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `_Powered by BillBlitz ⚡_`;
+
+  const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+}
+
+function whatsappBill(orderId){
+  const o = db.orders.find(x=>x.id===orderId); if(!o) return;
+  const info = db.settings?.restInfo || {};
+  const name = info.name || 'My Restaurant';
+  let msg = `🍽️ *${name}*\n`;
+  msg += `📋 *Receipt — Order #${o.id.slice(-4).toUpperCase()}*\n`;
+  msg += `📅 ${fmtDate(o.date)} ${fmtTime(o.date)}\n\n`;
+  msg += `*Items:*\n`;
+  o.items.forEach(i=>{ msg += `• ${i.qty}× ${i.name} — $₹${(i.price*i.qty).toFixed(2)}\n`; });
+  msg += `\n`;
+  if(o.tax) msg += `Tax: ₹${o.tax.toFixed(2)}\n`;
+  if(o.discount) msg += `Discount: -₹${o.discount.toFixed(2)}\n`;
+  msg += `*TOTAL: ₹${o.total.toFixed(2)}* (${o.payment})\n\n`;
+  msg += info.msg || 'Thank you for dining with us! 🙏';
+  const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(url,'_blank');
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║              BACKUP / RESTORE DATA                   ║
+// ╚══════════════════════════════════════════════════════╝
+function exportData(){
+  const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tablegold-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✅ Backup exported successfully!');
+}
+
+function importData(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if(!imported.menu || !imported.orders) throw new Error('Invalid backup file');
+      if(!confirm(`Import backup? This will replace all current data.\n\nFound: ${imported.customers?.length||0} customers, ${imported.orders?.length||0} orders, ${imported.menu?.length||0} menu items.`)) return;
+      db = imported;
+      save();
+      renderPage(currentPage);
+      toast('✅ Data restored successfully!');
+    } catch(err){
+      toast('❌ Invalid backup file!','#FF6B35');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                   SETTINGS PAGE                      ║
+// ╚══════════════════════════════════════════════════════╝
+function renderSettingsPage(){
+  const info = db.settings?.restInfo || {};
+  const opts = db.settings?.billOpts || {};
+  const sv = (id,v) => { const el=document.getElementById(id); if(el) el.value=v||''; };
+  const sc = (id,v) => { const el=document.getElementById(id); if(el) el.checked=(v!==false); };
+  sv('set-rest-name', info.name);
+  sv('set-rest-tagline', info.tagline);
+  sv('set-rest-addr', info.addr);
+  sv('set-rest-city', info.city);
+  sv('set-rest-pin', info.pin);
+  sv('set-rest-phone', info.phone);
+  sv('set-rest-gst', info.gst);
+  sv('set-rest-msg', info.msg);
+  sv('set-bill-header', info.billHeader);
+  sv('set-bill-offer', info.billOffer);
+  sc('opt-show-logo', opts.showLogo);
+  sc('opt-show-gst', opts.showGst);
+  sc('opt-show-tagline', opts.showTagline);
+  sc('opt-show-offer', opts.showOffer);
+  if(info.logo) showLogoPreview(info.logo);
+  const access = getCashierAccess();
+  const ac = document.getElementById('access-controls');
+  if(ac) ac.innerHTML = Object.entries(ACCESS_LABELS).map(([key,label])=>`
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;background:#F7F9FF;border-radius:10px;border:1px solid #E2E8F5">
+      <input type="checkbox" id="acc-${key}" ${access[key]?'checked':''} style="width:18px;height:18px;accent-color:#FF6B35"/>
+      <span style="font-size:0.9rem;font-weight:600">${label}</span>
+    </label>`).join('');
+}
+
+// ── LOGO UPLOAD ─────────────────────────────────────────
+function handleLogoUpload(e){
+  const file = e.target.files[0]; if(!file) return;
+  if(file.size > 800000){ toast('Logo 800KB se chota hona chahiye!','#FF6B35'); return; }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const b64 = ev.target.result;
+    if(!db.settings) db.settings={};
+    if(!db.settings.restInfo) db.settings.restInfo={};
+    db.settings.restInfo.logo = b64;
+    save();
+    showLogoPreview(b64);
+    toast('✅ Logo save ho gaya!','#00A878');
+  };
+  reader.readAsDataURL(file);
+}
+
+function showLogoPreview(src){
+  const img = document.getElementById('logo-preview-img');
+  const ph  = document.getElementById('logo-upload-placeholder');
+  const act = document.getElementById('logo-actions');
+  if(img){ img.src=src; img.style.display='block'; }
+  if(ph)  ph.style.display='none';
+  if(act) act.style.display='flex';
+}
+
+function removeLogo(){
+  if(!confirm('Logo remove karein?')) return;
+  if(db.settings?.restInfo) db.settings.restInfo.logo = null;
+  save();
+  const img = document.getElementById('logo-preview-img');
+  const ph  = document.getElementById('logo-upload-placeholder');
+  const act = document.getElementById('logo-actions');
+  if(img){ img.src=''; img.style.display='none'; }
+  if(ph)  ph.style.display='flex';
+  if(act) act.style.display='none';
+  toast('Logo hata diya');
+}
+
+function saveRestInfo(){
+  if(!db.settings) db.settings={};
+  db.settings.restInfo = {
+    ...(db.settings.restInfo||{}),
+    name:       document.getElementById('set-rest-name')?.value.trim()||'',
+    tagline:    document.getElementById('set-rest-tagline')?.value.trim()||'',
+    addr:       document.getElementById('set-rest-addr')?.value.trim()||'',
+    city:       document.getElementById('set-rest-city')?.value.trim()||'',
+    pin:        document.getElementById('set-rest-pin')?.value.trim()||'',
+    phone:      document.getElementById('set-rest-phone')?.value.trim()||'',
+    gst:        document.getElementById('set-rest-gst')?.value.trim()||'',
+    msg:        document.getElementById('set-rest-msg')?.value.trim()||'',
+    billHeader: document.getElementById('set-bill-header')?.value.trim()||'',
+    billOffer:  document.getElementById('set-bill-offer')?.value.trim()||'',
+  };
+  db.settings.billOpts = {
+    showLogo:    document.getElementById('opt-show-logo')?.checked!==false,
+    showGst:     document.getElementById('opt-show-gst')?.checked!==false,
+    showTagline: document.getElementById('opt-show-tagline')?.checked!==false,
+    showOffer:   document.getElementById('opt-show-offer')?.checked||false,
+  };
+  save(); toast('✅ Save ho gaya! Bill update ho gaya.','#00A878');
+}
+
+// ── BILL PREVIEW ─────────────────────────────────────────
+function showBillPreview(){
+  const info = db.settings?.restInfo || {};
+  const opts = db.settings?.billOpts || {};
+  const items = db.menu.slice(0,3);
+  const sub = items.reduce((s,m)=>s+m.price,0);
+  const tax = Math.round(sub*0.05);
+  const total = sub+tax;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-handle"></div>
+    <div class="modal-title">👁 Bill Preview</div>
+    <div class="bill-preview">
+      ${opts.showLogo&&info.logo?`<div class="bp-logo"><img src="${info.logo}"/></div>`:''}
+      <div class="bp-name">${esc(info.name||'My Restaurant')}</div>
+      ${opts.showTagline&&info.tagline?`<div class="bp-sub">${esc(info.tagline)}</div>`:''}
+      ${info.addr?`<div class="bp-info">📍 ${esc(info.addr)}${info.city?', '+esc(info.city):''}${info.pin?' '+esc(info.pin):''}</div>`:''}
+      ${info.phone?`<div class="bp-info">📞 ${esc(info.phone)}</div>`:''}
+      ${opts.showGst&&info.gst?`<div class="bp-info">GST: ${esc(info.gst)}</div>`:''}
+      ${info.billHeader?`<div style="background:#EEF2FF;border-radius:5px;padding:5px 8px;text-align:center;font-size:10px;font-weight:700;color:#2563EB;margin:5px 0">${esc(info.billHeader)}</div>`:''}
+      <div class="bp-line"></div>
+      <div class="bp-row"><span><b>BILL</b></span><span>#DEMO</span></div>
+      <div class="bp-row"><span>${new Date().toLocaleDateString('en-IN')}</span><span>${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      <div class="bp-line"></div>
+      <div class="bp-row" style="font-weight:700"><span>Item</span><span style="margin-left:auto">Qty</span><span style="min-width:55px;text-align:right">Amt</span></div>
+      ${items.map(m=>`<div class="bp-item"><span class="bp-item-name">${esc(m.name)}</span><span class="bp-item-qty">1</span><span class="bp-item-price">₹${m.price.toFixed(2)}</span></div>`).join('')}
+      <div class="bp-line"></div>
+      <div class="bp-row"><span>Subtotal</span><span>₹${sub.toFixed(2)}</span></div>
+      <div class="bp-row"><span>Tax (5%)</span><span>₹${tax.toFixed(2)}</span></div>
+      <div class="bp-dbl"></div>
+      <div class="bp-total"><span>TOTAL</span><span>₹${total.toFixed(2)}</span></div>
+      <div class="bp-line"></div>
+      <div class="bp-footer">${esc(info.msg||'Thank you! Visit again 😊')}</div>
+      ${opts.showOffer&&info.billOffer?`<div class="bp-extra">🎉 ${esc(info.billOffer)}</div>`:''}
+      <div class="bp-powered">Powered by BillBlitz ⚡</div>
+    </div>
+    <button class="btn btn-outline btn-full" style="margin-top:14px" onclick="closeModal()">Band Karo</button>`;
+  openModal();
+}
+
+
+function savePINs(){
+  const op = document.getElementById('set-owner-pin').value;
+  const cp = document.getElementById('set-cashier-pin').value;
+  if((op && op.length!==4)||( cp && cp.length!==4)){ toast('PINs must be 4 digits','#FF6B35'); return; }
+  if(!db.settings) db.settings = {};
+  if(!db.settings.pins) db.settings.pins = {};
+  if(op) db.settings.pins.owner = op;
+  if(cp) db.settings.pins.cashier = cp;
+  save();
+  document.getElementById('set-owner-pin').value = '';
+  document.getElementById('set-cashier-pin').value = '';
+  toast('PINs updated! 🔐');
+}
+
+function saveAccessControls(){
+  if(!db.settings) db.settings = {};
+  db.settings.cashierAccess = {};
+  Object.keys(ACCESS_LABELS).forEach(key=>{
+    const cb = document.getElementById('acc-'+key);
+    if(cb) db.settings.cashierAccess[key] = cb.checked;
+  });
+  save(); applyRoleRestrictions(); toast('Access controls saved!');
+}
+
+function clearOrders(){
+  if(!confirm('Delete ALL orders? This cannot be undone.')) return;
+  db.orders = []; save(); toast('All orders cleared.','#FF6B35');
+}
+
+function resetAll(){
+  if(!confirm('RESET EVERYTHING? All data will be lost permanently!')) return;
+  if(!confirm('Are you absolutely sure? This is irreversible!')) return;
+  localStorage.removeItem('bb-db-v1');
+  location.reload();
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║              UPDATE SETPAGE + RENDERPAGE             ║
+// ╚══════════════════════════════════════════════════════╝
+let currentPage='dashboard';
+let repTab='today';
+let loyaltyTab='all';
+
+const PAGE_TITLES = {
+  dashboard:'🏠 Dashboard', billing:'🧾 Billing / POS', menu:'🍜 Menu',
+  inventory:'📦 Inventory', purchases:'🛒 Purchases', reports:'📊 Reports',
+  loyalty:'⭐ Loyalty', settings:'⚙️ Settings'
+};
+
+function setPage(p){
+  if(currentRole==='cashier'){
+    const access=getCashierAccess();
+    if(CASHIER_BLOCKED_PAGES.includes(p)&&!access[p]){ toast('🔒 Access restricted for Cashier role','#FF6B35'); return; }
+  }
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.bnav').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(b=>b.classList.remove('active'));
+  const pg=document.getElementById('page-'+p);
+  const nb=document.getElementById('nav-'+p);
+  const sb=document.getElementById('sb-'+p);
+  if(pg) pg.classList.add('active');
+  if(nb) nb.classList.add('active');
+  if(sb) sb.classList.add('active');
+  // Update desktop header title
+  const dht=document.getElementById('dh-page-title');
+  if(dht) dht.textContent=PAGE_TITLES[p]||p;
+  currentPage=p;
+  renderPage(p);
+  // Update low stock badge on sidebar
+  const ls=db.inventory.filter(i=>i.qty<=i.minQty).length;
+  const lsBadge=document.getElementById('sb-lowstock-badge');
+  if(lsBadge){ lsBadge.style.display=ls>0?'':'none'; lsBadge.textContent=ls; }
+}
+
+function renderPage(p){
+  if(p==='dashboard') renderDashboard();
+  else if(p==='billing') renderBilling();
+  else if(p==='menu') renderMenuPage();
+  else if(p==='inventory') renderInventoryPage();
+  else if(p==='purchases') renderPurchasesPage();
+  else if(p==='reports') renderReports();
+  else if(p==='loyalty') renderLoyaltyPage();
+  else if(p==='settings') renderSettingsPage();
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                  DASHBOARD                           ║
+// ╚══════════════════════════════════════════════════════╝
+function renderDashboard(){
+  const todayOrders = db.orders.filter(o=>isToday(o.date));
+  const todaySales = todayOrders.reduce((s,o)=>s+o.total,0);
+  const lowStock = db.inventory.filter(i=>i.qty<=i.minQty);
+  const ready = db.customers.filter(c=>(c.stamps||0)>=STAMP_GOAL);
+  const bdays = db.customers.filter(c=>isBdayMonth(c.birthday));
+
+  document.getElementById('dash-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-val" style="color:#00A878">${fmt(todaySales)}</div><div class="stat-lbl">Today's Sales</div></div>
+    <div class="stat-card"><div class="stat-icon">🧾</div><div class="stat-val" style="color:#2563EB">${todayOrders.length}</div><div class="stat-lbl">Today's Orders</div></div>
+    <div class="stat-card"><div class="stat-icon">📦</div><div class="stat-val" style="color:${lowStock.length?'#FF6B35':'#00A878'}">${lowStock.length}</div><div class="stat-lbl">Low Stock Alerts</div></div>
+    <div class="stat-card"><div class="stat-icon">⭐</div><div class="stat-val" style="color:#FF8C42">${db.customers.length}</div><div class="stat-lbl">Loyalty Members</div></div>
+  `;
+
+  let alerts='';
+  if(lowStock.length) alerts+=`<div class="alert alert-red"><strong>⚠️ Low Stock (${lowStock.length} items)</strong>${lowStock.map(i=>`<span style="font-size:0.8rem">• ${esc(i.name)}: ${i.qty} ${esc(i.unit)} left</span><br>`).join('')}</div>`;
+  if(ready.length) alerts+=`<div class="alert alert-yellow"><strong>🎁 Loyalty: Ready to Redeem (${ready.length})</strong><div class="chips">${ready.map(c=>`<span class="chip chip-yellow" onclick="setPage('loyalty')">${esc(c.name)}</span>`).join('')}</div></div>`;
+  if(bdays.length) alerts+=`<div class="alert alert-green"><strong>🎂 Birthdays This Month!</strong><div class="chips">${bdays.map(c=>`<span class="chip chip-red">${esc(c.name)}</span>`).join('')}</div></div>`;
+  document.getElementById('dash-alerts').innerHTML=alerts;
+
+  const recent=todayOrders.slice(-5).reverse();
+  document.getElementById('dash-orders').innerHTML=recent.length?recent.map(o=>`
+    <div class="list-row" onclick="viewOrder('${o.id}')">
+      <div class="list-icon" style="background:#DCFCE7;color:#00A878">🧾</div>
+      <div class="list-main"><div class="list-title">Order #${o.id.slice(-4).toUpperCase()}</div><div class="list-sub">${o.items.length} items · ${fmtTime(o.date)} · ${o.payment}</div></div>
+      <div class="list-right"><div style="font-weight:800;color:#FF6B35">${fmt(o.total)}</div></div>
+    </div>`).join(''):'<div class="empty">No orders today yet.</div>';
+
+  document.getElementById('dash-lowstock').innerHTML=lowStock.length?lowStock.map(i=>{
+    const pct=Math.min(100,Math.round((i.qty/Math.max(i.minQty*2,1))*100));
+    return `<div class="list-row">
+      <div class="list-icon" style="background:#FFE8E8;color:#FF6B35">📦</div>
+      <div class="list-main"><div class="list-title">${esc(i.name)}</div>
+        <div class="stock-bar-wrap"><div class="stock-bar" style="width:${pct}%;background:${pct<30?'#FF6B35':pct<60?'#FF8C42':'#00A878'}"></div></div>
+        <div class="list-sub">${i.qty} ${esc(i.unit)} remaining (min: ${i.minQty})</div>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="openStockUpdate('${i.id}')">Update</button>
+    </div>`;}).join(''):'<div class="empty" style="padding:1rem">✅ All stock levels are fine!</div>';
+
+  document.getElementById('dash-loyalty').innerHTML=ready.length?ready.map(c=>`
+    <div class="loyalty-row" onclick="openLoyaltyDetail('${c.id}')">
+      <div class="loy-avatar" style="background:${avatarColor(c.name)}">${initials(c.name)}</div>
+      <div style="flex:1"><div style="font-weight:700;font-size:0.88rem">${esc(c.name)}</div><div style="font-size:0.7rem;color:#6B7A99">${esc(c.phone||'')}</div></div>
+      <span class="badge badge-yellow">🎁 Ready</span>
+    </div>`).join(''):'<div class="empty" style="padding:1rem">No members ready to redeem yet.</div>';
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                   POS / BILLING                      ║
+// ╚══════════════════════════════════════════════════════╝
+let order = { items:[], customerId:'' };
+let posCat = 'All';
+
+function renderBilling(){
+  renderSmartChips();
+  renderSmartSuggestions();
+  // populate customer dropdown
+  const sel = document.getElementById('pos-customer');
+  const cur = sel.value;
+  sel.innerHTML='<option value="">— Walk-in (No loyalty) —</option>';
+  db.customers.forEach(c=>{ sel.innerHTML+=`<option value="${c.id}" ${c.id===cur?'selected':''}>${esc(c.name)} (${c.stamps||0}/${STAMP_GOAL} stamps)</option>`; });
+  sel.onchange=()=>{ order.customerId=sel.value; updateCustStamps(); };
+  order.customerId=sel.value;
+  updateCustStamps();
+
+  // cat tabs
+  document.getElementById('pos-cat-tabs').innerHTML=CATS.map(c=>`<button class="cat-tab ${posCat===c?'active':''}" onclick="setPOSCat('${c}')">${c}</button>`).join('');
+
+  renderPOSMenu();
+  renderOrderItems();
+}
+
+function updateCustStamps(){
+  const c=db.customers.find(x=>x.id===order.customerId);
+  document.getElementById('pos-cust-stamps').textContent=c?`${c.stamps||0}/${STAMP_GOAL}☕`:'';
+}
+
+function setPOSCat(c){ posCat=c; document.getElementById('pos-cat-tabs').innerHTML=CATS.map(x=>`<button class="cat-tab ${posCat===x?'active':''}" onclick="setPOSCat('${x}')">${x}</button>`).join(''); renderPOSMenu(); }
+
+function renderPOSMenu(){
+  const items=posCat==='All'?db.menu:db.menu.filter(m=>m.category===posCat);
+  document.getElementById('pos-menu-grid').innerHTML=items.map(m=>`
+    <div class="menu-item-btn" onclick="addToOrder('${m.id}')">
+      <div class="mi-icon">${esc(m.icon||'🍽️')}</div>
+      <div class="mi-name">${esc(m.name)}</div>
+      <div class="mi-price">${fmt(m.price)}</div>
+    </div>`).join('')||'<div style="grid-column:1/-1;text-align:center;padding:1.5rem;color:#6B7A99;opacity:0.6">No items in this category.</div>';
+}
+
+function addToOrder(menuId){
+  const m=db.menu.find(x=>x.id===menuId); if(!m) return;
+  const existing=order.items.find(i=>i.menuId===menuId);
+  if(existing){ existing.qty++; }
+  else{ order.items.push({menuId,name:m.name,price:m.price,qty:1}); }
+  renderOrderItems();
+  toast(`${m.name} added!`);
+}
+
+function changeQty(menuId,delta){
+  const idx=order.items.findIndex(i=>i.menuId===menuId);
+  if(idx===-1) return;
+  order.items[idx].qty+=delta;
+  if(order.items[idx].qty<=0) order.items.splice(idx,1);
+  renderOrderItems();
+}
+
+function clearOrder(){ order.items=[]; renderOrderItems(); }
+
+function renderOrderItems(){
+  const el=document.getElementById('order-items-list');
+  if(!order.items.length){ el.innerHTML='<div class="empty" style="padding:1rem">No items added yet.</div>'; }
+  else{ el.innerHTML=order.items.map(i=>`
+    <div class="order-item">
+      <div class="oi-name">${esc(i.name)}</div>
+      <div class="oi-qty">
+        <button class="qty-btn" onclick="changeQty('${i.menuId}',-1)">−</button>
+        <span style="font-weight:700;min-width:16px;text-align:center">${i.qty}</span>
+        <button class="qty-btn" onclick="changeQty('${i.menuId}',1)">+</button>
+      </div>
+      <div class="oi-price">${fmt(i.price*i.qty)}</div>
+    </div>`).join(''); }
+  recalcBill();
+}
+
+function recalcBill(){
+  const sub=order.items.reduce((s,i)=>s+i.price*i.qty,0);
+  const taxPct=parseFloat(document.getElementById('bill-tax-pct').value)||0;
+  const disc=parseFloat(document.getElementById('bill-discount').value)||0;
+  const tax=sub*taxPct/100;
+  const total=Math.max(0,sub+tax-disc);
+  document.getElementById('bill-subtotal').textContent=fmt(sub);
+  document.getElementById('bill-tax-amt').textContent=fmt(tax);
+  document.getElementById('bill-total-amt').textContent=fmt(total);
+  document.getElementById('tax-pct-lbl').textContent=taxPct;
+}
+
+function completeBill(payment){
+  if(!order.items.length){ toast('Add items to the order first!','#FF6B35'); return; }
+  const sub=order.items.reduce((s,i)=>s+i.price*i.qty,0);
+  const taxPct=parseFloat(document.getElementById('bill-tax-pct').value)||0;
+  const disc=parseFloat(document.getElementById('bill-discount').value)||0;
+  const tax=sub*taxPct/100;
+  const total=Math.max(0,sub+tax-disc);
+  const orderId=uid();
+  const o={id:orderId,date:new Date().toISOString(),items:[...order.items],subtotal:sub,tax,discount:disc,total,payment,customerId:order.customerId};
+  db.orders.unshift(o);
+  // ☁️ Cloud sync
+  cloudSave('orders', orderId, o);
+  // add loyalty stamp if customer selected
+  if(order.customerId){
+    const c=db.customers.find(x=>x.id===order.customerId);
+    if(c){
+      c.stamps=(c.stamps||0)+1;
+      c.visits=[...(c.visits||[]),{type:'stamp',date:new Date().toISOString(),orderId}];
+    }
+  }
+  save();
+  showBillReceipt(o);
+  order={items:[],customerId:document.getElementById('pos-customer').value};
+  document.getElementById('bill-tax-pct').value=0;
+  document.getElementById('bill-discount').value=0;
+  renderOrderItems();
+}
+
+function showBillReceipt(o){
+  const c=o.customerId?db.customers.find(x=>x.id===o.customerId):null;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">✅ Bill Complete</div>
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:2.5rem;margin-bottom:4px">🧾</div>
+      <div style="font-weight:700;font-size:0.82rem;color:#6B7A99">Order #${o.id.slice(-4).toUpperCase()} · ${fmtDate(o.date)} ${fmtTime(o.date)}</div>
+    </div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-body">
+        ${o.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} ×${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
+        <div class="divider"></div>
+        <div class="bill-row"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
+        ${o.tax?`<div class="bill-row"><span>Tax</span><span>${fmt(o.tax)}</span></div>`:''}
+        ${o.discount?`<div class="bill-row"><span>Discount</span><span>-${fmt(o.discount)}</span></div>`:''}
+        <div class="bill-total"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
+        <div class="bill-row"><span>Payment</span><span>${o.payment.toUpperCase()}</span></div>
+      </div>
+    </div>
+    ${c?`<div class="stamp-card-mini">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-family:Georgia,serif;font-size:0.9rem">⭐ ${esc(c.name)}'s Card</div>
+        <div style="font-size:1.1rem;font-weight:800;color:#FFD700">${c.stamps||0}/${STAMP_GOAL}</div>
+      </div>
+      <div class="sc-stamps">${Array.from({length:STAMP_GOAL},(_,i)=>`<div class="sc-dot ${i<(c.stamps||0)?'on':'off'}">${i<(c.stamps||0)?'☕':''}</div>`).join('')}</div>
+      <div style="font-size:0.68rem;opacity:0.55">${(c.stamps||0)>=STAMP_GOAL?'🎉 Ready to redeem!':STAMP_GOAL-(c.stamps||0)+' more stamps to free item'}</div>
+    </div>`:''}
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-green" onclick="printBill('${o.id}')">🖨️ Print</button>
+              <button class="btn btn-sm" style="background:rgba(37,99,235,0.15);color:#60A5FA" onclick="btPrintBill('${o.id}')">📡 BT Print</button>
+              <button class="btn btn-sm btn-outline" onclick="btPrintKOT('${o.id}')">🍳 KOT</button>
+      <button class="btn btn-gold" onclick="whatsappBill('${o.id}')">📲 WhatsApp</button>
+      <button class="btn btn-outline" onclick="closeModal()">Close</button>
+    </div>`;
+  openModal();
+}
+
+function quickBill(){ setPage('billing'); }
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                  MENU MANAGEMENT                     ║
+// ╚══════════════════════════════════════════════════════╝
+function renderMenuPage(){
+  const q=(document.getElementById('menu-search')||{}).value||'';
+  const items=db.menu.filter(m=>m.name.toLowerCase().includes(q.toLowerCase())||m.category.toLowerCase().includes(q.toLowerCase()));
+  document.getElementById('menu-list').innerHTML=items.length?items.map(m=>`
+    <div class="list-row">
+      <div class="list-icon" style="background:#F7F9FF;font-size:1.4rem">${esc(m.icon||'🍽️')}</div>
+      <div class="list-main">
+        <div class="list-title">${esc(m.name)}</div>
+        <div class="list-sub"><span class="badge badge-blue">${esc(m.category)}</span> ${esc(m.description||'')}</div>
+      </div>
+      <div class="list-right">
+        <div style="font-weight:800;color:#FF6B35;font-size:0.95rem">${fmt(m.price)}</div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button class="btn btn-sm btn-outline" onclick="openMenuModal('${m.id}')">✏️</button>
+          <button class="btn btn-sm btn-red" onclick="deleteMenu('${m.id}')">🗑️</button>
+        </div>
+      </div>
+    </div>`).join(''):'<div class="empty">No menu items found.</div>';
+}
+
+function openMenuModal(id){
+  const m=id?db.menu.find(x=>x.id===id):null;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">${m?'Edit':'Add'} Menu Item</div>
+    <div class="form-group"><label class="form-label">Item Name *</label><input class="form-inp" id="mi-name" value="${esc(m?.name||'')}" placeholder="e.g. Butter Chicken"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Price ($) *</label><input class="form-inp" id="mi-price" type="number" step="0.01" value="${m?.price||''}" placeholder="0.00"/></div>
+      <div class="form-group"><label class="form-label">Icon (emoji)</label><input class="form-inp" id="mi-icon" value="${esc(m?.icon||'')}" placeholder="🍽️"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Category</label>
+      <select class="form-select" id="mi-cat">${['Food','Beverage','Dessert','Snacks','Special'].map(c=>`<option ${m?.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Description</label><input class="form-inp" id="mi-desc" value="${esc(m?.description||'')}" placeholder="Short description…"/></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMenu('${id||''}')">Save Item</button>
+    </div>`;
+  openModal();
+}
+
+function saveMenu(id){
+  const name=document.getElementById('mi-name').value.trim();
+  const price=parseFloat(document.getElementById('mi-price').value);
+  if(!name||isNaN(price)){ toast('Name and price are required','#FF6B35'); return; }
+  const data={name,price,category:document.getElementById('mi-cat').value,icon:document.getElementById('mi-icon').value.trim()||'🍽️',description:document.getElementById('mi-desc').value.trim()};
+  if(id){ Object.assign(db.menu.find(x=>x.id===id),data); toast('Menu item updated!'); }
+  else{ db.menu.push({id:uid(),...data}); toast('Menu item added!'); }
+  save(); cloudSave('meta','menu',{items:db.menu}); closeModal(); renderMenuPage();
+}
+
+function deleteMenu(id){
+  if(!confirm('Delete this menu item?')) return;
+  db.menu=db.menu.filter(m=>m.id!==id);
+  save(); renderMenuPage(); toast('Deleted.','#FF6B35');
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                   INVENTORY                          ║
+// ╚══════════════════════════════════════════════════════╝
+function renderInventoryPage(){
+  const q=(document.getElementById('inv-search')||{}).value||'';
+  const items=db.inventory.filter(i=>i.name.toLowerCase().includes(q.toLowerCase()));
+  const lowStock=db.inventory.filter(i=>i.qty<=i.minQty);
+  document.getElementById('inv-alerts').innerHTML=lowStock.length?`<div class="alert alert-red"><strong>⚠️ ${lowStock.length} item(s) need restocking</strong>${lowStock.map(i=>`<span style="font-size:0.78rem">• ${esc(i.name)}: ${i.qty} ${esc(i.unit)} (min: ${i.minQty})<br></span>`).join('')}</div>`:'';
+  document.getElementById('inv-list').innerHTML=items.length?items.map(i=>{
+    const pct=Math.min(100,Math.round((i.qty/Math.max(i.minQty*2,1))*100));
+    const col=i.qty<=i.minQty?'#FF6B35':i.qty<=i.minQty*1.5?'#FF8C42':'#00A878';
+    return `<div class="list-row">
+      <div class="list-icon" style="background:${i.qty<=i.minQty?'#FFE8E8':'#DCFCE7'};color:${col}">📦</div>
+      <div class="list-main">
+        <div class="list-title">${esc(i.name)}</div>
+        <div class="stock-bar-wrap"><div class="stock-bar" style="width:${pct}%;background:${col}"></div></div>
+        <div class="list-sub">${i.qty} ${esc(i.unit)} · Min: ${i.minQty} · Cost: ${fmt(i.costPrice)}/${esc(i.unit)}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-green" onclick="openStockUpdate('${i.id}')">+Stock</button>
+        <button class="btn btn-sm btn-outline" onclick="openInventoryModal('${i.id}')">✏️</button>
+        <button class="btn btn-sm btn-red" onclick="deleteInventory('${i.id}')">🗑️</button>
+      </div>
+    </div>`; }).join(''):'<div class="empty">No inventory items found.</div>';
+}
+
+function openInventoryModal(id){
+  const item=id?db.inventory.find(x=>x.id===id):null;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">${item?'Edit':'Add'} Inventory Item</div>
+    <div class="form-group"><label class="form-label">Item Name *</label><input class="form-inp" id="inv-name" value="${esc(item?.name||'')}" placeholder="e.g. Chicken"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Quantity *</label><input class="form-inp" id="inv-qty" type="number" step="0.1" value="${item?.qty||''}" placeholder="0"/></div>
+      <div class="form-group"><label class="form-label">Unit</label><input class="form-inp" id="inv-unit" value="${esc(item?.unit||'')}" placeholder="kg / L / pcs"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Min. Stock Level</label><input class="form-inp" id="inv-min" type="number" step="0.1" value="${item?.minQty||''}" placeholder="0"/></div>
+      <div class="form-group"><label class="form-label">Cost Price</label><input class="form-inp" id="inv-cost" type="number" step="0.01" value="${item?.costPrice||''}" placeholder="0.00"/></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInventory('${id||''}')">Save</button>
+    </div>`;
+  openModal();
+}
+
+function saveInventory(id){
+  const name=document.getElementById('inv-name').value.trim();
+  const qty=parseFloat(document.getElementById('inv-qty').value);
+  if(!name||isNaN(qty)){ toast('Name and quantity required','#FF6B35'); return; }
+  const data={name,qty,unit:document.getElementById('inv-unit').value.trim()||'unit',minQty:parseFloat(document.getElementById('inv-min').value)||0,costPrice:parseFloat(document.getElementById('inv-cost').value)||0};
+  if(id){ Object.assign(db.inventory.find(x=>x.id===id),data); toast('Updated!'); }
+  else{ db.inventory.push({id:uid(),...data}); toast('Item added!'); }
+  save(); cloudSave('meta','inventory',{items:db.inventory}); closeModal(); renderInventoryPage();
+}
+
+function openStockUpdate(id){
+  const item=db.inventory.find(x=>x.id===id); if(!item) return;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">Update Stock — ${esc(item.name)}</div>
+    <div style="font-size:0.88rem;color:#6B7A99;margin-bottom:12px">Current: <strong>${item.qty} ${esc(item.unit)}</strong></div>
+    <div class="form-group"><label class="form-label">Add Quantity</label><input class="form-inp" id="stock-add" type="number" step="0.1" placeholder="Enter amount to add"/></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-green" onclick="updateStock('${id}')">+ Add Stock</button>
+    </div>`;
+  openModal();
+}
+
+function updateStock(id){
+  const add=parseFloat(document.getElementById('stock-add').value);
+  if(isNaN(add)||add<=0){ toast('Enter a valid quantity','#FF6B35'); return; }
+  const item=db.inventory.find(x=>x.id===id);
+  item.qty=Math.round((item.qty+add)*100)/100;
+  save(); closeModal(); renderInventoryPage(); renderDashboard();
+  toast(`${item.name} updated to ${item.qty} ${item.unit}!`);
+}
+
+function deleteInventory(id){
+  if(!confirm('Delete this inventory item?')) return;
+  db.inventory=db.inventory.filter(i=>i.id!==id);
+  save(); renderInventoryPage(); toast('Deleted.','#FF6B35');
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                   PURCHASES                          ║
+// ╚══════════════════════════════════════════════════════╝
+let purchaseItems=[];
+
+function renderPurchasesPage(){
+  const list=document.getElementById('purchase-list');
+  const totPurch=db.purchases.reduce((s,p)=>s+p.total,0);
+  list.innerHTML=`<div class="stats-grid" style="margin-bottom:12px">
+    <div class="stat-card"><div class="stat-icon">🛒</div><div class="stat-val" style="color:#2563EB">${db.purchases.length}</div><div class="stat-lbl">Total Purchases</div></div>
+    <div class="stat-card"><div class="stat-icon">💸</div><div class="stat-val" style="color:#FF6B35">${fmt(totPurch)}</div><div class="stat-lbl">Total Spent</div></div>
+  </div>`+
+  (db.purchases.length?[...db.purchases].reverse().map(p=>`
+    <div class="list-row" onclick="viewPurchase('${p.id}')">
+      <div class="list-icon" style="background:#DBEAFE;color:#2563EB">🛒</div>
+      <div class="list-main">
+        <div class="list-title">${esc(p.supplier||'Unknown Supplier')}</div>
+        <div class="list-sub">${fmtDate(p.date)} · ${p.items.length} items</div>
+      </div>
+      <div class="list-right">
+        <div style="font-weight:800;color:#FF6B35">${fmt(p.total)}</div>
+        <span class="badge ${p.status==='paid'?'badge-green':'badge-yellow'}">${p.status||'pending'}</span>
+      </div>
+    </div>`).join(''):'<div class="empty">No purchases recorded yet.</div>');
+}
+
+function openPurchaseModal(){
+  purchaseItems=[{name:'',qty:1,unit:'',cost:0}];
+  renderPurchaseForm();
+  openModal();
+}
+
+function renderPurchaseForm(){
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">Record Purchase</div>
+    <div class="form-group"><label class="form-label">Supplier Name</label><input class="form-inp" id="pur-supplier" placeholder="e.g. Fresh Farms Co."/></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-inp" id="pur-date" type="date" value="${new Date().toISOString().split('T')[0]}"/></div>
+    <div class="section-lbl" style="margin-top:0">Purchase Items</div>
+    <div id="pur-items">${purchaseItems.map((item,i)=>purchaseItemRow(item,i)).join('')}</div>
+    <button class="btn btn-outline btn-full" style="margin-bottom:12px" onclick="addPurchaseItem()">+ Add Item</button>
+    <div class="form-group"><label class="form-label">Status</label>
+      <select class="form-select" id="pur-status"><option value="paid">Paid</option><option value="pending">Pending</option></select></div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-ta" id="pur-notes" placeholder="Any notes…"></textarea></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePurchase()">Save Purchase</button>
+    </div>`;
+}
+
+function purchaseItemRow(item,i){
+  return `<div style="background:#F7F9FF;border-radius:9px;padding:9px;margin-bottom:7px;border:1px solid #E2E8F5">
+    <div class="form-row" style="margin-bottom:6px">
+      <div><label class="form-label">Item Name</label><input class="form-inp" id="pi-name-${i}" value="${esc(item.name)}" placeholder="e.g. Chicken" oninput="syncPurchaseItem(${i})"/></div>
+      <div><label class="form-label">Unit</label><input class="form-inp" id="pi-unit-${i}" value="${esc(item.unit)}" placeholder="kg" oninput="syncPurchaseItem(${i})"/></div>
+    </div>
+    <div class="form-row">
+      <div><label class="form-label">Qty</label><input class="form-inp" id="pi-qty-${i}" type="number" step="0.1" value="${item.qty}" oninput="syncPurchaseItem(${i})"/></div>
+      <div><label class="form-label">Unit Cost ($)</label><input class="form-inp" id="pi-cost-${i}" type="number" step="0.01" value="${item.cost}" oninput="syncPurchaseItem(${i})"/></div>
+    </div>
+    ${i>0?`<button class="btn btn-sm btn-red" onclick="removePurchaseItem(${i})" style="margin-top:4px">Remove</button>`:''}
+  </div>`;
+}
+
+function syncPurchaseItem(i){
+  if(purchaseItems[i]){
+    purchaseItems[i].name=document.getElementById(`pi-name-${i}`)?.value||'';
+    purchaseItems[i].unit=document.getElementById(`pi-unit-${i}`)?.value||'';
+    purchaseItems[i].qty=parseFloat(document.getElementById(`pi-qty-${i}`)?.value)||0;
+    purchaseItems[i].cost=parseFloat(document.getElementById(`pi-cost-${i}`)?.value)||0;
+  }
+}
+
+function addPurchaseItem(){ purchaseItems.push({name:'',qty:1,unit:'',cost:0}); renderPurchaseForm(); }
+function removePurchaseItem(i){ purchaseItems.splice(i,1); renderPurchaseForm(); }
+
+function savePurchase(){
+  const supplier=document.getElementById('pur-supplier').value.trim();
+  const date=document.getElementById('pur-date').value||new Date().toISOString().split('T')[0];
+  purchaseItems.forEach((_,i)=>syncPurchaseItem(i));
+  const items=purchaseItems.filter(p=>p.name.trim());
+  if(!items.length){ toast('Add at least one item','#FF6B35'); return; }
+  const total=items.reduce((s,i)=>s+i.qty*i.cost,0);
+
+  // update inventory stock
+  items.forEach(p=>{
+    const inv=db.inventory.find(i=>i.name.toLowerCase()===p.name.toLowerCase());
+    if(inv){ inv.qty=Math.round((inv.qty+p.qty)*100)/100; }
+  });
+
+  db.purchases.unshift({id:uid(),date:new Date(date).toISOString(),supplier,items,total,status:document.getElementById('pur-status').value,notes:document.getElementById('pur-notes').value.trim()});
+  save(); closeModal(); renderPurchasesPage();
+  toast(`Purchase of ${fmt(total)} recorded!`);
+}
+
+function viewPurchase(id){
+  const p=db.purchases.find(x=>x.id===id); if(!p) return;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">Purchase Details</div>
+    <div class="list-row" style="cursor:default;margin-bottom:10px">
+      <div class="list-icon" style="background:#DBEAFE;color:#2563EB;font-size:1.3rem">🛒</div>
+      <div class="list-main"><div class="list-title">${esc(p.supplier||'Unknown')}</div><div class="list-sub">${fmtDate(p.date)}</div></div>
+      <span class="badge ${p.status==='paid'?'badge-green':'badge-yellow'}">${p.status}</span>
+    </div>
+    <div class="card"><div class="card-body">
+      ${p.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} — ${i.qty} ${esc(i.unit)}</span><span>${fmt(i.qty*i.cost)}</span></div>`).join('')}
+      <div class="bill-total"><span>TOTAL</span><span>${fmt(p.total)}</span></div>
+    </div></div>
+    ${p.notes?`<div class="alert alert-yellow" style="margin-top:8px"><strong>Notes</strong>${esc(p.notes)}</div>`:''}
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-red" onclick="deletePurchase('${id}')">Delete</button>
+      <button class="btn btn-outline" onclick="closeModal()">Close</button>
+    </div>`;
+  openModal();
+}
+
+function deletePurchase(id){
+  if(!confirm('Delete this purchase record?')) return;
+  db.purchases=db.purchases.filter(p=>p.id!==id);
+  save(); closeModal(); renderPurchasesPage(); toast('Deleted.','#FF6B35');
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                    REPORTS                           ║
+// ╚══════════════════════════════════════════════════════╝
+function setRepTab(t){
+  repTab=t;
+  ['today','week','month','all'].forEach(x=>document.getElementById('rep-'+x).classList.toggle('active',x===t));
+  renderReports();
+}
+
+function renderReports(){
+  let orders=db.orders;
+  if(repTab==='today') orders=orders.filter(o=>isToday(o.date));
+  else if(repTab==='week') orders=orders.filter(o=>isThisWeek(o.date));
+  else if(repTab==='month') orders=orders.filter(o=>isThisMonth(o.date));
+
+  const total=orders.reduce((s,o)=>s+o.total,0);
+  const tax=orders.reduce((s,o)=>s+o.tax,0);
+  const disc=orders.reduce((s,o)=>s+o.discount,0);
+  const cash=orders.filter(o=>o.payment==='cash').length;
+  const card=orders.filter(o=>o.payment==='card').length;
+  const other=orders.filter(o=>o.payment==='other').length;
+
+  // best sellers
+  const itemCount={};
+  orders.forEach(o=>o.items.forEach(i=>{ itemCount[i.name]=(itemCount[i.name]||0)+i.qty; }));
+  const topItems=Object.entries(itemCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const purch=repTab==='today'?db.purchases.filter(p=>isToday(p.date)):repTab==='week'?db.purchases.filter(p=>isThisWeek(p.date)):repTab==='month'?db.purchases.filter(p=>isThisMonth(p.date)):db.purchases;
+  const purchTotal=purch.reduce((s,p)=>s+p.total,0);
+
+  document.getElementById('report-content').innerHTML=`
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-val" style="color:#00A878">${fmt(total)}</div><div class="stat-lbl">Total Revenue</div></div>
+      <div class="stat-card"><div class="stat-icon">🧾</div><div class="stat-val" style="color:#2563EB">${orders.length}</div><div class="stat-lbl">Total Orders</div></div>
+      <div class="stat-card"><div class="stat-icon">🧮</div><div class="stat-val" style="color:#FF8C42">${orders.length?fmt(total/orders.length):'$0.00'}</div><div class="stat-lbl">Avg. Order Value</div></div>
+      <div class="stat-card"><div class="stat-icon">💸</div><div class="stat-val" style="color:#FF6B35">${fmt(purchTotal)}</div><div class="stat-lbl">Purchases Cost</div></div>
+    </div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">💳 Payment Breakdown</div></div>
+      <div class="card-body">
+        <div class="bill-row"><span>💵 Cash</span><span><strong>${cash}</strong> orders</span></div>
+        <div class="bill-row"><span>💳 Card</span><span><strong>${card}</strong> orders</span></div>
+        <div class="bill-row"><span>📱 Other/QR</span><span><strong>${other}</strong> orders</span></div>
+        <div class="divider"></div>
+        <div class="bill-row"><span>Total Tax Collected</span><span>${fmt(tax)}</span></div>
+        <div class="bill-row"><span>Total Discounts Given</span><span>-${fmt(disc)}</span></div>
+        <div class="bill-total"><span>Net Profit (Est.)</span><span>${fmt(total-purchTotal)}</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">🏆 Top Selling Items</div></div>
+      <div class="card-body">
+        ${topItems.length?topItems.map(([name,qty],i)=>`
+          <div class="bill-row">
+            <span><span style="font-weight:700;color:#FFD700;margin-right:6px">#${i+1}</span>${esc(name)}</span>
+            <span class="badge badge-green">${qty} sold</span>
+          </div>`).join(''):'<div class="empty" style="padding:1rem">No orders in this period.</div>'}
+      </div>
+    </div>
+    <!-- SHARE / PRINT REPORT BUTTONS -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-green" style="flex:1" onclick="whatsappReport()">📤 WhatsApp Share</button>
+      <button class="btn btn-blue" style="flex:1" onclick="btPrintDailyReport()">🖨️ BT Print</button>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">🧾 Order History</div></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Order</th><th>Time</th><th>Items</th><th>Payment</th><th>Total</th></tr></thead>
+          <tbody>
+            ${[...orders].slice(0,20).map(o=>`<tr>
+              <td>#${o.id.slice(-4).toUpperCase()}</td>
+              <td>${fmtTime(o.date)}<br><span style="font-size:0.65rem;color:#6B7A99">${fmtDate(o.date)}</span></td>
+              <td>${o.items.length}</td>
+              <td><span class="badge ${o.payment==='cash'?'badge-green':o.payment==='card'?'badge-blue':'badge-yellow'}">${o.payment}</span></td>
+              <td style="font-weight:700;color:#FF6B35">${fmt(o.total)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        ${!orders.length?'<div class="empty">No orders in this period.</div>':''}
+      </div>
+    </div>`;
+}
+
+function viewOrder(id){
+  const o=db.orders.find(x=>x.id===id); if(!o) return;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">Order #${o.id.slice(-4).toUpperCase()}</div>
+    <div style="font-size:0.8rem;color:#6B7A99;margin-bottom:12px">${fmtDate(o.date)} at ${fmtTime(o.date)} · ${o.payment}</div>
+    <div class="card"><div class="card-body">
+      ${o.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} ×${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
+      <div class="divider"></div>
+      <div class="bill-row"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
+      ${o.tax?`<div class="bill-row"><span>Tax</span><span>${fmt(o.tax)}</span></div>`:''}
+      ${o.discount?`<div class="bill-row"><span>Discount</span><span>-${fmt(o.discount)}</span></div>`:''}
+      <div class="bill-total"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
+    </div></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-green" onclick="printBill('${o.id}')">🖨️ Print</button>
+              <button class="btn btn-sm" style="background:rgba(37,99,235,0.15);color:#60A5FA" onclick="btPrintBill('${o.id}')">📡 BT Print</button>
+              <button class="btn btn-sm btn-outline" onclick="btPrintKOT('${o.id}')">🍳 KOT</button>
+      <button class="btn btn-gold" onclick="whatsappBill('${o.id}')">📲 WhatsApp</button>
+      <button class="btn btn-outline" onclick="closeModal()">Close</button>
+    </div>`;
+  openModal();
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                    LOYALTY                           ║
+// ╚══════════════════════════════════════════════════════╝
+function setLoyaltyTab(t){
+  loyaltyTab=t;
+  document.querySelectorAll('#loyalty-tabs .mtab').forEach((b,i)=>b.classList.toggle('active',['all','redeem','bday'][i]===t));
+  renderLoyaltyPage();
+}
+
+function renderLoyaltyPage(){
+  const q=(document.getElementById('loyalty-search')||{}).value||'';
+  let list=db.customers.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())||(c.phone&&c.phone.includes(q)));
+  if(loyaltyTab==='redeem') list=list.filter(c=>(c.stamps||0)>=STAMP_GOAL);
+  else if(loyaltyTab==='bday') list=list.filter(c=>isBdayMonth(c.birthday));
+
+  document.getElementById('loyalty-list').innerHTML=list.length?list.map(c=>`
+    <div class="list-row" onclick="openLoyaltyDetail('${c.id}')">
+      <div class="avatar" style="background:${avatarColor(c.name)}">${initials(c.name)}</div>
+      <div class="list-main">
+        <div class="list-title">${esc(c.name)}${isBdayMonth(c.birthday)?' 🎂':''}</div>
+        <div class="list-sub">${esc(c.phone||c.email||'No contact')} · Joined ${fmtDate(c.joinedAt)}</div>
+      </div>
+      <div class="list-right">
+        <div style="font-weight:800;font-size:0.95rem;color:${(c.stamps||0)>=STAMP_GOAL?'#FF8C42':'#FF6B35'}">${c.stamps||0}/${STAMP_GOAL}</div>
+        <div style="font-size:0.65rem;color:#6B7A99">stamps</div>
+        ${(c.stamps||0)>=STAMP_GOAL?'<span style="font-size:0.8rem">🎁</span>':''}
+      </div>
+    </div>`).join(''):`<div class="empty">${loyaltyTab==='redeem'?'No members ready to redeem.':loyaltyTab==='bday'?'No birthdays this month.':q?'No members found.':'No loyalty members yet.'}</div>`;
+}
+
+function openLoyaltyDetail(id){
+  const c=db.customers.find(x=>x.id===id); if(!c) return;
+  const stamps=c.stamps||0;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">${esc(c.name)}</div>
+    <div class="stamp-card-mini" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-family:Georgia,serif;font-size:0.9rem">🍽️ Loyalty Card</div>
+        <div style="font-size:1.2rem;font-weight:800;color:#FFD700">${stamps}/${STAMP_GOAL}</div>
+      </div>
+      <div class="sc-stamps">${Array.from({length:STAMP_GOAL},(_,i)=>`<div class="sc-dot ${i<stamps?'on':'off'}">${i<stamps?'☕':''}</div>`).join('')}</div>
+      <div style="font-size:0.68rem;opacity:0.55;margin-top:4px">${stamps>=STAMP_GOAL?'🎉 Ready to redeem a FREE item!':STAMP_GOAL-stamps+' more stamps to free item'}</div>
+    </div>
+    <div class="info-rows" style="margin-bottom:12px">
+      ${[['📞 Phone',c.phone||'—'],['📧 Email',c.email||'—'],['🎂 Birthday',c.birthday?fmtDate(c.birthday):'—'],['💬 Remarks',c.remarks||'—']].map(([l,v])=>`
+        <div style="display:flex;gap:8px;padding:7px 9px;background:#F7F9FF;border-radius:8px;border:1px solid #E2E8F5;margin-bottom:6px">
+          <span style="min-width:72px;font-size:0.72rem;font-weight:700;color:#FF6B35">${l}</span>
+          <span style="font-size:0.85rem">${esc(v)}</span>
+        </div>`).join('')}
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="loyaltyAddStamp('${id}')">+ Add Stamp</button>
+      <button class="btn btn-gold" onclick="loyaltyRedeem('${id}')" ${stamps>=STAMP_GOAL?'':'disabled'}>🎁 Redeem</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="openLoyaltyEditModal('${id}')">✏️ Edit</button>
+      <button class="btn btn-red" onclick="deleteLoyalty('${id}')">🗑️ Delete</button>
+    </div>
+    ${c.visits&&c.visits.length?`<div class="section-lbl">Visit History</div>`+[...c.visits].reverse().slice(0,8).map(v=>`<div style="display:flex;justify-content:space-between;padding:7px 9px;background:#F7F9FF;border-radius:8px;border:1px solid #E2E8F5;margin-bottom:5px;font-size:0.82rem"><span>${v.type==='stamp'?'☕ Stamp added':'🎁 Reward redeemed'}</span><span style="color:#6B7A99;font-size:0.7rem">${fmtDate(v.date)}</span></div>`).join(''):''}`;
+  openModal();
+}
+
+function loyaltyAddStamp(id){
+  const c=db.customers.find(x=>x.id===id); if(!c) return;
+  c.stamps=(c.stamps||0)+1;
+  c.visits=[...(c.visits||[]),{type:'stamp',date:new Date().toISOString()}];
+  save(); renderLoyaltyPage(); openLoyaltyDetail(id);
+  toast(`Stamp added! (${c.stamps}/${STAMP_GOAL})`);
+}
+
+function loyaltyRedeem(id){
+  const c=db.customers.find(x=>x.id===id); if(!c||(c.stamps||0)<STAMP_GOAL) return;
+  c.stamps=0;
+  c.visits=[...(c.visits||[]),{type:'redeem',date:new Date().toISOString()}];
+  save(); renderLoyaltyPage(); openLoyaltyDetail(id);
+  toast(`🎁 Reward redeemed for ${c.name}!`,'#FF8C42');
+}
+
+function deleteLoyalty(id){
+  if(!confirm('Remove this loyalty member?')) return;
+  db.customers=db.customers.filter(c=>c.id!==id);
+  save(); closeModal(); renderLoyaltyPage(); toast('Member removed.','#FF6B35');
+}
+
+function openLoyaltyAddModal(id){
+  const c=id?db.customers.find(x=>x.id===id):null;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">${c?'Edit Member':'New Loyalty Member'}</div>
+    <div class="form-group"><label class="form-label">Full Name *</label><input class="form-inp" id="ly-name" value="${esc(c?.name||'')}" placeholder="Customer name"/></div>
+    <div class="form-group"><label class="form-label">Phone</label><input class="form-inp" id="ly-phone" type="tel" value="${esc(c?.phone||'')}" placeholder="Phone number"/></div>
+    <div class="form-group"><label class="form-label">Email</label><input class="form-inp" id="ly-email" type="email" value="${esc(c?.email||'')}" placeholder="Email address"/></div>
+    <div class="form-group"><label class="form-label">Birthday</label><input class="form-inp" id="ly-bday" type="date" value="${c?.birthday||''}"/></div>
+    <div class="form-group"><label class="form-label">Remarks / Feedback</label><textarea class="form-ta" id="ly-remarks" placeholder="Notes about this customer…">${esc(c?.remarks||'')}</textarea></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLoyaltyMember('${id||''}')">Save</button>
+    </div>`;
+  openModal();
+}
+
+function openLoyaltyEditModal(id){ openLoyaltyAddModal(id); }
+
+function saveLoyaltyMember(id){
+  const name=document.getElementById('ly-name').value.trim();
+  if(!name){ toast('Name is required','#FF6B35'); return; }
+  const data={name,phone:document.getElementById('ly-phone').value.trim(),email:document.getElementById('ly-email').value.trim(),birthday:document.getElementById('ly-bday').value,remarks:document.getElementById('ly-remarks').value.trim()};
+  if(id){ Object.assign(db.customers.find(x=>x.id===id),data); toast('Member updated!'); }
+  else{ db.customers.unshift({id:uid(),...data,stamps:0,visits:[],joinedAt:new Date().toISOString()}); toast(`${name} added! 🎉`); }
+  save();
+  const cust = db.customers.find(x=>x.name===name);
+  if(cust) cloudSave('customers', cust.id, cust);
+  closeModal(); renderLoyaltyPage();
+}
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                   MODAL UTILS                        ║
+// ╚══════════════════════════════════════════════════════╝
+function openModal(){ document.getElementById('overlay').classList.add('open'); }
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+function closeModalOnBg(e){ if(e.target===document.getElementById('overlay')) closeModal(); }
+
+// ╔══════════════════════════════════════════════════════╗
+// ║              SMART ORDER INPUT + VOICE               ║
+// ╚══════════════════════════════════════════════════════╝
+let voiceRecognition = null;
+let isListening = false;
+
+function renderSmartSuggestions() {
+  const el = document.getElementById('smart-suggestions');
+  if (!el) return;
+  // Show top 6 menu items as quick-tap chips
+  const top = db.menu.slice(0, 6);
+  el.innerHTML = top.map(m =>
+    `<button class="smart-sug" onclick="quickAddSmartItem('${m.id}')">${m.icon||'🍽️'} ${esc(m.name)}</button>`
+  ).join('');
+}
+
+function quickAddSmartItem(menuId) {
+  const m = db.menu.find(x => x.id === menuId); if (!m) return;
+  const existing = order.items.find(i => i.menuId === menuId);
+  if (existing) { existing.qty++; }
+  else { order.items.push({ menuId, name: m.name, price: m.price, qty: 1 }); }
+  renderOrderItems();
+  toast(`${m.icon||''} ${m.name} added!`);
+}
+
+// ── Parse natural language order text ──────────────────
+function parseOrderText(text) {
+  if (!text.trim()) return [];
+  const results = [];
+
+  // ── Step 1: Clean filler words first ─────────────────
+  let t = text.toLowerCase()
+    .replace(/\bplease\b/g,'').replace(/\bkaro\b/g,'')
+    .replace(/\blao\b/g,'').replace(/\bmujhe\b/g,'')
+    .replace(/\bde do\b/g,'').replace(/\bchahiye\b/g,'')
+    .replace(/\border\b/g,'').replace(/\blagao\b/g,'');
+
+  // ── Step 2: Number words → digits ────────────────────
+  t = t
+    // Hindi
+    .replace(/\bek\b/g,'1').replace(/\bdo\b/g,'2').replace(/\bteen\b/g,'3')
+    .replace(/\bchar\b/g,'4').replace(/\bpaanch\b/g,'5').replace(/\bchheh\b/g,'6')
+    .replace(/\bsaat\b/g,'7').replace(/\baath\b/g,'8').replace(/\bnau\b/g,'9')
+    .replace(/\bdas\b/g,'10')
+    // English
+    .replace(/\bone\b/g,'1').replace(/\btwo\b/g,'2').replace(/\bthree\b/g,'3')
+    .replace(/\bfour\b/g,'4').replace(/\bfive\b/g,'5').replace(/\bsix\b/g,'6')
+    .replace(/\bseven\b/g,'7').replace(/\beight\b/g,'8').replace(/\bnine\b/g,'9')
+    .replace(/\bten\b/g,'10');
+
+  // ── Step 3: Connectors → comma ───────────────────────
+  t = t.replace(/\band\b/g,',').replace(/\baur\b/g,',')
+       .replace(/\bwith\b/g,',').replace(/\bplus\b/g,',');
+
+  // ── Step 4: Insert comma before mid-string numbers ───
+  // "2 butter chicken 1 naan 3 lassi" → "2 butter chicken, 1 naan, 3 lassi"
+  // Replace: letter(s) + spaces + digit + space (not at string start)
+  t = t.replace(/([a-z])\s+(\d+)(\s)/g, '$1,$2$3');
+  t = t.replace(/([a-z])\s+(\d+)$/g,   '$1,$2');
+
+  // ── Step 5: Split into segments ──────────────────────
+  const segments = t.split(/[,]+/).map(s => s.trim()).filter(s => s.length > 1);
+
+  // ── Step 6: Parse each segment ───────────────────────
+  segments.forEach(seg => {
+    let qty = 1, name = seg.trim();
+
+    // "2 butter chicken"
+    const leadMatch  = seg.match(/^(\d+)\s+(.+)/);
+    // "butter chicken x2" or "butter chicken 2"
+    const xMatch     = seg.match(/^(.+?)\s*x\s*(\d+)$/i);
+    const trailMatch = seg.match(/^(.+?)\s+(\d+)$/i);
+
+    if (xMatch)        { qty = parseInt(xMatch[2]);    name = xMatch[1].trim(); }
+    else if (leadMatch){ qty = parseInt(leadMatch[1]); name = leadMatch[2].trim(); }
+    else if (trailMatch){ qty = parseInt(trailMatch[2]); name = trailMatch[1].trim(); }
+
+    if (!name || name.length < 2) return;
+    const match = fuzzyFindMenu(name);
+    results.push({ input: seg, qty, name, match });
+  });
+
+  return results;
+}
+
+function fuzzyFindMenu(query) {
+  if (!query) return null;
+  const q = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  let best = null, bestScore = 0;
+
+  db.menu.forEach(m => {
+    const mName = m.name.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+    let score = 0;
+
+    if (mName === q) score = 100;                          // exact
+    else if (mName.includes(q) || q.includes(mName)) score = 80; // contains
+    else {
+      // word overlap score
+      const qWords = q.split(/\s+/);
+      const mWords = mName.split(/\s+/);
+      const overlap = qWords.filter(w => mWords.some(mw => mw.includes(w) || w.includes(mw)));
+      score = (overlap.length / Math.max(qWords.length, mWords.length)) * 70;
+    }
+
+    if (score > bestScore && score > 25) { bestScore = score; best = m; }
+  });
+
+  return best;
+}
+
+function processSmartOrder() {
+  const inp = document.getElementById('smart-inp');
+  const text = inp.value.trim();
+  if (!text) { toast('Pehle order type ya bolo!', '#FF6B35'); return; }
+
+  const parsed = parseOrderText(text);
+  if (!parsed.length) { toast('Samajh nahi aaya — menu items ka naam use karein', '#FF6B35'); return; }
+
+  let addedCount = 0;
+  let resultHTML = '';
+
+  parsed.forEach(p => {
+    if (p.match) {
+      const existing = order.items.find(i => i.menuId === p.match.id);
+      if (existing) { existing.qty += p.qty; }
+      else { order.items.push({ menuId: p.match.id, name: p.match.name, price: p.match.price, qty: p.qty }); }
+      addedCount++;
+      resultHTML += `<div class="smart-result-item">
+        <span>${p.qty}× ${esc(p.match.icon||'🍽️')} <strong>${esc(p.match.name)}</strong></span>
+        <span class="sr-found">✅ ₹${(p.match.price * p.qty).toFixed(2)}</span>
+      </div>`;
+    } else {
+      resultHTML += `<div class="smart-result-item">
+        <span>❓ "${esc(p.name)}"</span>
+        <span class="sr-notfound">Menu mein nahi</span>
+      </div>`;
+    }
+  });
+
+  const resultEl = document.getElementById('smart-result');
+  const resultItems = document.getElementById('smart-result-items');
+  if(resultItems) resultItems.innerHTML = resultHTML;
+  if(resultEl) resultEl.classList.add('show');
+
+  renderOrderItems();
+  inp.value = '';
+
+  if (addedCount > 0) {
+    toast(`✅ ${addedCount} item order mein add!`, '#00A878');
+    setTimeout(() => document.getElementById('order-items-list')?.scrollIntoView({ behavior:'smooth', block:'nearest' }), 300);
+  } else {
+    toast('Koi item match nahi hua', '#FF6B35');
+  }
+}
+
+// Quick chip tap karo — seedha add
+function quickAddChip(name) {
+  const inp = document.getElementById('smart-inp');
+  const current = inp.value.trim();
+  inp.value = current ? current + ', ' + name : name;
+  inp.focus();
+}
+
+// Render quick chips from menu
+function renderSmartChips() {
+  const el = document.getElementById('smart-chips');
+  if(!el) return;
+  const top = db.menu.slice(0,8);
+  el.innerHTML = top.map(m =>
+    `<span class="smart-chip" onclick="quickAddChip('${esc(m.name)}')">${m.icon||'🍽️'} ${esc(m.name)}</span>`
+  ).join('');
+}
+
+
+// ── Voice Recognition ───────────────────────────────────
+// NOTE: Voice needs HTTPS to work. Works on:
+// ✅ Hosted website (GitHub Pages, etc.)
+// ✅ PWA installed on phone
+// ❌ Local HTML file opened directly (security restriction)
+
+function toggleVoice() {
+  // Check browser support
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    toast('🎤 Voice sirf Chrome browser mein kaam karta hai!', '#FF6B35');
+    return;
+  }
+  // Check if running on local file (voice won't work)
+  if (location.protocol === 'file:' || location.protocol === 'content:') {
+    // Show helpful modal instead of error
+    document.getElementById('modal-body').innerHTML = `
+      <div class="modal-handle"></div>
+      <div class="modal-title">🎤 Voice Feature</div>
+      <div style="text-align:center;padding:10px 0">
+        <div style="font-size:3rem;margin-bottom:12px">🎤</div>
+        <div style="font-weight:700;font-size:1rem;margin-bottom:8px;color:#0F1923">Voice Abhi Kaam Nahi Karega</div>
+        <div style="font-size:0.85rem;color:#6B7A99;line-height:1.6;margin-bottom:16px">
+          Voice feature ke liye app ko <strong>HTTPS</strong> par host karna padega.<br><br>
+          Abhi aap local file se chal rahe ho — yeh browser ki security restriction hai, koi bug nahi!
+        </div>
+        <div style="background:#F7F9FF;border-radius:12px;padding:14px;margin-bottom:14px;text-align:left">
+          <div style="font-size:0.78rem;font-weight:700;color:#2563EB;margin-bottom:8px">✅ Tab kaam karega jab:</div>
+          <div style="font-size:0.82rem;color:#1A2B3C;line-height:1.8">
+            📌 App GitHub Pages par host karo (free)<br>
+            📌 PWA banao aur install karo<br>
+            📌 Localhost server se kholo
+          </div>
+        </div>
+        <div style="background:#FFF3CD;border-radius:12px;padding:14px;margin-bottom:14px;text-align:left">
+          <div style="font-size:0.78rem;font-weight:700;color:#92400E;margin-bottom:6px">💡 Abhi ke liye:</div>
+          <div style="font-size:0.82rem;color:#1A2B3C">
+            Type karke order add karo — utna hi fast hai!<br>
+            e.g. "2 butter chicken, 1 naan"
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="closeModal()">Theek Hai, Samajh Gaya</button>`;
+    openModal();
+    return;
+  }
+  if (isListening) { stopVoice(); return; }
+  startVoice();
+}
+
+function startVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  
+  voiceRecognition = new SR();
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = true;
+  voiceRecognition.lang = 'en-IN'; // Indian English — Indian accent + English words
+
+  const btn = document.getElementById('voice-btn');
+  const inp = document.getElementById('smart-inp');
+
+  voiceRecognition.onstart = () => {
+    isListening = true;
+    if (btn) { btn.classList.add('listening'); btn.textContent = '🔴'; }
+    if (inp) inp.placeholder = '🎤 Bol rahe ho... order sunai de raha hai';
+    toast('🎤 Boliye! Order sun raha hun...', '#2563EB');
+  };
+
+  voiceRecognition.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join(' ').trim();
+    if (inp) inp.value = transcript;
+    if (e.results[e.results.length - 1].isFinal) {
+      stopVoice();
+      setTimeout(() => processSmartOrder(), 200);
+    }
+  };
+
+  voiceRecognition.onerror = (e) => {
+    stopVoice();
+    const errors = {
+      'not-allowed': '🚫 Microphone permission denied! Browser settings mein allow karein.',
+      'no-speech':   '🎤 Koi awaaz nahi aayi. Dobara try karein.',
+      'network':     '🌐 Network error. Internet check karein.',
+      'aborted':     '',
+    };
+    const msg = errors[e.error] || ('Voice error: ' + e.error);
+    if (msg) toast(msg, '#FF6B35');
+  };
+
+  voiceRecognition.onend = () => stopVoice();
+  
+  try {
+    voiceRecognition.start();
+  } catch(e) {
+    stopVoice();
+    toast('🎤 Voice start nahi hua. Dobara try karein.', '#FF6B35');
+  }
+}
+
+function stopVoice() {
+  isListening = false;
+  const btn = document.getElementById('voice-btn');
+  if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤'; }
+  const inp = document.getElementById('smart-inp');
+  if (inp) inp.placeholder = 'e.g. "2 butter chicken, 1 naan, 3 lassi"';
+  if (voiceRecognition) { try { voiceRecognition.stop(); } catch(e){} voiceRecognition = null; }
+}
+
+
+// ╔══════════════════════════════════════════════════════╗
+// ║         FIREBASE LAYOUT CONTROL SYSTEM               ║
+// ║  Firebase Console → clients → {licenseKey}           ║
+// ║  Field: layoutMode                                    ║
+// ║  Values: "auto" | "mobile" | "desktop"               ║
+// ╚══════════════════════════════════════════════════════╝
+
+let currentLayoutMode = 'auto'; // default
+let layoutListener = null;
+
+// Apply layout based on mode
+function applyLayout(mode) {
+  const body = document.body;
+  const badge = document.getElementById('layout-badge');
+  const badgeText = document.getElementById('layout-badge-text');
+
+  // Remove previous forced layouts
+  body.removeAttribute('data-layout');
+
+  if (mode === 'mobile') {
+    body.setAttribute('data-layout', 'mobile');
+    if (badge) { badge.classList.add('show'); }
+    if (badgeText) badgeText.textContent = '📱 Mobile Layout (Admin set)';
+    setTimeout(() => badge?.classList.remove('show'), 4000);
+  } else if (mode === 'desktop') {
+    body.setAttribute('data-layout', 'desktop');
+    if (badge) { badge.classList.add('show'); }
+    if (badgeText) badgeText.textContent = '🖥️ Desktop Layout (Admin set)';
+    setTimeout(() => badge?.classList.remove('show'), 4000);
+  } else {
+    // auto — CSS media queries handle it naturally
+    if (badge) badge.classList.remove('show');
+  }
+
+  currentLayoutMode = mode;
+  console.log('Layout applied:', mode);
+}
+
+// Listen to Firebase for real-time layout changes
+function startLayoutListener(licenseKey) {
+  if (!isFirebaseReady || !firestoreDb) return;
+  if (layoutListener) { layoutListener(); layoutListener = null; }
+
+  const ref = firestoreDb.collection('clients').doc(licenseKey);
+
+  layoutListener = ref.onSnapshot(snap => {
+    if (!snap.exists) return;
+    const data = snap.data();
+
+    // Layout control
+    const mode = data.layoutMode || 'auto';
+    if (mode !== currentLayoutMode) {
+      console.log('Layout changed by admin:', mode);
+      applyLayout(mode);
+      if (mode !== 'auto') {
+        toast(`📐 Admin ne layout change kiya: ${mode === 'mobile' ? '📱 Mobile' : '🖥️ Desktop'}`, '#2563EB');
+      }
+    }
+
+    // Block/unblock check
+    if (data.status === 'blocked') {
+      toast('🚫 App blocked by admin!', '#FF6B35');
+      setTimeout(() => {
+        document.getElementById('lic-overlay').style.display = 'flex';
+        showLicView('expired');
+      }, 2000);
+    }
+
+    // Announcement from admin
+    if (data.announcement && data.announcement !== (localStorage.getItem('bb-last-announcement'))) {
+      localStorage.setItem('bb-last-announcement', data.announcement);
+      showAnnouncement(data.announcement);
+    }
+
+  }, err => {
+    console.log('Layout listener error (offline ok):', err.message);
+  });
+}
+
+// Show admin announcement as toast
+function showAnnouncement(msg) {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:80px;left:16px;right:16px;background:linear-gradient(135deg,#1E40AF,#2563EB);color:#fff;padding:14px 16px;border-radius:14px;z-index:9999;font-size:0.88rem;font-weight:600;box-shadow:0 4px 20px rgba(37,99,235,0.4);border:1px solid rgba(255,255,255,0.2)';
+  el.innerHTML = '<div style="font-size:0.7rem;opacity:0.7;margin-bottom:4px">📢 Admin Message</div>' + esc(msg) +
+    '<button onclick="this.parentElement.remove()" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#fff;font-size:1rem;cursor:pointer">✕</button>';
+  el.style.position = 'fixed';
+  document.body.appendChild(el);
+  setTimeout(() => el?.remove(), 10000);
+}
+
+// Save layout preference locally too
+function saveLayoutPreference(mode) {
+  try { localStorage.setItem('bb-layout-mode', mode); } catch(e) {}
+}
+
+// Load saved layout on startup (before Firebase connects)
+function loadSavedLayout() {
+  try {
+    const saved = localStorage.getItem('bb-layout-mode');
+    if (saved && saved !== 'auto') applyLayout(saved);
+  } catch(e) {}
+}
+
+
+// ╔══════════════════════════════════════════════════════╗
+// ║         BLUETOOTH THERMAL PRINTER — ESC/POS          ║
+// ║  Supports: 58mm & 80mm thermal printers              ║
+// ║  Protocol: ESC/POS (Epson standard)                  ║
+// ║  Works: Android Chrome (Web Bluetooth API)           ║
+// ╚══════════════════════════════════════════════════════╝
+
+let btDevice = null;
+let btCharacteristic = null;
+let btConnected = false;
+let btPaperWidth = 58; // default 58mm
+
+// ESC/POS Service & Characteristic UUIDs (standard for most thermal printers)
+const BT_SERVICE_UUID     = '000018f0-0000-1000-8000-00805f9b34fb';
+const BT_CHAR_UUID        = '00002af1-0000-1000-8000-00805f9b34fb';
+// Fallback UUIDs for other brands
+const BT_SERVICE_ALT      = '49535343-fe7d-4ae5-8fa9-9fafd205e455';
+const BT_CHAR_ALT         = '49535343-8841-43f4-a8d4-ecbe34729bb3';
+// Generic serial port
+const BT_SPP_SERVICE      = '00001101-0000-1000-8000-00805f9b34fb';
+
+// ── ESC/POS COMMAND BUILDER ────────────────────────────
+const ESC = 0x1B;
+const GS  = 0x1D;
+const LF  = 0x0A;
+const CR  = 0x0D;
+
+const CMD = {
+  init:         [ESC, 0x40],                    // Reset printer
+  alignLeft:    [ESC, 0x61, 0x00],
+  alignCenter:  [ESC, 0x61, 0x01],
+  alignRight:   [ESC, 0x61, 0x02],
+  bold:         [ESC, 0x45, 0x01],
+  boldOff:      [ESC, 0x45, 0x00],
+  doubleHeight: [ESC, 0x21, 0x10],
+  doubleSize:   [ESC, 0x21, 0x30],
+  normalSize:   [ESC, 0x21, 0x00],
+  cut:          [GS,  0x56, 0x42, 0x00],        // Paper cut
+  feed1:        [ESC, 0x64, 0x01],              // Feed 1 line
+  feed3:        [ESC, 0x64, 0x03],              // Feed 3 lines
+  underlineOn:  [ESC, 0x2D, 0x01],
+  underlineOff: [ESC, 0x2D, 0x00],
+  invertOn:     [GS,  0x42, 0x01],
+  invertOff:    [GS,  0x42, 0x00],
+};
+
+// Convert text to Uint8Array
+function textToBytes(text) {
+  return new TextEncoder().encode(text);
+}
+
+// Build complete byte array for printing
+function buildPrintData(sections) {
+  const arrays = [];
+  const add = (data) => {
+    if (Array.isArray(data)) arrays.push(new Uint8Array(data));
+    else if (data instanceof Uint8Array) arrays.push(data);
+    else if (typeof data === 'string') arrays.push(textToBytes(data));
+  };
+
+  add(CMD.init);
+
+  sections.forEach(sec => {
+    if (sec.type === 'center')    { add(CMD.alignCenter); }
+    if (sec.type === 'left')      { add(CMD.alignLeft); }
+    if (sec.type === 'right')     { add(CMD.alignRight); }
+    if (sec.bold)                 { add(CMD.bold); }
+    if (sec.size === 'lg')        { add(CMD.doubleSize); }
+    if (sec.size === 'md')        { add(CMD.doubleHeight); }
+    if (sec.text)                 { add(sec.text + '\n'); }
+    if (sec.line)                 { add(dashLine() + '\n'); }
+    if (sec.dblLine)              { add(equalLine() + '\n'); }
+    if (sec.size)                 { add(CMD.normalSize); }
+    if (sec.bold)                 { add(CMD.boldOff); }
+  });
+
+  add(CMD.feed3);
+  add(CMD.cut);
+
+  // Merge all arrays
+  const totalLen = arrays.reduce((s, a) => s + a.length, 0);
+  const merged = new Uint8Array(totalLen);
+  let offset = 0;
+  arrays.forEach(a => { merged.set(a, offset); offset += a.length; });
+  return merged;
+}
+
+// Get dash/equal line based on paper width
+function dashLine() {
+  const cols = btPaperWidth === 80 ? 48 : 32;
+  return '-'.repeat(cols);
+}
+function equalLine() {
+  const cols = btPaperWidth === 80 ? 48 : 32;
+  return '='.repeat(cols);
+}
+
+// Pad row: left text + right text (aligned)
+function padRow(left, right) {
+  const cols = btPaperWidth === 80 ? 48 : 32;
+  const maxLeft = cols - right.length - 1;
+  const l = left.length > maxLeft ? left.substring(0, maxLeft) : left;
+  return l + ' '.repeat(cols - l.length - right.length) + right;
+}
+
+// Center text
+function centerText(text) {
+  const cols = btPaperWidth === 80 ? 48 : 32;
+  if (text.length >= cols) return text;
+  const pad = Math.floor((cols - text.length) / 2);
+  return ' '.repeat(pad) + text;
+}
+
+// ── CONNECT TO PRINTER ─────────────────────────────────
+async function connectBluetooth() {
+  if (!('bluetooth' in navigator)) {
+    toast('❌ Bluetooth sirf Chrome Android mein kaam karta hai!', '#FF6B35');
+    showBtHelp();
+    return;
+  }
+
+  updateBtUI('connecting', 'Connecting...', 'Scanning for printer...');
+
+  try {
+    // Try with filters first, fallback to acceptAllDevices
+    try {
+      btDevice = await navigator.bluetooth.requestDevice({
+        filters: [
+          { services: [BT_SERVICE_UUID] },
+          { services: [BT_SERVICE_ALT] },
+          { namePrefix: 'Printer' },
+          { namePrefix: 'RPP' },
+          { namePrefix: 'MTP' },
+          { namePrefix: 'XP' },
+          { namePrefix: 'Xprinter' },
+          { namePrefix: 'pos' },
+          { namePrefix: 'POS' },
+          { namePrefix: 'BlueTooth' },
+          { namePrefix: 'ESC' },
+          { namePrefix: 'PT' },
+          { namePrefix: 'TP' },
+        ],
+        optionalServices: [BT_SERVICE_UUID, BT_SERVICE_ALT, BT_SPP_SERVICE,
+          '00001101-0000-1000-8000-00805f9b34fb',
+          '0000ff00-0000-1000-8000-00805f9b34fb',
+          '0000ffe0-0000-1000-8000-00805f9b34fb']
+      });
+    } catch(filterErr) {
+      // Filters mein nahi mila — sab devices show karo
+      console.log('Filter failed, trying acceptAllDevices...', filterErr.message);
+      btDevice = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [BT_SERVICE_UUID, BT_SERVICE_ALT, BT_SPP_SERVICE,
+          '00001101-0000-1000-8000-00805f9b34fb',
+          '0000ff00-0000-1000-8000-00805f9b34fb',
+          '0000ffe0-0000-1000-8000-00805f9b34fb',
+          '000018f0-0000-1000-8000-00805f9b34fb',
+          '49535343-fe7d-4ae5-8fa9-9fafd205e455']
+      });
+    }
+
+    btDevice.addEventListener('gattserverdisconnected', onBtDisconnected);
+
+    const server = await btDevice.gatt.connect();
+    updateBtUI('connecting', btDevice.name || 'Printer', 'Getting service...');
+
+    // Try primary service first, then fallback
+    let service, characteristic;
+    try {
+      service = await server.getPrimaryService(BT_SERVICE_UUID);
+      characteristic = await service.getCharacteristic(BT_CHAR_UUID);
+    } catch {
+      try {
+        service = await server.getPrimaryService(BT_SERVICE_ALT);
+        characteristic = await service.getCharacteristic(BT_CHAR_ALT);
+      } catch {
+        // Try all available services
+        const services = await server.getPrimaryServices();
+        for (const svc of services) {
+          try {
+            const chars = await svc.getCharacteristics();
+            for (const ch of chars) {
+              if (ch.properties.write || ch.properties.writeWithoutResponse) {
+                service = svc;
+                characteristic = ch;
+                break;
+              }
+            }
+            if (characteristic) break;
+          } catch {}
+        }
+      }
+    }
+
+    if (!characteristic) throw new Error('Printer characteristic not found');
+
+    btCharacteristic = characteristic;
+    btConnected = true;
+
+    updateBtUI('connected', btDevice.name || 'Printer Connected', '✅ Ready to print!');
+    toast('✅ Printer connected: ' + (btDevice.name || 'Bluetooth Printer'), '#00A878');
+
+    // Save printer name
+    try { localStorage.setItem('bb-bt-printer', btDevice.name || 'Printer'); } catch {}
+
+  } catch (err) {
+    btConnected = false;
+    btCharacteristic = null;
+    if (err.name === 'NotFoundError') {
+      updateBtUI('', 'No printer selected', 'Tap Connect to scan');
+    } else if (err.name === 'SecurityError') {
+      updateBtUI('error', 'Permission denied', 'HTTPS required for Bluetooth');
+      toast('❌ HTTPS chahiye Bluetooth ke liye!', '#FF6B35');
+    } else {
+      updateBtUI('error', 'Connection failed', err.message);
+      toast('❌ Connect failed: ' + err.message, '#FF6B35');
+    }
+  }
+}
+
+function onBtDisconnected() {
+  btConnected = false;
+  btCharacteristic = null;
+  updateBtUI('error', 'Printer disconnected', 'Tap Connect to reconnect');
+  toast('📡 Printer disconnected', '#FF6B35');
+}
+
+async function disconnectBluetooth() {
+  if (btDevice && btDevice.gatt.connected) {
+    btDevice.gatt.disconnect();
+  }
+  btConnected = false;
+  btCharacteristic = null;
+  updateBtUI('', 'Not connected', 'Tap Connect to pair printer');
+  toast('Printer disconnected');
+}
+
+// ── SEND DATA TO PRINTER ───────────────────────────────
+async function sendToPrinter(data) {
+  if (!btConnected || !btCharacteristic) {
+    toast('❌ Printer connected nahi hai!', '#FF6B35');
+    return false;
+  }
+  try {
+    // Send in chunks (BT has ~512 byte MTU limit)
+    const CHUNK = 100;
+    for (let i = 0; i < data.length; i += CHUNK) {
+      const chunk = data.slice(i, i + CHUNK);
+      await btCharacteristic.writeValue(chunk);
+      await new Promise(r => setTimeout(r, 30)); // small delay between chunks
+    }
+    return true;
+  } catch (err) {
+    toast('❌ Print failed: ' + err.message, '#FF6B35');
+    btConnected = false;
+    updateBtUI('error', 'Print error', err.message);
+    return false;
+  }
+}
+
+// ── UPDATE BT UI ────────────────────────────────────────
+function updateBtUI(status, name, sub) {
+  const dot   = document.getElementById('bt-status-dot');
+  const nameEl = document.getElementById('bt-printer-name');
+  const subEl  = document.getElementById('bt-printer-sub');
+  const connBtn = document.getElementById('bt-connect-btn');
+  const printRow = document.getElementById('bt-print-row');
+
+  if (dot) { dot.className = 'bt-status ' + status; }
+  if (nameEl) nameEl.textContent = name || 'Not connected';
+  if (subEl) subEl.textContent = sub || '';
+
+  if (connBtn) {
+    if (status === 'connected') {
+      connBtn.textContent = '⏏ Disconnect';
+      connBtn.className = 'bt-btn bt-btn-disconnect';
+      connBtn.onclick = disconnectBluetooth;
+    } else {
+      connBtn.textContent = status === 'connecting' ? '⏳ Connecting...' : '🔵 Connect';
+      connBtn.className = 'bt-btn bt-btn-connect';
+      connBtn.onclick = connectBluetooth;
+    }
+  }
+  if (printRow) {
+    printRow.style.display = status === 'connected' ? 'flex' : 'none';
+  }
+}
+
+// ── PRINT FUNCTIONS ─────────────────────────────────────
+
+// 1. Customer Bill
+async function btPrintBill(orderId) {
+  const o = db.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const info = db.settings?.restInfo || {};
+  const cust = o.customerId ? db.customers.find(x => x.id === o.customerId) : null;
+  const cols = btPaperWidth === 80 ? 48 : 32;
+
+  const sections = [
+    { type: 'center', text: info.name || 'My Restaurant', bold: true, size: 'md' },
+  ];
+  if (info.tagline) sections.push({ type: 'center', text: info.tagline });
+  if (info.addr)    sections.push({ type: 'center', text: info.addr + (info.city ? ', ' + info.city : '') });
+  if (info.phone)   sections.push({ type: 'center', text: 'Ph: ' + info.phone });
+  if (info.gst)     sections.push({ type: 'center', text: 'GST: ' + info.gst });
+  sections.push({ line: true });
+  sections.push({ type: 'left', text: padRow('RECEIPT', '#' + o.id.slice(-4).toUpperCase()), bold: true });
+  sections.push({ type: 'left', text: padRow(fmtDate(o.date), fmtTime(o.date)) });
+  if (cust) sections.push({ type: 'left', text: 'Customer: ' + cust.name });
+  sections.push({ line: true });
+  sections.push({ type: 'left', text: padRow('ITEM', 'AMT'), bold: true });
+  o.items.forEach(i => {
+    sections.push({ type: 'left', text: padRow(i.qty + 'x ' + i.name, 'Rs.' + (i.price * i.qty).toFixed(2)) });
+  });
+  sections.push({ line: true });
+  sections.push({ type: 'left', text: padRow('Subtotal', 'Rs.' + o.subtotal.toFixed(2)) });
+  if (o.tax)      sections.push({ type: 'left', text: padRow('Tax', 'Rs.' + o.tax.toFixed(2)) });
+  if (o.discount) sections.push({ type: 'left', text: padRow('Discount', '-Rs.' + o.discount.toFixed(2)) });
+  sections.push({ dblLine: true });
+  sections.push({ type: 'left', text: padRow('TOTAL', 'Rs.' + o.total.toFixed(2)), bold: true, size: 'md' });
+  sections.push({ type: 'left', text: padRow('Payment', o.payment.toUpperCase()) });
+  sections.push({ line: true });
+  sections.push({ type: 'center', text: info.msg || 'Thank you! Visit again :)' });
+  if (info.billOffer && db.settings?.billOpts?.showOffer) {
+    sections.push({ type: 'center', text: info.billOffer });
+  }
+  sections.push({ type: 'center', text: 'Powered by BillBlitz' });
+
+  const data = buildPrintData(sections);
+  const ok = await sendToPrinter(data);
+  if (ok) toast('🖨️ Bill print ho raha hai!', '#00A878');
+}
+
+// 2. Daily Sales Report
+async function btPrintDailyReport() {
+  const today = new Date().toDateString();
+  const todayOrders = db.orders.filter(o => new Date(o.date).toDateString() === today && o.status !== 'cancelled');
+  const total = todayOrders.reduce((s, o) => s + o.total, 0);
+  const count = todayOrders.length;
+  const info = db.settings?.restInfo || {};
+
+  const sections = [
+    { type: 'center', text: info.name || 'My Restaurant', bold: true, size: 'md' },
+    { type: 'center', text: 'DAILY SALES REPORT', bold: true },
+    { type: 'center', text: new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) },
+    { line: true },
+    { type: 'left', text: padRow('Total Orders', count.toString()) },
+    { type: 'left', text: padRow('Total Sales', 'Rs.' + total.toFixed(2)), bold: true },
+    { line: true },
+    { type: 'left', text: 'ITEM WISE SUMMARY', bold: true },
+  ];
+
+  // Item-wise totals
+  const itemMap = {};
+  todayOrders.forEach(o => {
+    o.items.forEach(i => {
+      if (!itemMap[i.name]) itemMap[i.name] = { qty: 0, total: 0 };
+      itemMap[i.name].qty += i.qty;
+      itemMap[i.name].total += i.price * i.qty;
+    });
+  });
+  Object.entries(itemMap).sort((a, b) => b[1].total - a[1].total).forEach(([name, data]) => {
+    sections.push({ type: 'left', text: padRow(data.qty + 'x ' + name, 'Rs.' + data.total.toFixed(2)) });
+  });
+
+  // Payment breakdown
+  sections.push({ line: true });
+  sections.push({ type: 'left', text: 'PAYMENT BREAKDOWN', bold: true });
+  const payments = {};
+  todayOrders.forEach(o => {
+    payments[o.payment] = (payments[o.payment] || 0) + o.total;
+  });
+  Object.entries(payments).forEach(([method, amt]) => {
+    sections.push({ type: 'left', text: padRow(method.toUpperCase(), 'Rs.' + amt.toFixed(2)) });
+  });
+
+  sections.push({ dblLine: true });
+  sections.push({ type: 'left', text: padRow('GRAND TOTAL', 'Rs.' + total.toFixed(2)), bold: true, size: 'md' });
+  sections.push({ line: true });
+  sections.push({ type: 'center', text: 'Printed: ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) });
+  sections.push({ type: 'center', text: 'BillBlitz' });
+
+  const data = buildPrintData(sections);
+  const ok = await sendToPrinter(data);
+  if (ok) toast('🖨️ Daily report print ho raha hai!', '#00A878');
+}
+
+// 3. Inventory Report
+async function btPrintInventoryReport() {
+  const info = db.settings?.restInfo || {};
+  const items = db.inventory || [];
+  const lowStock = items.filter(i => i.qty <= (i.minQty || 5));
+
+  const sections = [
+    { type: 'center', text: info.name || 'My Restaurant', bold: true, size: 'md' },
+    { type: 'center', text: 'INVENTORY REPORT', bold: true },
+    { type: 'center', text: new Date().toLocaleDateString('en-IN') },
+    { line: true },
+    { type: 'left', text: padRow('Total Items', items.length.toString()) },
+    { type: 'left', text: padRow('Low Stock Alerts', lowStock.length.toString()), bold: lowStock.length > 0 },
+    { line: true },
+    { type: 'left', text: padRow('ITEM', 'QTY'), bold: true },
+  ];
+
+  items.forEach(i => {
+    const isLow = i.qty <= (i.minQty || 5);
+    sections.push({ type: 'left', text: padRow((isLow ? '! ' : '  ') + i.name, i.qty + ' ' + (i.unit || 'pcs')), bold: isLow });
+  });
+
+  if (lowStock.length > 0) {
+    sections.push({ line: true });
+    sections.push({ type: 'center', text: '!! LOW STOCK ALERT !!', bold: true });
+    lowStock.forEach(i => {
+      sections.push({ type: 'left', text: padRow(i.name, 'Only ' + i.qty + ' left'), bold: true });
+    });
+  }
+
+  sections.push({ line: true });
+  sections.push({ type: 'center', text: 'BillBlitz' });
+
+  const data = buildPrintData(sections);
+  const ok = await sendToPrinter(data);
+  if (ok) toast('🖨️ Inventory report print ho raha hai!', '#00A878');
+}
+
+// 4. KOT — Kitchen Order Ticket
+async function btPrintKOT(orderId) {
+  const o = db.orders.find(x => x.id === orderId);
+  if (!o) return;
+
+  const sections = [
+    { type: 'center', text: 'KOT', bold: true, size: 'lg' },
+    { type: 'center', text: '--- KITCHEN ORDER ---', bold: true },
+    { line: true },
+    { type: 'left', text: padRow('Order #', o.id.slice(-4).toUpperCase()), bold: true, size: 'md' },
+    { type: 'left', text: padRow('Time', fmtTime(o.date)) },
+    { type: 'left', text: padRow('Table', o.tableNo || '-') },
+    { line: true },
+    { type: 'left', text: 'ITEMS:', bold: true },
+  ];
+
+  o.items.forEach(i => {
+    sections.push({ type: 'left', text: i.qty + 'x  ' + i.name, bold: true, size: 'md' });
+  });
+
+  if (o.notes) {
+    sections.push({ line: true });
+    sections.push({ type: 'left', text: 'NOTE: ' + o.notes, bold: true });
+  }
+  sections.push({ line: true });
+  sections.push({ type: 'center', text: '*** END OF KOT ***' });
+
+  const data = buildPrintData(sections);
+  const ok = await sendToPrinter(data);
+  if (ok) toast('🍳 KOT kitchen ko print ho raha hai!', '#00A878');
+}
+
+// ── BT HELP MODAL ────────────────────────────────────────
+function showBtHelp() {
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔵 Bluetooth Printer Setup</div>
+    <div style="padding:4px 0">
+      <div style="background:#FFF3CD;border-radius:12px;padding:14px;margin-bottom:14px">
+        <div style="font-weight:700;color:#92400E;margin-bottom:6px">⚠️ Requirements</div>
+        <div style="font-size:0.83rem;color:#1A2B3C;line-height:1.8">
+          ✅ Android phone<br>
+          ✅ Chrome browser<br>
+          ✅ HTTPS URL (GitHub Pages)<br>
+          ✅ Bluetooth ON<br>
+          ✅ ESC/POS thermal printer
+        </div>
+      </div>
+      <div style="background:#EEF2FF;border-radius:12px;padding:14px;margin-bottom:14px">
+        <div style="font-weight:700;color:#2563EB;margin-bottom:6px">🖨️ Recommended Printers</div>
+        <div style="font-size:0.83rem;color:#1A2B3C;line-height:1.8">
+          📌 Xprinter XP-P300 (58mm) ~₹1,500<br>
+          📌 RP322 (58mm) ~₹1,200<br>
+          📌 Goojprt PT-280 (58mm) ~₹2,000<br>
+          📌 Epson TM-T82 (80mm) ~₹8,000<br>
+          📌 Xprinter XP-N160 (80mm) ~₹3,500
+        </div>
+      </div>
+      <div style="background:#F0FDF4;border-radius:12px;padding:14px">
+        <div style="font-weight:700;color:#166534;margin-bottom:6px">📱 Local File Par Kaam Nahi Karta</div>
+        <div style="font-size:0.83rem;color:#1A2B3C">
+          Bluetooth ke liye GitHub Pages par host karna zaroori hai.<br>
+          Woh step ready hai — sirf upload karo!
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="closeModal()" style="margin-top:12px">Samajh Gaya</button>`;
+  openModal();
+}
+
+// ── PAPER SIZE CHANGE ────────────────────────────────────
+function btSetPaperWidth(w) {
+  btPaperWidth = parseInt(w);
+  try { localStorage.setItem('bb-bt-paper', w); } catch {}
+  toast('📄 Paper: ' + w + 'mm set!');
+}
+
+// Load saved paper size
+(function() {
+  try {
+    const saved = localStorage.getItem('bb-bt-paper');
+    if (saved) btPaperWidth = parseInt(saved);
+  } catch {}
+})();
+
+// ╔══════════════════════════════════════════════════════╗
+// ║                     INIT                             ║
+// ╚══════════════════════════════════════════════════════╝
+load();
+// Firebase FIRST — so it's ready before license check
+try { initFirebase(); } catch(e) { console.log('Firebase init:', e); }
+initLicense();
+
+</script>
+
+<!-- PWA Service Worker — Inline Registration -->
+<script>
+(function() {
+  if (!('serviceWorker' in navigator)) return;
+
+  // Create service worker as blob — no separate file needed!
+  const swCode = `
+const CACHE = 'billblitz-v1';
+const ASSETS = ['/'];
+
+self.addEventListener('install', e => {
+  self.skipWaiting();
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(ASSETS).catch(()=>{}))
+  );
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    fetch(e.request).catch(() =>
+      caches.match(e.request).then(r => r || caches.match('/'))
+    )
+  );
+});
+`;
+
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+
+  navigator.serviceWorker.register(swUrl, { scope: '/' })
+    .then(reg => {
+      console.log('✅ BillBlitz PWA ready! Scope:', reg.scope);
+      // Check for updates
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            console.log('New version available!');
+          }
+        });
+      });
+    })
+    .catch(err => {
+      // Silently fail — app still works without SW
+      console.log('SW not available (local file mode):', err.message);
+    });
+
+  // PWA Install prompt handler
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show install banner after 3 seconds
+    setTimeout(() => showInstallBanner(deferredPrompt), 3000);
+  });
+
+  window.addEventListener('appinstalled', () => {
+    console.log('✅ BillBlitz installed!');
+    hideInstallBanner();
+    deferredPrompt = null;
+  });
+})();
+
+// ── INSTALL BANNER ──────────────────────────────────────
+function showInstallBanner(prompt) {
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  const existing = document.getElementById('pwa-banner');
+  if (existing) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'pwa-banner';
+  banner.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;flex:1">
+      <div style="font-size:2rem">⚡</div>
+      <div>
+        <div style="font-weight:700;font-size:0.9rem;color:#fff">BillBlitz Install Karein!</div>
+        <div style="font-size:0.75rem;color:rgba(255,255,255,0.6)">Home screen par icon aayega — bilkul app jaisa!</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0">
+      <button onclick="doInstall()" style="background:linear-gradient(135deg,#FFD700,#FFA500);color:#0F1923;border:none;padding:9px 16px;border-radius:10px;font-weight:800;font-size:0.85rem;cursor:pointer">Install ✅</button>
+      <button onclick="hideInstallBanner()" style="background:rgba(255,255,255,0.1);color:#fff;border:none;padding:9px 12px;border-radius:10px;font-size:0.85rem;cursor:pointer">✕</button>
+    </div>`;
+  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#0F1923,#1A2B3C);padding:14px 16px;display:flex;align-items:center;gap:12px;z-index:99999;box-shadow:0 -4px 20px rgba(0,0,0,0.5);border-top:2px solid #FFD700;animation:slideUp 0.3s ease';
+  document.body.appendChild(banner);
+
+  // Store prompt for later
+  window._pwaPrompt = prompt;
+}
+
+function hideInstallBanner() {
+  const b = document.getElementById('pwa-banner');
+  if (b) b.remove();
+}
+
+async function doInstall() {
+  if (!window._pwaPrompt) return;
+  window._pwaPrompt.prompt();
+  const { outcome } = await window._pwaPrompt.userChoice;
+  if (outcome === 'accepted') {
+    hideInstallBanner();
+    setTimeout(() => toast('✅ BillBlitz install ho raha hai!', '#00A878'), 500);
+  }
+  window._pwaPrompt = null;
+}
+</script>
+
+<style>
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity:0; }
+  to   { transform: translateY(0);    opacity:1; }
+}
+</style>
+
+</body>
+</html>
