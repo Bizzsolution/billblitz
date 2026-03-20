@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>BillBlitz Admin Panel</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:100vh;}
+
+/* LOGIN */
+.admin-login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-box{background:linear-gradient(135deg,#0F1923,#1A2B3C);border:1px solid rgba(255,215,0,0.2);border-radius:20px;padding:32px;width:100%;max-width:380px;}
+.login-logo{font-size:2rem;font-weight:900;color:#FFD700;text-align:center;margin-bottom:4px;}
+.login-sub{text-align:center;color:rgba(255,255,255,0.4);font-size:0.8rem;margin-bottom:24px;}
+.form-inp{width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#fff;padding:12px 14px;border-radius:10px;font-size:0.9rem;font-family:inherit;margin-bottom:12px;}
+.form-inp::placeholder{color:rgba(255,255,255,0.3);}
+.btn-primary{width:100%;padding:13px;background:linear-gradient(135deg,#FFD700,#FFA500);color:#0F1923;border:none;border-radius:10px;font-weight:800;font-size:1rem;cursor:pointer;font-family:inherit;}
+
+/* MAIN LAYOUT */
+.admin-wrap{display:none;min-height:100vh;}
+.admin-sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:linear-gradient(180deg,#0A1018,#0F1923);border-right:1px solid rgba(255,215,0,0.1);padding:20px 0;z-index:100;}
+.admin-logo{padding:0 20px 20px;border-bottom:1px solid rgba(255,255,255,0.06);}
+.admin-logo-txt{font-size:1.1rem;font-weight:900;color:#FFD700;}
+.admin-logo-sub{font-size:0.7rem;color:rgba(255,255,255,0.3);margin-top:2px;}
+.sb-nav{margin-top:12px;}
+.sb-link{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:0.85rem;font-weight:600;transition:all 0.2s;}
+.sb-link:hover,.sb-link.active{background:rgba(255,215,0,0.08);color:#FFD700;border-right:3px solid #FFD700;}
+.sb-link span{font-size:1.1rem;}
+.admin-main{margin-left:220px;padding:24px;}
+
+/* TOP BAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.topbar-title{font-size:1.3rem;font-weight:800;color:#fff;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.badge-pill{padding:5px 14px;border-radius:20px;font-size:0.75rem;font-weight:700;}
+.badge-green{background:rgba(0,200,150,0.15);color:#00C896;border:1px solid rgba(0,200,150,0.3);}
+.badge-red{background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.3);}
+.badge-yellow{background:rgba(255,215,0,0.15);color:#FFD700;border:1px solid rgba(255,215,0,0.3);}
+.badge-grey{background:rgba(107,122,153,0.15);color:#6B7A99;border:1px solid rgba(107,122,153,0.3);}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+.stat-box{background:linear-gradient(135deg,#0F1923,#162030);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:18px;}
+.stat-val{font-size:1.8rem;font-weight:800;margin-bottom:4px;}
+.stat-lbl{font-size:0.75rem;color:rgba(255,255,255,0.4);font-weight:600;}
+
+/* CARDS */
+.card{background:linear-gradient(135deg,#0F1923,#162030);border:1px solid rgba(255,255,255,0.07);border-radius:16px;margin-bottom:16px;}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.06);}
+.card-title{font-size:0.95rem;font-weight:700;}
+.card-body{padding:16px 18px;}
+
+/* TABLE */
+.admin-table{width:100%;border-collapse:collapse;}
+.admin-table th{text-align:left;padding:10px 12px;font-size:0.75rem;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(255,255,255,0.06);}
+.admin-table td{padding:12px 12px;font-size:0.85rem;border-bottom:1px solid rgba(255,255,255,0.04);}
+.admin-table tr:hover td{background:rgba(255,255,255,0.02);}
+
+/* BUTTONS */
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:0.8rem;font-family:inherit;}
+.btn-sm{padding:5px 12px;font-size:0.75rem;}
+.btn-gold{background:linear-gradient(135deg,#FFD700,#FFA500);color:#0F1923;}
+.btn-green{background:rgba(0,200,150,0.15);color:#00C896;border:1px solid rgba(0,200,150,0.3);}
+.btn-red{background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.3);}
+.btn-outline{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);border:1px solid rgba(255,255,255,0.12);}
+.btn-blue{background:rgba(37,99,235,0.15);color:#60A5FA;border:1px solid rgba(37,99,235,0.3);}
+.btn-full{width:100%;display:block;}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;padding:20px;}
+.modal-bg.open{display:flex;}
+.modal-box{background:linear-gradient(135deg,#0F1923,#1A2B3C);border:1px solid rgba(255,215,0,0.2);border-radius:20px;padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:1.1rem;font-weight:800;margin-bottom:16px;color:#FFD700;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.form-group{margin-bottom:12px;}
+.form-label{font-size:0.75rem;font-weight:700;color:rgba(255,255,255,0.5);display:block;margin-bottom:5px;text-transform:uppercase;}
+.form-select{width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#fff;padding:10px 12px;border-radius:10px;font-family:inherit;font-size:0.85rem;}
+.form-select option{background:#1A2B3C;}
+.key-display{background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.3);border-radius:12px;padding:14px;text-align:center;font-family:monospace;font-size:1.1rem;font-weight:700;color:#FFD700;letter-spacing:0.1em;margin:12px 0;}
+
+/* ANNOUNCEMENT */
+.ann-box{background:rgba(37,99,235,0.1);border:1px solid rgba(37,99,235,0.2);border-radius:12px;padding:14px;margin-bottom:10px;}
+.ann-text{font-size:0.85rem;color:#fff;margin-bottom:6px;}
+.ann-meta{font-size:0.72rem;color:rgba(255,255,255,0.4);}
+
+/* SEARCH */
+.search-wrap{position:relative;margin-bottom:14px;}
+.search-inp{width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:10px 14px 10px 36px;border-radius:10px;font-size:0.85rem;font-family:inherit;}
+.search-inp::placeholder{color:rgba(255,255,255,0.3);}
+.search-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);opacity:0.4;}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:#1A2B3C;border:1px solid rgba(255,215,0,0.3);color:#fff;padding:12px 18px;border-radius:12px;font-size:0.85rem;font-weight:600;z-index:9999;display:none;}
+
+@media(max-width:700px){
+  .admin-sidebar{display:none;}
+  .admin-main{margin-left:0;}
+  .stats-row{grid-template-columns:1fr 1fr;}
+  .form-row{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="admin-login" id="admin-login">
+  <div class="login-box">
+    <div class="login-logo">⚡ BillBlitz</div>
+    <div class="login-sub">ADMIN PANEL — RESELLER DASHBOARD</div>
+    <input class="form-inp" id="admin-pass" type="password" placeholder="Admin Password" onkeydown="if(event.key==='Enter')adminLogin()"/>
+    <button class="btn-primary" onclick="adminLogin()">🔐 Login</button>
+    <div id="login-err" style="color:#FF6B35;font-size:0.8rem;text-align:center;margin-top:10px;min-height:18px;"></div>
+  </div>
+</div>
+
+<!-- MAIN ADMIN PANEL -->
+<div class="admin-wrap" id="admin-wrap">
+
+  <!-- Sidebar -->
+  <div class="admin-sidebar">
+    <div class="admin-logo">
+      <div class="admin-logo-txt">⚡ BillBlitz</div>
+      <div class="admin-logo-sub">Admin Panel</div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-link active" id="nav-dashboard" onclick="showSection('dashboard')"><span>📊</span> Dashboard</div>
+      <div class="sb-link" id="nav-clients" onclick="showSection('clients')"><span>👥</span> Clients</div>
+      <div class="sb-link" id="nav-keys" onclick="showSection('keys')"><span>🔑</span> License Keys</div>
+      <div class="sb-link" id="nav-announce" onclick="showSection('announce')"><span>📢</span> Announcements</div>
+      <div class="sb-link" id="nav-revenue" onclick="showSection('revenue')"><span>💰</span> Revenue</div>
+      <div class="sb-link" id="nav-settings" onclick="showSection('asettings')"><span>⚙️</span> Settings</div>
+      <div class="sb-link" style="margin-top:auto;color:#FF6B35" onclick="adminLogout()"><span>🚪</span> Logout</div>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="admin-main">
+
+    <!-- DASHBOARD -->
+    <div id="sec-dashboard">
+      <div class="topbar">
+        <div class="topbar-title">📊 Dashboard</div>
+        <div class="topbar-right">
+          <button class="btn btn-gold" onclick="showSection('clients');showAddClientModal()">➕ New Client</button>
+        </div>
+      </div>
+      <div class="stats-row" id="dash-stats"></div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">🔴 Expiring Soon (Next 7 days)</div></div>
+        <div class="card-body" id="dash-expiring"></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">🕐 Recent Activity</div></div>
+        <div class="card-body" id="dash-activity"></div>
+      </div>
+    </div>
+
+    <!-- CLIENTS -->
+    <div id="sec-clients" style="display:none">
+      <div class="topbar">
+        <div class="topbar-title">👥 All Clients</div>
+        <div class="topbar-right">
+          <button class="btn btn-gold" onclick="showAddClientModal()">➕ Add Client</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div class="search-wrap">
+            <span class="search-ico">🔍</span>
+            <input class="search-inp" id="client-search" placeholder="Search by name, phone, location..." oninput="renderClients()"/>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap" id="client-filter-btns"></div>
+          <div style="overflow-x:auto">
+            <table class="admin-table" id="clients-table">
+              <thead><tr>
+                <th>#</th><th>Client</th><th>Location</th><th>License</th>
+                <th>Expiry</th><th>Revenue</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="clients-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LICENSE KEYS -->
+    <div id="sec-keys" style="display:none">
+      <div class="topbar">
+        <div class="topbar-title">🔑 License Keys</div>
+        <div class="topbar-right">
+          <button class="btn btn-gold" onclick="showGenerateKeyModal()">✨ Generate Key</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div style="overflow-x:auto">
+            <table class="admin-table">
+              <thead><tr><th>Key</th><th>Client</th><th>Created</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="keys-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS -->
+    <div id="sec-announce" style="display:none">
+      <div class="topbar"><div class="topbar-title">📢 Announcements</div></div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">📝 New Announcement</div></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Message *</label>
+            <textarea class="form-inp" id="ann-msg" rows="3" placeholder="e.g. New feature added! Check billing section." style="resize:vertical"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select class="form-select" id="ann-type">
+                <option value="info">ℹ️ Info</option>
+                <option value="warning">⚠️ Warning</option>
+                <option value="success">✅ Success</option>
+                <option value="urgent">🔴 Urgent</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Target</label>
+              <select class="form-select" id="ann-target">
+                <option value="all">All Clients</option>
+                <option value="trial">Trial Users</option>
+                <option value="active">Active Only</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-gold btn-full" onclick="sendAnnouncement()">📢 Send to All Clients</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">📋 Sent Announcements</div></div>
+        <div class="card-body" id="ann-list"></div>
+      </div>
+    </div>
+
+    <!-- REVENUE -->
+    <div id="sec-revenue" style="display:none">
+      <div class="topbar"><div class="topbar-title">💰 Revenue Dashboard</div></div>
+      <div class="stats-row" id="rev-stats"></div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">📅 Monthly Breakdown</div></div>
+        <div class="card-body" id="rev-monthly"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="sec-asettings" style="display:none">
+      <div class="topbar"><div class="topbar-title">⚙️ Admin Settings</div></div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">🔐 Change Admin Password</div></div>
+        <div class="card-body">
+          <div class="form-group"><label class="form-label">Current Password</label><input class="form-inp" id="curr-pass" type="password"/></div>
+          <div class="form-group"><label class="form-label">New Password</label><input class="form-inp" id="new-pass" type="password"/></div>
+          <div class="form-group"><label class="form-label">Confirm Password</label><input class="form-inp" id="conf-pass" type="password"/></div>
+          <button class="btn btn-gold btn-full" onclick="changeAdminPass()">💾 Change Password</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">💼 Business Info</div></div>
+        <div class="card-body">
+          <div class="form-group"><label class="form-label">Your Name / Company</label><input class="form-inp" id="biz-name" placeholder="Bizzsolution"/></div>
+          <div class="form-group"><label class="form-label">WhatsApp Support Number</label><input class="form-inp" id="biz-wa" type="tel" placeholder="9876543210"/></div>
+          <div class="form-group"><label class="form-label">UPI ID (for payments)</label><input class="form-inp" id="biz-upi" placeholder="yourname@upi"/></div>
+          <button class="btn btn-gold btn-full" onclick="saveBizInfo()">💾 Save</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">🔑 License Key Prefix</div></div>
+        <div class="card-body">
+          <div class="form-group"><label class="form-label">Key Prefix (e.g. BB, RS, BZ)</label><input class="form-inp" id="key-prefix" maxlength="3" placeholder="BB" style="text-transform:uppercase"/></div>
+          <div class="form-group"><label class="form-label">Default Trial Days</label><input class="form-inp" id="trial-days" type="number" value="30" min="1"/></div>
+          <button class="btn btn-gold btn-full" onclick="saveKeySettings()">💾 Save</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-bg" id="modal-add-client">
+  <div class="modal-box">
+    <div class="modal-title">➕ Add New Client</div>
+    <div class="form-group"><label class="form-label">Restaurant Name *</label><input class="form-inp" id="cl-name" placeholder="e.g. Spice Garden Restaurant"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Owner Name *</label><input class="form-inp" id="cl-owner" placeholder="Ramesh Kumar"/></div>
+      <div class="form-group"><label class="form-label">Phone *</label><input class="form-inp" id="cl-phone" type="tel" placeholder="9876543210"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">City</label><input class="form-inp" id="cl-city" placeholder="Delhi"/></div>
+      <div class="form-group"><label class="form-label">Plan</label>
+        <select class="form-select" id="cl-plan">
+          <option value="trial">Free Trial</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+          <option value="lifetime">Lifetime</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Amount Paid (₹)</label><input class="form-inp" id="cl-amount" type="number" placeholder="0"/></div>
+      <div class="form-group"><label class="form-label">Expiry Date</label><input class="form-inp" id="cl-expiry" type="date"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Notes</label><input class="form-inp" id="cl-notes" placeholder="Any notes..."/></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-gold" style="flex:1" onclick="saveClient()">✅ Save & Generate Key</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-add-client')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-view-client">
+  <div class="modal-box" id="modal-view-client-body"></div>
+</div>
+
+<div class="modal-bg" id="modal-gen-key">
+  <div class="modal-box">
+    <div class="modal-title">✨ Generate License Key</div>
+    <div class="form-group"><label class="form-label">Client</label>
+      <select class="form-select" id="gen-client"></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Plan</label>
+        <select class="form-select" id="gen-plan">
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+          <option value="lifetime">Lifetime</option>
+          <option value="custom">Custom Days</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Days (if custom)</label>
+        <input class="form-inp" id="gen-days" type="number" placeholder="30"/>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-inp" id="gen-amount" type="number" placeholder="499"/></div>
+    <button class="btn btn-gold btn-full" onclick="generateKey()" style="margin-bottom:10px">✨ Generate Key</button>
+    <div id="gen-key-result"></div>
+    <button class="btn btn-outline btn-full" onclick="closeModal('modal-gen-key')">Close</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script>
+// ═══════════════════════════════════════════════════
+// BILLBLITZ ADMIN PANEL
+// ═══════════════════════════════════════════════════
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCbCj22kdy5bba2s0-yMHAmeqLSbN4Ri3A",
+  authDomain: "billblitz-a17dd.firebaseapp.com",
+  projectId: "billblitz-a17dd"
+};
+
+// ── Admin Config (change these!) ──
+const ADMIN_PASS_KEY = 'bb-admin-pass';
+const DEFAULT_ADMIN_PASS = 'admin@2024'; // First login password
+
+let db_admin = null;
+let adminData = {
+  clients: [],
+  keys: [],
+  announcements: [],
+  settings: { prefix:'BB', trialDays:30, bizName:'', bizWa:'', bizUpi:'' }
+};
+
+// ══ INIT ══════════════════════════════════════════
+firebase.initializeApp(FIREBASE_CONFIG);
+db_admin = firebase.firestore();
+
+function save() {
+  try { localStorage.setItem('bb-admin-data', JSON.stringify(adminData)); } catch(e){}
+}
+function load() {
+  try {
+    const d = localStorage.getItem('bb-admin-data');
+    if(d) adminData = {...adminData, ...JSON.parse(d)};
+  } catch(e){}
+}
+
+// ══ AUTH ══════════════════════════════════════════
+function getAdminPass() {
+  return localStorage.getItem(ADMIN_PASS_KEY) || DEFAULT_ADMIN_PASS;
+}
+function adminLogin() {
+  const pass = document.getElementById('admin-pass').value;
+  if(pass === getAdminPass()) {
+    document.getElementById('admin-login').style.display = 'none';
+    document.getElementById('admin-wrap').style.display = 'block';
+    load();
+    showSection('dashboard');
+    syncFromFirebase();
+  } else {
+    document.getElementById('login-err').textContent = '❌ Wrong password!';
+  }
+}
+function adminLogout() {
+  document.getElementById('admin-wrap').style.display = 'none';
+  document.getElementById('admin-login').style.display = 'flex';
+  document.getElementById('admin-pass').value = '';
+}
+function changeAdminPass() {
+  const curr = document.getElementById('curr-pass').value;
+  const np = document.getElementById('new-pass').value;
+  const cp = document.getElementById('conf-pass').value;
+  if(curr !== getAdminPass()) { toast('Current password wrong!','#FF6B35'); return; }
+  if(np !== cp) { toast('Passwords match nahi!','#FF6B35'); return; }
+  if(np.length < 6) { toast('Min 6 characters chahiye!','#FF6B35'); return; }
+  localStorage.setItem(ADMIN_PASS_KEY, np);
+  toast('✅ Password changed!','#00C896');
+  document.getElementById('curr-pass').value = '';
+  document.getElementById('new-pass').value = '';
+  document.getElementById('conf-pass').value = '';
+}
+
+// ══ NAVIGATION ════════════════════════════════════
+function showSection(id) {
+  ['dashboard','clients','keys','announce','revenue','asettings'].forEach(s => {
+    const el = document.getElementById('sec-'+s);
+    const nav = document.getElementById('nav-'+s);
+    if(el) el.style.display = s===id ? 'block' : 'none';
+    if(nav) nav.classList.toggle('active', s===id);
+  });
+  if(id==='dashboard') renderDashboard();
+  if(id==='clients') renderClients();
+  if(id==='keys') renderKeys();
+  if(id==='announce') renderAnnouncements();
+  if(id==='revenue') renderRevenue();
+  if(id==='asettings') loadSettings();
+}
+
+// ══ FIREBASE SYNC ══════════════════════════════════
+async function syncFromFirebase() {
+  try {
+    await firebase.auth().signInAnonymously();
+    // Sync clients
+    const snap = await db_admin.collection('admin_clients').get();
+    if(!snap.empty) {
+      adminData.clients = snap.docs.map(d => ({id:d.id, ...d.data()}));
+    }
+    // Sync keys
+    const ksnap = await db_admin.collection('admin_keys').get();
+    if(!ksnap.empty) {
+      adminData.keys = ksnap.docs.map(d => ({id:d.id, ...d.data()}));
+    }
+    save();
+    renderDashboard();
+    toast('☁️ Synced!','#00C896');
+  } catch(e) {
+    console.log('Firebase sync:', e);
+  }
+}
+
+async function pushToFirebase(collection, id, data) {
+  try {
+    await db_admin.collection(collection).doc(id).set(data, {merge:true});
+  } catch(e) { console.log('Firebase push:', e); }
+}
+
+// ══ CLIENTS ════════════════════════════════════════
+function showAddClientModal() {
+  // Set default expiry 30 days from now
+  const d = new Date(); d.setDate(d.getDate()+30);
+  document.getElementById('cl-expiry').value = d.toISOString().split('T')[0];
+  document.getElementById('modal-add-client').classList.add('open');
+}
+
+function saveClient() {
+  const name = document.getElementById('cl-name').value.trim();
+  const owner = document.getElementById('cl-owner').value.trim();
+  const phone = document.getElementById('cl-phone').value.trim();
+  if(!name||!owner||!phone) { toast('Name, owner, phone required!','#FF6B35'); return; }
+
+  const key = generateLicenseKey();
+  const client = {
+    id: 'c'+Date.now(),
+    name, owner, phone,
+    city: document.getElementById('cl-city').value.trim(),
+    plan: document.getElementById('cl-plan').value,
+    amount: parseFloat(document.getElementById('cl-amount').value)||0,
+    expiry: document.getElementById('cl-expiry').value,
+    notes: document.getElementById('cl-notes').value.trim(),
+    key, status:'active',
+    createdAt: new Date().toISOString(),
+    payments: []
+  };
+
+  if(document.getElementById('cl-plan').value !== 'trial') {
+    client.payments = [{date:new Date().toISOString(), amount:client.amount, plan:client.plan}];
+  }
+
+  adminData.clients.push(client);
+  adminData.keys.push({
+    key, clientId:client.id, clientName:name,
+    plan:client.plan, expiry:client.expiry,
+    createdAt:new Date().toISOString(), status:'active'
+  });
+
+  save();
+  // Push to Firebase so BillBlitz app can verify
+  pushToFirebase('admin_clients', client.id, client);
+  pushToFirebase('licenses', key, {
+    clientId:client.id, clientName:name, plan:client.plan,
+    expiry:client.expiry, status:'active', createdAt:new Date().toISOString()
+  });
+
+  closeModal('modal-add-client');
+  showClientKeyResult(client);
+  logActivity('New client added: '+name);
+  toast('✅ Client added!','#00C896');
+}
+
+function showClientKeyResult(client) {
+  const msg = '🎉 Client Added!\n\n'
+    + 'Restaurant: '+client.name+'\n'
+    + 'License Key: '+client.key+'\n'
+    + 'Expiry: '+fmtDate(client.expiry)+'\n\n'
+    + 'Share this key with the client!';
+  
+  // Show in modal
+  document.getElementById('modal-view-client-body').innerHTML = `
+    <div class="modal-title">✅ Client Added!</div>
+    <div style="background:rgba(0,200,150,0.1);border:1px solid rgba(0,200,150,0.3);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-bottom:4px">Restaurant</div>
+      <div style="font-weight:700">${esc(client.name)}</div>
+    </div>
+    <div style="font-size:0.85rem;color:rgba(255,255,255,0.6);margin-bottom:6px">License Key (Share this with client):</div>
+    <div class="key-display">${esc(client.key)}</div>
+    <div style="font-size:0.82rem;color:rgba(255,255,255,0.5);margin-bottom:14px">Expiry: ${fmtDate(client.expiry)} · Plan: ${client.plan}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-gold btn-full" onclick="whatsappKey('${client.key}','${esc(client.name)}','${fmtDate(client.expiry)}','${client.phone}')">📲 Share on WhatsApp</button>
+      <button class="btn btn-outline btn-full" onclick="copyKey('${client.key}')">📋 Copy Key</button>
+      <button class="btn btn-outline btn-full" onclick="closeModal('modal-view-client');renderClients()">✅ Done</button>
+    </div>`;
+  document.getElementById('modal-view-client').classList.add('open');
+}
+
+function renderClients() {
+  const search = (document.getElementById('client-search')?.value||'').toLowerCase();
+  const clients = adminData.clients.filter(c =>
+    !search ||
+    c.name.toLowerCase().includes(search) ||
+    (c.owner||'').toLowerCase().includes(search) ||
+    (c.phone||'').includes(search) ||
+    (c.city||'').toLowerCase().includes(search)
+  );
+
+  // Filter buttons
+  const statuses = ['all','active','trial','expired','blocked'];
+  const filterEl = document.getElementById('client-filter-btns');
+  if(filterEl && !filterEl.dataset.rendered) {
+    filterEl.innerHTML = statuses.map(s=>`<button class="btn btn-sm ${s==='all'?'btn-gold':'btn-outline'}" onclick="filterClients('${s}',this)">${s.toUpperCase()}</button>`).join('');
+    filterEl.dataset.rendered = '1';
+  }
+
+  const tbody = document.getElementById('clients-tbody');
+  if(!tbody) return;
+  if(!clients.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.3);padding:20px">No clients yet</td></tr>'; return; }
+
+  tbody.innerHTML = clients.map((c,i) => {
+    const daysLeft = c.expiry ? Math.ceil((new Date(c.expiry)-new Date())/86400000) : 999;
+    const statusBadge = c.status==='blocked' ? '<span class="badge-pill badge-red">Blocked</span>'
+      : daysLeft <= 0 ? '<span class="badge-pill badge-red">Expired</span>'
+      : daysLeft <= 7 ? '<span class="badge-pill badge-yellow">Expiring</span>'
+      : c.plan==='trial' ? '<span class="badge-pill badge-yellow">Trial</span>'
+      : '<span class="badge-pill badge-green">Active</span>';
+    const totalPaid = (c.payments||[]).reduce((s,p)=>s+p.amount,0);
+    const dayColor = daysLeft<=7 ? '#FF6B35' : 'rgba(255,255,255,0.3)';
+    const dayText = daysLeft>0 ? daysLeft+'d left' : 'Expired';
+    const blockBtnClass = c.status==='blocked' ? 'btn-green' : 'btn-red';
+    const blockBtnText = c.status==='blocked' ? 'Unblock' : 'Block';
+    const cid = c.id;
+    return '<tr>'
+      + '<td style="color:rgba(255,255,255,0.4)">'+(i+1)+'</td>'
+      + '<td><div style="font-weight:700">'+esc(c.name)+'</div>'
+      + '<div style="font-size:0.75rem;color:rgba(255,255,255,0.4)">'+esc(c.owner||'')+' · '+esc(c.phone||'')+'</div></td>'
+      + '<td style="color:rgba(255,255,255,0.6)">'+esc(c.city||'—')+'</td>'
+      + '<td>'+statusBadge+'</td>'
+      + '<td style="font-size:0.82rem">'+fmtDate(c.expiry)+'<br><span style="color:'+dayColor+';font-size:0.72rem">'+dayText+'</span></td>'
+      + '<td style="font-weight:700;color:#00C896">₹'+totalPaid+'</td>'
+      + '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
+      + '<button class="btn btn-sm btn-blue" data-id="'+cid+'" onclick="viewClient(this.dataset.id)">View</button>'
+      + '<button class="btn btn-sm btn-gold" data-id="'+cid+'" onclick="extendClient(this.dataset.id)">Extend</button>'
+      + '<button class="btn btn-sm '+blockBtnClass+'" data-id="'+cid+'" onclick="toggleBlock(this.dataset.id)">'+blockBtnText+'</button>'
+      + '</div></td></tr>';
+  }).join('');
+}
+
+function filterClients(status, btn) {
+  document.querySelectorAll('#client-filter-btns .btn').forEach(b=>{
+    b.className = 'btn btn-sm btn-outline';
+  });
+  btn.className = 'btn btn-sm btn-gold';
+  // filter logic can be extended
+}
+
+function viewClient(clientId) {
+  const c = adminData.clients.find(x=>x.id===clientId); if(!c) return;
+  const daysLeft = c.expiry ? Math.ceil((new Date(c.expiry)-new Date())/86400000) : 0;
+  const totalPaid = (c.payments||[]).reduce((s,p)=>s+p.amount,0);
+  document.getElementById('modal-view-client-body').innerHTML = `
+    <div class="modal-title">👁 ${esc(c.name)}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4)">OWNER</div>
+        <div style="font-weight:700">${esc(c.owner||'—')}</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4)">PHONE</div>
+        <div style="font-weight:700">${esc(c.phone||'—')}</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4)">PLAN</div>
+        <div style="font-weight:700;color:#FFD700">${c.plan||'trial'}</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4)">REVENUE</div>
+        <div style="font-weight:700;color:#00C896">₹${totalPaid}</div>
+      </div>
+    </div>
+    <div style="font-size:0.82rem;color:rgba(255,255,255,0.5);margin-bottom:4px">License Key:</div>
+    <div class="key-display">${esc(c.key||'No key')}</div>
+    <div style="font-size:0.82rem;color:${daysLeft<=0?'#FF6B35':daysLeft<=7?'#FFD700':'rgba(255,255,255,0.5)'};margin-bottom:14px">
+      Expiry: ${fmtDate(c.expiry)} · ${daysLeft>0?daysLeft+' days left':'EXPIRED'}
+    </div>
+    ${c.notes?`<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:12px;color:rgba(255,255,255,0.6)">${esc(c.notes)}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-gold btn-full" onclick="closeModal('modal-view-client');extendClient('${c.id}')">🔄 Extend / Renew</button>
+      <button class="btn btn-outline btn-full" onclick="whatsappKey('${c.key}','${esc(c.name)}','${fmtDate(c.expiry)}','${c.phone}')">📲 Send Key WhatsApp</button>
+      <button class="btn btn-outline btn-full" onclick="closeModal('modal-view-client')">Close</button>
+    </div>`;
+  document.getElementById('modal-view-client').classList.add('open');
+}
+
+function extendClient(clientId) {
+  const c = adminData.clients.find(x=>x.id===clientId); if(!c) return;
+  closeModal('modal-view-client');
+  document.getElementById('modal-view-client-body').innerHTML = `
+    <div class="modal-title">🔄 Extend — ${esc(c.name)}</div>
+    <div class="form-group"><label class="form-label">Extend By</label>
+      <select class="form-select" id="ext-type">
+        <option value="30">30 Days (Monthly)</option>
+        <option value="90">90 Days (Quarterly)</option>
+        <option value="180">180 Days (Half Yearly)</option>
+        <option value="365">365 Days (Yearly)</option>
+        <option value="0">Lifetime</option>
+        <option value="custom">Custom Days</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Custom Days (if custom)</label><input class="form-inp" id="ext-custom" type="number" placeholder="30"/></div>
+    <div class="form-group"><label class="form-label">Amount Received (₹)</label><input class="form-inp" id="ext-amount" type="number" placeholder="499"/></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-gold" style="flex:1" data-id="${clientId}" onclick="saveExtend(this.dataset.id)">Extend</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-view-client')">Cancel</button>
+    </div>`;
+  document.getElementById('modal-view-client').classList.add('open');
+}
+
+function saveExtend(clientId) {
+  const c = adminData.clients.find(x=>x.id===clientId); if(!c) return;
+  const extType = document.getElementById('ext-type').value;
+  const amount = parseFloat(document.getElementById('ext-amount').value)||0;
+  let days = 0;
+  if(extType==='0') { c.expiry = '2099-12-31'; c.plan='lifetime'; }
+  else if(extType==='custom') { days=parseInt(document.getElementById('ext-custom').value)||30; }
+  else { days=parseInt(extType); }
+  
+  if(days>0) {
+    const base = c.expiry && new Date(c.expiry)>new Date() ? new Date(c.expiry) : new Date();
+    base.setDate(base.getDate()+days);
+    c.expiry = base.toISOString().split('T')[0];
+    c.plan = days>=365?'yearly':days>=30?'monthly':'custom';
+  }
+  c.status='active';
+  if(amount>0) c.payments = [...(c.payments||[]), {date:new Date().toISOString(), amount, plan:c.plan}];
+
+  // Update key in Firebase
+  if(c.key) {
+    pushToFirebase('licenses', c.key, {expiry:c.expiry, status:'active', plan:c.plan});
+    pushToFirebase('admin_clients', c.id, c);
+  }
+  save(); closeModal('modal-view-client'); renderClients();
+  logActivity('Extended: '+c.name+' → '+fmtDate(c.expiry));
+  toast('✅ Extended to '+fmtDate(c.expiry),'#00C896');
+}
+
+function toggleBlock(clientId) {
+  const c = adminData.clients.find(x=>x.id===clientId); if(!c) return;
+  c.status = c.status==='blocked' ? 'active' : 'blocked';
+  if(c.key) {
+    pushToFirebase('licenses', c.key, {status:c.status});
+    pushToFirebase('admin_clients', c.id, {status:c.status});
+  }
+  save(); renderClients();
+  toast((c.status==='blocked'?'🚫 Blocked: ':'✅ Unblocked: ')+c.name);
+  logActivity((c.status==='blocked'?'Blocked':'Unblocked')+': '+c.name);
+}
+
+// ══ LICENSE KEYS ════════════════════════════════════
+function generateLicenseKey() {
+  const prefix = adminData.settings.prefix || 'BB';
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let key = prefix+'-';
+  for(let seg=0;seg<3;seg++){
+    for(let i=0;i<4;i++) key+=chars[Math.floor(Math.random()*chars.length)];
+    if(seg<2) key+='-';
+  }
+  return key;
+}
+
+function showGenerateKeyModal() {
+  const sel = document.getElementById('gen-client');
+  sel.innerHTML = adminData.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  document.getElementById('modal-gen-key').classList.add('open');
+}
+
+function generateKey() {
+  const clientId = document.getElementById('gen-client').value;
+  const c = adminData.clients.find(x=>x.id===clientId);
+  const plan = document.getElementById('gen-plan').value;
+  const amount = parseFloat(document.getElementById('gen-amount').value)||0;
+  let days = plan==='monthly'?30:plan==='yearly'?365:plan==='lifetime'?0:parseInt(document.getElementById('gen-days').value)||30;
+  
+  const key = generateLicenseKey();
+  const expiry = days===0 ? '2099-12-31' : new Date(Date.now()+days*86400000).toISOString().split('T')[0];
+
+  adminData.keys.push({key, clientId, clientName:c?c.name:'', plan, expiry, createdAt:new Date().toISOString(), status:'active', amount});
+  
+  pushToFirebase('licenses', key, {
+    clientId, clientName:c?c.name:'', plan, expiry, status:'active',
+    createdAt:new Date().toISOString()
+  });
+
+  if(c) {
+    c.key=key; c.expiry=expiry; c.plan=plan;
+    if(amount>0) c.payments=[...(c.payments||[]),{date:new Date().toISOString(),amount,plan}];
+    pushToFirebase('admin_clients', c.id, c);
+  }
+
+  save();
+  document.getElementById('gen-key-result').innerHTML = `
+    <div class="key-display">${key}</div>
+    <div style="text-align:center;margin-bottom:10px;font-size:0.82rem;color:rgba(255,255,255,0.5)">Expiry: ${fmtDate(expiry)}</div>
+    <button class="btn btn-outline btn-full" onclick="copyKey('${key}')">📋 Copy Key</button>
+    ${c?`<button class="btn btn-gold btn-full" style="margin-top:6px" onclick="whatsappKey('${key}','${esc(c.name)}','${fmtDate(expiry)}','${c.phone||''}')">📲 WhatsApp</button>`:''}`;
+  
+  toast('✅ Key generated!','#00C896');
+  logActivity('Key generated for '+(c?c.name:'unknown'));
+}
+
+function renderKeys() {
+  const tbody = document.getElementById('keys-tbody'); if(!tbody) return;
+  const keys = adminData.keys;
+  if(!keys.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.3);padding:20px">No keys yet</td></tr>'; return; }
+  tbody.innerHTML = [...keys].reverse().map(function(k){
+    const daysLeft = k.expiry ? Math.ceil((new Date(k.expiry)-new Date())/86400000) : 0;
+    const badge = k.status==='active' && daysLeft>0 ? '<span class="badge-pill badge-green">Active</span>'
+      : k.status==='blocked' ? '<span class="badge-pill badge-red">Blocked</span>'
+      : '<span class="badge-pill badge-red">Expired</span>';
+    return '<tr>'
+      + '<td style="font-family:monospace;color:#FFD700;font-size:0.82rem">'+esc(k.key)+'</td>'
+      + '<td>'+esc(k.clientName||'—')+'</td>'
+      + '<td style="font-size:0.75rem;color:rgba(255,255,255,0.4)">'+fmtDate(k.createdAt)+'</td>'
+      + '<td style="font-size:0.82rem">'+fmtDate(k.expiry)+'</td>'
+      + '<td>'+badge+'</td>'
+      + '<td><button class="btn btn-sm btn-outline" data-key="'+k.key+'" onclick="copyKey(this.dataset.key)">Copy</button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+// ══ DASHBOARD ══════════════════════════════════════
+function renderDashboard() {
+  const total = adminData.clients.length;
+  const active = adminData.clients.filter(c=>c.status==='active' && c.plan!=='trial' && new Date(c.expiry)>new Date()).length;
+  const trial = adminData.clients.filter(c=>c.plan==='trial').length;
+  const expired = adminData.clients.filter(c=>new Date(c.expiry)<new Date() && c.plan!=='trial').length;
+  const totalRev = adminData.clients.reduce((s,c)=>(c.payments||[]).reduce((ss,p)=>ss+p.amount,0)+s,0);
+
+  const statsEl = document.getElementById('dash-stats');
+  if(statsEl) statsEl.innerHTML = [
+    {val:total, lbl:'Total Clients', color:'#60A5FA'},
+    {val:active, lbl:'Active Paid', color:'#00C896'},
+    {val:trial, lbl:'On Trial', color:'#FFD700'},
+    {val:expired, lbl:'Expired', color:'#FF6B35'},
+    {val:'₹'+totalRev, lbl:'Total Revenue', color:'#A78BFA'},
+  ].map(s=>`<div class="stat-box"><div class="stat-val" style="color:${s.color}">${s.val}</div><div class="stat-lbl">${s.lbl}</div></div>`).join('');
+
+  // Expiring soon
+  const expiring = adminData.clients.filter(c=>{
+    const d = Math.ceil((new Date(c.expiry)-new Date())/86400000);
+    return d>=0 && d<=7 && c.plan!=='trial';
+  });
+  const expEl = document.getElementById('dash-expiring');
+  if(expEl) expEl.innerHTML = expiring.length 
+    ? expiring.map(c=>{
+        const d=Math.ceil((new Date(c.expiry)-new Date())/86400000);
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+          <div><div style="font-weight:700">${esc(c.name)}</div><div style="font-size:0.75rem;color:rgba(255,255,255,0.4)">${esc(c.phone||'')}</div></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="color:#FF6B35;font-weight:700">${d}d left</span>
+            <button class="btn btn-sm btn-gold" onclick="extendClient('${c.id}')">Renew</button>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:12px">No expiring clients 🎉</div>';
+
+  // Activity log
+  const acts = JSON.parse(localStorage.getItem('bb-admin-activity')||'[]');
+  const actEl = document.getElementById('dash-activity');
+  if(actEl) actEl.innerHTML = acts.slice(0,10).map(a=>`
+    <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+      <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);white-space:nowrap">${fmtDate(a.time)}</div>
+      <div style="font-size:0.82rem">${esc(a.msg)}</div>
+    </div>`).join('') || '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:12px">No activity yet</div>';
+}
+
+function logActivity(msg) {
+  const acts = JSON.parse(localStorage.getItem('bb-admin-activity')||'[]');
+  acts.unshift({msg, time:new Date().toISOString()});
+  localStorage.setItem('bb-admin-activity', JSON.stringify(acts.slice(0,50)));
+}
+
+// ══ ANNOUNCEMENTS ══════════════════════════════════
+async function sendAnnouncement() {
+  const msg = document.getElementById('ann-msg').value.trim();
+  if(!msg) { toast('Message daalo!','#FF6B35'); return; }
+  const ann = {
+    id:'ann'+Date.now(),
+    message:msg,
+    type:document.getElementById('ann-type').value,
+    target:document.getElementById('ann-target').value,
+    createdAt:new Date().toISOString()
+  };
+  adminData.announcements.unshift(ann);
+  save();
+  // Push to Firebase
+  await pushToFirebase('announcements', ann.id, ann);
+  document.getElementById('ann-msg').value='';
+  renderAnnouncements();
+  toast('✅ Announcement sent!','#00C896');
+  logActivity('Announcement sent: '+msg.slice(0,30));
+}
+
+function renderAnnouncements() {
+  const el = document.getElementById('ann-list'); if(!el) return;
+  const anns = adminData.announcements;
+  if(!anns.length) { el.innerHTML='<div style="color:rgba(255,255,255,0.3);text-align:center;padding:12px">No announcements yet</div>'; return; }
+  const icons = {info:'ℹ️',warning:'⚠️',success:'✅',urgent:'🔴'};
+  el.innerHTML = anns.map(a=>`
+    <div class="ann-box">
+      <div class="ann-text">${icons[a.type]||'ℹ️'} ${esc(a.message)}</div>
+      <div class="ann-meta">${fmtDate(a.createdAt)} · Target: ${a.target||'all'}</div>
+    </div>`).join('');
+}
+
+// ══ REVENUE ════════════════════════════════════════
+function renderRevenue() {
+  const allPayments = [];
+  adminData.clients.forEach(c=>(c.payments||[]).forEach(p=>allPayments.push({...p, client:c.name})));
+  allPayments.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const total = allPayments.reduce((s,p)=>s+p.amount,0);
+  const thisMonth = allPayments.filter(p=>isThisMonth(p.date)).reduce((s,p)=>s+p.amount,0);
+
+  const statsEl = document.getElementById('rev-stats');
+  if(statsEl) statsEl.innerHTML = [
+    {val:'₹'+total,lbl:'Total Revenue',color:'#00C896'},
+    {val:'₹'+thisMonth,lbl:'This Month',color:'#FFD700'},
+    {val:allPayments.length,lbl:'Total Transactions',color:'#60A5FA'},
+    {val:adminData.clients.filter(c=>c.plan==='lifetime').length,lbl:'Lifetime Clients',color:'#A78BFA'},
+  ].map(s=>`<div class="stat-box"><div class="stat-val" style="color:${s.color}">${s.val}</div><div class="stat-lbl">${s.lbl}</div></div>`).join('');
+
+  const monthEl = document.getElementById('rev-monthly');
+  if(monthEl) {
+    if(!allPayments.length) { monthEl.innerHTML='<div style="color:rgba(255,255,255,0.3);text-align:center;padding:12px">No payments yet</div>'; return; }
+    const table = `<table class="admin-table"><thead><tr><th>Date</th><th>Client</th><th>Plan</th><th>Amount</th></tr></thead><tbody>`
+      + allPayments.slice(0,20).map(function(p){
+      return '<tr><td style="font-size:0.8rem">'+fmtDate(p.date)+'</td><td>'+esc(p.client||'—')+'</td>'
+        +'<td><span class="badge-pill badge-green">'+(p.plan||'—')+'</span></td>'
+        +'<td style="font-weight:700;color:#00C896">₹'+p.amount+'</td></tr>';
+    }).join('')
+      + `</tbody></table>`;
+    monthEl.innerHTML = table;
+  }
+}
+
+// ══ SETTINGS ════════════════════════════════════════
+function loadSettings() {
+  const s = adminData.settings;
+  if(document.getElementById('biz-name')) document.getElementById('biz-name').value=s.bizName||'';
+  if(document.getElementById('biz-wa')) document.getElementById('biz-wa').value=s.bizWa||'';
+  if(document.getElementById('biz-upi')) document.getElementById('biz-upi').value=s.bizUpi||'';
+  if(document.getElementById('key-prefix')) document.getElementById('key-prefix').value=s.prefix||'BB';
+  if(document.getElementById('trial-days')) document.getElementById('trial-days').value=s.trialDays||30;
+}
+
+function saveBizInfo() {
+  adminData.settings.bizName=document.getElementById('biz-name').value.trim();
+  adminData.settings.bizWa=document.getElementById('biz-wa').value.trim();
+  adminData.settings.bizUpi=document.getElementById('biz-upi').value.trim();
+  save(); toast('✅ Saved!','#00C896');
+}
+function saveKeySettings() {
+  adminData.settings.prefix=(document.getElementById('key-prefix').value.trim().toUpperCase()||'BB').slice(0,3);
+  adminData.settings.trialDays=parseInt(document.getElementById('trial-days').value)||30;
+  save(); toast('✅ Saved!','#00C896');
+}
+
+// ══ HELPERS ════════════════════════════════════════
+function isThisMonth(d) {
+  const now=new Date(); const dd=new Date(d);
+  return dd.getMonth()===now.getMonth() && dd.getFullYear()===now.getFullYear();
+}
+function fmtDate(d) {
+  if(!d) return '—';
+  try { return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+  catch(e){ return d; }
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function copyKey(key) {
+  navigator.clipboard.writeText(key).then(()=>toast('📋 Key copied!','#00C896')).catch(()=>{
+    const ta=document.createElement('textarea'); ta.value=key;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast('📋 Key copied!','#00C896');
+  });
+}
+function whatsappKey(key, name, expiry, phone) {
+  const biz=adminData.settings;
+  const msg='*BillBlitz License Key*\n\n'
+    +'Restaurant: '+name+'\n'
+    +'License Key: *'+key+'*\n'
+    +'Valid Till: '+expiry+'\n\n'
+    +'*App download:*\nhttps://bizzsolution.github.io/billblitz\n\n'
+    +'App mein Settings > License Key mein enter karein.\n\n'
+    +'Support: '+(biz.bizWa?'+91'+biz.bizWa:'contact us')
+    +'\n\n_Powered by BillBlitz ⚡_';
+  const ph = phone ? '91'+phone.replace(/[^0-9]/g,'') : '';
+  window.open('https://wa.me/'+(ph||'')+'?text='+encodeURIComponent(msg),'_blank');
+}
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function toast(msg, color) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='block';
+  if(color) t.style.borderColor=color+'44';
+  setTimeout(()=>{t.style.display='none';},3000);
+}
+function showAddClientModal(){ 
+  const d=new Date(); d.setDate(d.getDate()+30);
+  document.getElementById('cl-expiry').value=d.toISOString().split('T')[0];
+  document.getElementById('modal-add-client').classList.add('open');
+}
+
+// Close modal on background click
+document.querySelectorAll('.modal-bg').forEach(m=>{
+  m.addEventListener('click',function(e){ if(e.target===m) m.classList.remove('open'); });
+});
+
+// Enter to login
+document.getElementById('admin-pass').addEventListener('keydown',function(e){
+  if(e.key==='Enter') adminLogin();
+});
+
+load();
+</script>
+</body>
+</html>
