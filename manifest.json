@@ -1,0 +1,27 @@
+{
+  "name": "BillBlitz Restaurant Manager",
+  "short_name": "BillBlitz",
+  "description": "Smart Restaurant Billing and Management",
+  "start_url": "/billblitz/",
+  "scope": "/billblitz/",
+  "display": "standalone",
+  "background_color": "#0F1923",
+  "theme_color": "#FFD700",
+  "orientation": "any",
+  "id": "billblitz-app",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/billblitz/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/billblitz/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
