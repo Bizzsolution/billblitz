@@ -1,0 +1,87 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[build.environment]
+  # ⚠️ IMPORTANT: Per Netlify's own docs, these secrets-scan controls must
+  # ALSO be set as actual Environment Variables in the Netlify Dashboard
+  # (Project configuration → Environment variables) — NOT just here in
+  # netlify.toml — for the scan to reliably respect them. This toml entry
+  # is kept as a documented backup/reference, but the DASHBOARD variable
+  # is what actually takes effect. If a build ever fails on secrets
+  # scanning again, check the Dashboard variables first.
+  #
+  # Netlify's secrets scanner flags these 5 as false positives in this app:
+  #
+  # - GEMINI_API_KEY / GROQ_API_KEY: never hardcoded anywhere — accessed ONLY
+  #   via process.env inside Netlify Functions (scan.mjs), never shipped to
+  #   the client. The scanner's real trigger is almost certainly Firebase's
+  #   own CLIENT-SIDE "apiKey" (in the firebaseConfig object, required in
+  #   every Firebase web app and DESIGNED to be public — Firebase's actual
+  #   security boundary is server-side Firestore Rules, not hiding this
+  #   value). That Firebase key happens to share the same "AIzaSy..." prefix
+  #   pattern Google uses for Gemini keys too, which is what trips the scan.
+  # - ADMIN_SECRET: never hardcoded — only appears as an input-field
+  #   placeholder string in admin.html, never assigned a real value.
+  # - ADMIN_PASSWORD: admin.html's client-side panel-login default was
+  #   deliberately changed to a DIFFERENT value than the server-side env var
+  #   specifically so the two would never collide (see admin.html comments).
+  # - VALID_LICENSES: a list of CUSTOMER-FACING license keys meant to be
+  #   shared with hotels via WhatsApp — not a true secret like a password or
+  #   API key. admin.html's demo/seed license data (e.g. "ATITHI-TRIAL001")
+  #   legitimately shares the same key-format as real configured licenses.
+  #
+  # All 5 have been manually verified (grepped for literal hardcoded
+  # values) — none are genuinely leaked. If the scanner ever flags a NEW,
+  # different env var in the future, treat THAT as a real leak to
+  # investigate rather than adding it here reflexively.
+  SECRETS_SCAN_OMIT_KEYS = "ADMIN_PASSWORD,ADMIN_SECRET,GEMINI_API_KEY,GROQ_API_KEY,VALID_LICENSES"
+
+[[redirects]]
+  from = "/api/scan"
+  to = "/.netlify/functions/scan"
+  status = 200
+
+[[redirects]]
+  from = "/api/manage-keys"
+  to = "/.netlify/functions/manage-keys"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
+
+# ── SECURITY HEADERS ─────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
+    X-XSS-Protection = "1; mode=block"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://api.qrserver.com; connect-src 'self' https://www.gstatic.com https://*.firebaseio.com https://firestore.googleapis.com https://api.groq.com https://generativelanguage.googleapis.com https://*.googleapis.com wss://*.firebaseio.com; frame-ancestors 'none';"
+
+# ── NEVER CACHE sw.js or index.html — critical for PWA updates to actually
+# reach installed devices. Without this, Netlify's CDN (and browsers) can
+# keep serving an OLD sw.js/index.html indefinitely even after a fresh
+# deploy, since there's no signal telling them to re-check — exactly what
+# caused devices to keep showing stale app versions across multiple deploys.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
