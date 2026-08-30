@@ -1,2 +1,0 @@
-# billblitz
-BillBlitz Restaurant Manager
