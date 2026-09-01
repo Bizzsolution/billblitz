@@ -1165,6 +1165,28 @@ tr:nth-child(even) td{background:#FFFFFF;}
       </div>
     </div>
 
+    <!-- Late/OT Rules (customizable per restaurant/hotel) -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">⏰ Late & Overtime Rules</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Apne restaurant/hotel ke hisaab se Late aur OT ke rules set karein — koi bhi standard fix nahi hai, jo chahiye wahi set karein.</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <div class="form-group" style="flex:1"><label class="form-label">Late Kab Se Maane (Time)</label>
+            <input class="form-inp" id="set-late-time" type="time"/></div>
+          <div class="form-group" style="flex:1"><label class="form-label">Late Deduction (% of per-day)</label>
+            <input class="form-inp" id="set-late-pct" type="number" min="0" max="200" placeholder="50"/></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <div class="form-group" style="flex:1"><label class="form-label">OT Kab Se Maane (Time)</label>
+            <input class="form-inp" id="set-ot-time" type="time"/></div>
+          <div class="form-group" style="flex:1"><label class="form-label">OT Bonus (% of per-day)</label>
+            <input class="form-inp" id="set-ot-pct" type="number" min="0" max="300" placeholder="150"/></div>
+        </div>
+        <div style="font-size:0.68rem;color:#9CA3AF;margin-bottom:10px">Example: Agar Late % = 50, toh late din ka aadha per-day rate katega. OT % = 150 matlab OT din ka 1.5x bonus milega.</div>
+        <button class="btn btn-primary btn-full" onclick="saveAttendanceRules()">💾 Rules Save Karein</button>
+      </div>
+    </div>
+
     <!-- Restaurant Info -->
     <div class="card" style="margin-bottom:10px">
       <div class="card-header"><div class="card-title">🍽️ Restaurant Info</div></div>
@@ -2696,6 +2718,7 @@ function savePrinterMode() {
 function renderSettingsPage(){
   renderWeekOffGrid();
   renderLocationStatus();
+  renderAttendanceRulesUI();
   var pmSel = document.getElementById('printer-mode-sel');
   if(pmSel) pmSel.value = db.settings?.printerMode || 'both';
   var op = document.getElementById('set-owner-phone');
@@ -5755,8 +5778,49 @@ var staffAttYear  = new Date().getFullYear();
 var staffSalMonth = new Date().getMonth();
 var staffSalYear  = new Date().getFullYear();
 var WORKING_DAYS  = 26; // Default — recalculated dynamically
-var LATE_THRESHOLD = '09:30';
-var OT_THRESHOLD   = '21:00';
+
+// ── Editable Late/OT Rules (Item: per-restaurant customizable) ──
+// Each restaurant/hotel can set their own late cutoff time, OT cutoff
+// time, and the deduction/bonus percentages — instead of one fixed
+// rule for everyone.
+function getAttendanceRules() {
+  var r = (db.settings && db.settings.attendanceRules) || {};
+  return {
+    lateThreshold:    r.lateThreshold    || '09:30',
+    otThreshold:      r.otThreshold      || '21:00',
+    lateDeductionPct: r.lateDeductionPct !== undefined ? r.lateDeductionPct : 50,
+    otBonusPct:       r.otBonusPct       !== undefined ? r.otBonusPct : 150
+  };
+}
+function getLateThreshold(){ return getAttendanceRules().lateThreshold; }
+function getOTThreshold(){ return getAttendanceRules().otThreshold; }
+
+function saveAttendanceRules(){
+  var lt = document.getElementById('set-late-time').value || '09:30';
+  var ot = document.getElementById('set-ot-time').value || '21:00';
+  var ldp = parseFloat(document.getElementById('set-late-pct').value);
+  var obp = parseFloat(document.getElementById('set-ot-pct').value);
+  if(!db.settings) db.settings = {};
+  db.settings.attendanceRules = {
+    lateThreshold: lt, otThreshold: ot,
+    lateDeductionPct: isNaN(ldp)?50:Math.max(0,ldp),
+    otBonusPct: isNaN(obp)?150:Math.max(0,obp)
+  };
+  save();
+  toast('✅ Late/OT rules saved! Naye rules agle check-in se apply honge.', '#00A878');
+}
+
+function renderAttendanceRulesUI(){
+  var r = getAttendanceRules();
+  var ltEl = document.getElementById('set-late-time');
+  var otEl = document.getElementById('set-ot-time');
+  var ldpEl = document.getElementById('set-late-pct');
+  var obpEl = document.getElementById('set-ot-pct');
+  if(ltEl) ltEl.value = r.lateThreshold;
+  if(otEl) otEl.value = r.otThreshold;
+  if(ldpEl) ldpEl.value = r.lateDeductionPct;
+  if(obpEl) obpEl.value = r.otBonusPct;
+}
 
 // Get owner-defined weekly off days (0=Sun,1=Mon,...,6=Sat)
 function getWeekOffDays() {
@@ -5843,7 +5907,7 @@ function renderStaff() {
       + '<div style="display:flex;align-items:center;gap:12px">'
       + '<div class="staff-av">'+ini+'<div class="duty-dot '+(isIn?'in':'out')+'"></div></div>'
       + '<div class="staff-info" style="flex:1">'
-      + '<div class="staff-name">'+esc(s.name)+(s.biometricCredentialId?' <span style="font-size:0.7rem" title="Biometric verified">🔐</span>':'')+(s.staffPinHash?' <span style="font-size:0.7rem" title="PIN verified">🔢</span>':'')+'</div>'
+      + '<div class="staff-name">'+esc(s.name)+(s.faceDescriptor?' <span style="font-size:0.7rem" title="Face verified">😀</span>':'')+(s.staffPinHash?' <span style="font-size:0.7rem" title="PIN verified">🔢</span>':'')+'</div>'
       + '<div class="staff-role">'+esc(s.role||'Staff')+(s.phone?' · '+esc(s.phone):'')+'</div>'
       + '<div class="staff-rating">'+stars+'</div>'
       + (certs?'<div class="staff-certs" style="margin-top:4px">'+certs+'</div>':'')
@@ -5908,11 +5972,9 @@ function showStaffProfile(id) {
     + (isIn?'<button class="btn btn-red btn-full" data-sid="'+id+'" onclick="checkOutFromProfile(this.dataset.sid)">Check Out</button>':'')
     + '<button class="btn btn-outline btn-full" data-sid="'+id+'" onclick="giveAdvanceModal(this.dataset.sid)">Give Advance</button>'
     + '<button class="btn btn-outline btn-full" data-sid="'+id+'" onclick="editStaffModal(this.dataset.sid)">Edit Profile</button>'
-    + (s.biometricCredentialId
-        ? '<button class="btn btn-outline btn-full" style="border-color:#16A34A;color:#16A34A" data-sid="'+id+'" onclick="removeStaffBiometric(this.dataset.sid)">🔐 Fingerprint Registered — Remove</button>'
-        : (isBiometricSupported()
-            ? '<button class="btn btn-outline btn-full" data-sid="'+id+'" onclick="registerStaffBiometric(this.dataset.sid)">🔐 Register Fingerprint</button>'
-            : ''))
+    + (s.faceDescriptor
+        ? '<button class="btn btn-outline btn-full" style="border-color:#16A34A;color:#16A34A" data-sid="'+id+'" onclick="removeStaffFace(this.dataset.sid)">😀 Face Registered — Remove</button>'
+        : '<button class="btn btn-outline btn-full" data-sid="'+id+'" onclick="registerStaffFace(this.dataset.sid)">😀 Register Face (Shared Device OK)</button>')
     + (s.staffPinHash
         ? '<button class="btn btn-outline btn-full" style="border-color:#16A34A;color:#16A34A" data-sid="'+id+'" onclick="setStaffPinModal(this.dataset.sid)">🔢 PIN Set Hai — Change Karein</button>'
         : '<button class="btn btn-outline btn-full" data-sid="'+id+'" onclick="setStaffPinModal(this.dataset.sid)">🔢 Set Attendance PIN</button>')
@@ -6055,127 +6117,205 @@ function deleteStaff(id) {
 
 // ── CHECK IN / OUT ─────────────────────────────────────────
 
+
 // ╔══════════════════════════════════════════════════════════╗
-// ║       BIOMETRIC ATTENDANCE (WebAuthn - fingerprint/face)   ║
+// ║       FACE RECOGNITION ATTENDANCE — Camera-based,           ║
+// ║       works reliably on SHARED devices (no OS passkey      ║
+// ║       limitation like fingerprint has)                      ║
 // ╚══════════════════════════════════════════════════════════╝
-function isBiometricSupported() {
-  return !!(window.PublicKeyCredential && navigator.credentials);
+var faceModelsLoaded = false;
+var faceCameraStream = null;
+var FACE_MATCH_THRESHOLD = 0.55; // lower = stricter match
+
+function ensureFaceApiLib(cb) {
+  if (window.faceapi) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js';
+  s.onload = cb;
+  s.onerror = function(){ toast('Face recognition library load nahi hui. Internet check karein.', '#FF6B35'); };
+  document.head.appendChild(s);
 }
 
-function randomChallenge() {
-  var arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return arr;
-}
-
-function strToBuffer(str) {
-  var enc = new TextEncoder();
-  return enc.encode(str);
-}
-
-function bufferToBase64(buf) {
-  var bytes = new Uint8Array(buf);
-  var binary = '';
-  for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
-function base64ToBuffer(b64) {
-  var binary = atob(b64);
-  var bytes = new Uint8Array(binary.length);
-  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-async function registerStaffBiometric(staffId) {
-  var s = db.staff.find(function(x){return x.id===staffId;}); if(!s) return;
-  if (!isBiometricSupported()) { toast('Yeh device/browser fingerprint support nahi karta.', '#FF6B35'); return; }
-
-  try {
-    var available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    if (!available) { toast('Is device mein fingerprint/face unlock set up nahi hai.', '#FF6B35'); return; }
-
-    toast('Apni ungli sensor pe rakhein...', '#2563EB');
-
-    // Exclude every OTHER staff member's already-registered credential so
-    // Android/Chrome is forced to create a genuinely NEW, distinct credential
-    // instead of silently reusing an existing one. Skip any stored ID that
-    // fails to decode (e.g. from an older app version) rather than letting
-    // one bad entry break registration for everyone.
-    var excludeList = [];
-    (db.staff || []).forEach(function(st) {
-      if (st.biometricCredentialId && st.id !== staffId) {
-        try {
-          excludeList.push({ type: 'public-key', id: base64ToBuffer(st.biometricCredentialId) });
-        } catch (e) { /* skip malformed old entry */ }
-      }
+function loadFaceModels(cb, onError) {
+  if (faceModelsLoaded) { cb(); return; }
+  ensureFaceApiLib(function() {
+    var MODEL_URL = 'https://cdn.jsdelivr.net/gh/vladmandic/face-api/model/';
+    Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+    ]).then(function(){
+      faceModelsLoaded = true;
+      cb();
+    }).catch(function(e){
+      console.log('Face model load error:', e);
+      if (onError) onError(); else toast('Face models load nahi hue. Internet check karein.', '#FF6B35');
     });
+  });
+}
 
-    var credential = await navigator.credentials.create({
-      publicKey: {
-        challenge: randomChallenge(),
-        rp: { name: 'BillBlitz', id: window.location.hostname },
-        user: { id: strToBuffer(staffId), name: s.name, displayName: s.name },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-        // residentKey left as 'discouraged' (not required) — we always verify
-        // using an explicit allowCredentials list, so a discoverable/resident
-        // key is unnecessary. Requiring one caused real registration failures
-        // on many Android devices with limited/buggy resident-key support.
-        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
-        excludeCredentials: excludeList,
-        timeout: 60000
-      }
-    });
-
-    if (!credential) throw new Error('Registration cancelled');
-
-    s.biometricCredentialId = bufferToBase64(credential.rawId);
-    s.biometricRegisteredAt = new Date().toISOString();
-    save();
-    cloudSave('meta', 'staff', { items: db.staff });
-    toast('✅ Fingerprint register ho gayi ' + s.name + ' ke liye!', '#00A878');
-    if (typeof showStaffProfile === 'function') showStaffProfile(staffId);
-  } catch (e) {
-    if (e.name === 'InvalidStateError') {
-      toast('Yeh fingerprint kisi aur staff ke liye already registered hai! Alag ungli use karein.', '#FF6B35');
-    } else if (e.name === 'NotAllowedError') {
-      toast('Fingerprint scan cancel ho gaya ya timeout hua. Dobara try karein.', '#FF6B35');
-    } else if (e.name === 'NotSupportedError') {
-      toast('Yeh device is tarah ki fingerprint registration support nahi karta.', '#FF6B35');
-    } else if (e.name === 'SecurityError') {
-      toast('Security error — HTTPS pe app kholein (github.io link se).', '#FF6B35');
-    } else {
-      toast('Registration fail hua: ' + (e.message || e.name || 'Unknown error'), '#FF6B35');
-    }
+function stopFaceCamera() {
+  if (faceCameraStream) {
+    faceCameraStream.getTracks().forEach(function(t){ t.stop(); });
+    faceCameraStream = null;
   }
 }
 
-function removeStaffBiometric(staffId) {
+// ── CONSENT SCREEN (required before first-ever registration) ──
+function showFaceConsentModal(staffId) {
   var s = db.staff.find(function(x){return x.id===staffId;}); if(!s) return;
-  if (!confirm('Fingerprint verification hatani hai?')) return;
-  delete s.biometricCredentialId;
-  delete s.biometricRegisteredAt;
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">😀 Face Registration — Consent</div>'
+    + '<div style="background:#EFF6FF;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#1D4ED8;line-height:1.5">'
+    + '<b>' + esc(s.name) + '</b> ki sehmati chahiye:<br><br>'
+    + '• Aapke chehre ka ek "unique signature" (sirf numbers, photo NAHI) secure tarike se save hoga<br>'
+    + '• Yeh sirf attendance check-in/out verify karne ke liye use hoga<br>'
+    + '• Aap kabhi bhi apna face data profile se remove kar sakte hain<br>'
+    + '• Photo kahi save nahi hoti, sirf ek mathematical signature'
+    + '</div>'
+    + '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:16px;cursor:pointer">'
+    + '<input type="checkbox" id="face-consent-check" style="margin-top:3px;width:18px;height:18px;accent-color:#16A34A"/>'
+    + '<span style="font-size:0.85rem;font-weight:600">Main, ' + esc(s.name) + ', apna face register karne ke liye sehmat hoon</span>'
+    + '</label>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="btn btn-outline" style="flex:1" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" style="flex:2" data-sid="' + staffId + '" onclick="onFaceConsentConfirm(this.dataset.sid)">Continue</button>'
+    + '</div>';
+  openModal();
+}
+
+function onFaceConsentConfirm(staffId) {
+  var chk = document.getElementById('face-consent-check');
+  if (!chk || !chk.checked) { toast('Pehle consent checkbox check karein!', '#FF6B35'); return; }
+  openFaceCameraModal(staffId, 'register');
+}
+
+// ── CAMERA MODAL (shared for register + verify) ────────────────
+function openFaceCameraModal(staffId, mode, onDone) {
+  var s = db.staff.find(function(x){return x.id===staffId;}); if(!s) return;
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">' + (mode==='register' ? '😀 Face Register Karein' : '👁️ Face Verify Karein') + ' — ' + esc(s.name) + '</div>'
+    + '<div id="face-cam-status" style="text-align:center;font-size:0.82rem;color:#2563EB;margin-bottom:8px;font-weight:600">Camera aur AI load ho raha hai...</div>'
+    + '<div style="position:relative;width:100%;max-width:280px;margin:0 auto;border-radius:16px;overflow:hidden;background:#000">'
+    + '<video id="face-video" autoplay playsinline muted style="width:100%;display:block;transform:scaleX(-1)"></video>'
+    + '<div id="face-oval-guide" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:65%;height:75%;border:3px dashed rgba(255,255,255,0.5);border-radius:50%;pointer-events:none"></div>'
+    + '</div>'
+    + '<div id="face-cam-actions" style="display:flex;gap:8px;margin-top:14px">'
+    + '<button class="btn btn-outline" style="flex:1" onclick="closeFaceCameraModal()">Cancel</button>'
+    + '<button class="btn btn-primary" style="flex:2" id="face-capture-btn" disabled onclick="captureFaceFrame(\'' + staffId + '\',\'' + mode + '\')">📸 Capture</button>'
+    + '</div>';
+  openModal();
+  window._faceModalOnDone = onDone || null;
+
+  loadFaceModels(function() {
+    var statusEl = document.getElementById('face-cam-status');
+    if (statusEl) statusEl.textContent = 'Camera khul rahi hai...';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (statusEl) statusEl.textContent = 'Yeh device camera support nahi karta.';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }).then(function(stream) {
+      faceCameraStream = stream;
+      var video = document.getElementById('face-video');
+      if (!video) { stream.getTracks().forEach(function(t){t.stop();}); return; }
+      video.srcObject = stream;
+      if (statusEl) statusEl.textContent = 'Apna chehra oval ke andar rakhein';
+      var capBtn = document.getElementById('face-capture-btn');
+      if (capBtn) capBtn.disabled = false;
+    }).catch(function(err) {
+      if (statusEl) statusEl.textContent = 'Camera access nahi mila. Permission allow karein.';
+    });
+  }, function() {
+    var statusEl = document.getElementById('face-cam-status');
+    if (statusEl) statusEl.textContent = '❌ AI model load nahi hua. Internet check karein.';
+  });
+}
+
+function closeFaceCameraModal() {
+  stopFaceCamera();
+  closeModal();
+  var cb = window._faceModalOnDone;
+  window._faceModalOnDone = null;
+  if (typeof cb === 'function') cb(false, null);
+}
+
+async function captureFaceFrame(staffId, mode) {
+  var video = document.getElementById('face-video');
+  var statusEl = document.getElementById('face-cam-status');
+  var capBtn = document.getElementById('face-capture-btn');
+  if (!video) return;
+  if (capBtn) capBtn.disabled = true;
+  if (statusEl) { statusEl.textContent = '🔍 Face detect ho raha hai...'; statusEl.style.color = '#2563EB'; }
+
+  try {
+    var detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks().withFaceDescriptor();
+
+    if (!detection) {
+      if (statusEl) { statusEl.textContent = '❌ Face nahi mila. Roshni theek karein aur dobara try karein.'; statusEl.style.color = '#DC2626'; }
+      if (capBtn) capBtn.disabled = false;
+      return;
+    }
+
+    var descriptorArr = Array.from(detection.descriptor);
+    stopFaceCamera();
+    var cb = window._faceModalOnDone;
+    window._faceModalOnDone = null;
+
+    if (mode === 'register') {
+      var s = db.staff.find(function(x){return x.id===staffId;}); if(!s) return;
+      s.faceDescriptor = descriptorArr;
+      s.faceRegisteredAt = new Date().toISOString();
+      save();
+      cloudSave('meta', 'staff', { items: db.staff });
+      closeModal();
+      toast('✅ Face register ho gaya ' + s.name + ' ke liye!', '#00A878');
+      if (typeof showStaffProfile === 'function') showStaffProfile(staffId);
+    } else {
+      // verify mode — compare against stored descriptor
+      var s2 = db.staff.find(function(x){return x.id===staffId;});
+      var matched = false;
+      if (s2 && s2.faceDescriptor) {
+        var dist = faceapi.euclideanDistance(descriptorArr, s2.faceDescriptor);
+        matched = dist < FACE_MATCH_THRESHOLD;
+      }
+      closeModal();
+      if (typeof cb === 'function') cb(matched, descriptorArr);
+    }
+  } catch (e) {
+    if (statusEl) { statusEl.textContent = 'Error: ' + e.message; statusEl.style.color = '#DC2626'; }
+    if (capBtn) capBtn.disabled = false;
+  }
+}
+
+function registerStaffFace(staffId) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Yeh device/browser camera support nahi karta.', '#FF6B35'); return;
+  }
+  showFaceConsentModal(staffId);
+}
+
+function removeStaffFace(staffId) {
+  var s = db.staff.find(function(x){return x.id===staffId;}); if(!s) return;
+  if (!confirm('Face registration hatani hai?')) return;
+  delete s.faceDescriptor;
+  delete s.faceRegisteredAt;
   save();
   cloudSave('meta', 'staff', { items: db.staff });
-  toast('Biometric verification hata di gayi.', '#FF6B35');
+  toast('Face registration hata di gayi.', '#FF6B35');
   if (typeof showStaffProfile === 'function') showStaffProfile(staffId);
 }
 
-function verifyStaffBiometric(staffId) {
-  var s = db.staff.find(function(x){return x.id===staffId;});
-  if (!s || !s.biometricCredentialId) return Promise.resolve(true); // no biometric set — allow normally
-
-  return navigator.credentials.get({
-    publicKey: {
-      challenge: randomChallenge(),
-      allowCredentials: [{ type: 'public-key', id: base64ToBuffer(s.biometricCredentialId) }],
-      userVerification: 'required',
-      timeout: 60000
-    }
-  }).then(function(assertion) {
-    return !!assertion;
-  }).catch(function() {
-    return false;
+// Returns Promise<boolean> — consistent with verifyStaffPin
+function verifyStaffFace(staffId) {
+  return new Promise(function(resolve) {
+    var s = db.staff.find(function(x){return x.id===staffId;});
+    if (!s || !s.faceDescriptor) { resolve(true); return; }
+    openFaceCameraModal(staffId, 'verify', function(matched) {
+      resolve(matched);
+    });
   });
 }
 
@@ -6183,11 +6323,10 @@ async function staffCheckIn(id) {
   var s = db.staff.find(function(x){return x.id===id;}); if(!s) return;
 
   var verifiedMethod = '';
-  if (s.biometricCredentialId) {
-    toast('👆 Fingerprint verify karein...', '#2563EB');
-    var verified = await verifyStaffBiometric(id);
-    if (!verified) { toast('❌ Fingerprint match nahi hua! Check-in cancel.', '#FF6B35'); return; }
-    verifiedMethod = 'biometric';
+  if (s.faceDescriptor) {
+    var faceOk = await verifyStaffFace(id);
+    if (!faceOk) { toast('❌ Face match nahi hua! Check-in cancel.', '#FF6B35'); return; }
+    verifiedMethod = 'face';
   } else if (s.staffPinHash) {
     var pinOk = await verifyStaffPin(id);
     if (!pinOk) { toast('Check-in cancel — PIN verify nahi hua.', '#FF6B35'); return; }
@@ -6208,7 +6347,7 @@ async function staffCheckIn(id) {
   var today = new Date().toDateString();
   var now   = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
   var att   = s.attendance.find(function(a){return new Date(a.date).toDateString()===today;});
-  var late  = now > LATE_THRESHOLD;
+  var late  = now > getLateThreshold();
   var locData = { checkInDistance: locResult.distance, locationFlag: locationFlag };
   if(att) { att.checkIn = now; att.late = late; att.verifiedBy = verifiedMethod; Object.assign(att, locData); }
   else s.attendance.push(Object.assign({date:new Date().toISOString(), checkIn:now, checkOut:null, late:late, ot:false, verifiedBy: verifiedMethod}, locData));
@@ -6218,10 +6357,9 @@ async function staffCheckIn(id) {
 async function staffCheckOut(id) {
   var s = db.staff.find(function(x){return x.id===id;}); if(!s) return;
 
-  if (s.biometricCredentialId) {
-    toast('👆 Fingerprint verify karein...', '#2563EB');
-    var verified = await verifyStaffBiometric(id);
-    if (!verified) { toast('❌ Fingerprint match nahi hua! Check-out cancel.', '#FF6B35'); return; }
+  if (s.faceDescriptor) {
+    var faceOk = await verifyStaffFace(id);
+    if (!faceOk) { toast('❌ Face match nahi hua! Check-out cancel.', '#FF6B35'); return; }
   } else if (s.staffPinHash) {
     var pinOk = await verifyStaffPin(id);
     if (!pinOk) { toast('Check-out cancel — PIN verify nahi hua.', '#FF6B35'); return; }
@@ -6237,7 +6375,7 @@ async function staffCheckOut(id) {
   var today = new Date().toDateString();
   var now   = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
   var att   = (s.attendance||[]).find(function(a){return new Date(a.date).toDateString()===today;});
-  if(att) { att.checkOut = now; att.ot = (now >= OT_THRESHOLD); }
+  if(att) { att.checkOut = now; att.ot = (now >= getOTThreshold()); }
   save(); renderStaff(); toast(s.name+' checked out'+(att&&att.ot?' (OT!)':''));
 }
 
@@ -6403,6 +6541,7 @@ function renderSalarySheet() {
   var today = new Date();
   var totalPayroll = 0;
 
+  var rules = getAttendanceRules();
   var rows = db.staff.map(function(s){
     var basic  = s.salary||0;
     var perDay = basic / getWorkingDaysInMonth(yr, mo);
@@ -6416,8 +6555,8 @@ function renderSalarySheet() {
     }
     var absent     = Math.max(0, getWorkingDaysInMonth(yr, mo) - present);
     var absentDed  = absent * perDay;
-    var lateDed    = late   * (perDay * 0.5);
-    var otBonus    = ot     * (perDay * 1.5);
+    var lateDed    = late   * (perDay * (rules.lateDeductionPct/100));
+    var otBonus    = ot     * (perDay * (rules.otBonusPct/100));
     var advDed     = (s.advances||[]).filter(function(a){
       var ad=new Date(a.date); return ad.getFullYear()===yr&&ad.getMonth()===mo;
     }).reduce(function(sm,a){return sm+a.amount;},0);
@@ -6842,8 +6981,8 @@ function saveBackdate(staffId) {
       absent:   status==='absent',
       halfDay:  status==='halfday',
       leave:    status==='leave',
-      late:     checkIn > LATE_THRESHOLD,
-      ot:       checkOut >= OT_THRESHOLD,
+      late:     checkIn > getLateThreshold(),
+      ot:       checkOut >= getOTThreshold(),
       note:     note,
       editedBy: currentRole || 'owner',
       editedAt: new Date().toISOString()
@@ -7114,8 +7253,8 @@ function saveQuickAtt(staffId, dateStr) {
       checkOut: status==='present' ? checkOut : null,
       absent:   status==='absent',
       halfDay:  status==='halfday',
-      late:     checkIn > LATE_THRESHOLD,
-      ot:       status==='present' && checkOut >= OT_THRESHOLD,
+      late:     checkIn > getLateThreshold(),
+      ot:       status==='present' && checkOut >= getOTThreshold(),
       note:     note || ('Backdated - '+status),
       editedBy: currentRole || 'owner',
       editedAt: new Date().toISOString()
