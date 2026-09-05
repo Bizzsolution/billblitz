@@ -51,6 +51,13 @@ body{font-family:'Segoe UI',sans-serif;background:linear-gradient(160deg,#EEF2FF
 .stat-val{font-size:1.75rem;font-weight:800;line-height:1;}
 .stat-lbl{font-size:0.75rem;color:#6B7A99;margin-top:4px;font-weight:600;}
 
+.manage-card{background:#fff;border-radius:16px;padding:18px 12px;border:2px solid #EEF2FF;box-shadow:0 4px 14px rgba(37,99,235,0.07);text-align:center;cursor:pointer;transition:all 0.15s;}
+.manage-card:active{transform:scale(0.97);background:#F7F9FF;}
+.manage-card-icon{font-size:1.8rem;margin-bottom:6px;}
+.manage-card-title{font-size:0.88rem;font-weight:800;color:#1A2B3C;}
+.manage-card-sub{font-size:0.68rem;color:#9CA3AF;margin-top:2px;}
+
+
 /* ── CARDS ── */
 .card{background:#fff;border-radius:20px;border:2px solid #EEF2FF;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 16px rgba(37,99,235,0.07);}
 .card-header{padding:14px 16px;background:linear-gradient(135deg,#F7F9FF,#EEF2FF);border-bottom:2px solid #EEF2FF;display:flex;justify-content:space-between;align-items:center;}
@@ -89,7 +96,7 @@ body{font-family:'Segoe UI',sans-serif;background:linear-gradient(160deg,#EEF2FF
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 
 /* ── MODAL ── */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:none;align-items:flex-end;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:none;align-items:flex-end;}
 .overlay.open{display:flex;}
 .modal{background:linear-gradient(180deg,#FFFFFF,#F7F9FF);border-radius:24px 24px 0 0;padding:22px 18px 36px;width:100%;max-height:93vh;overflow-y:auto;}
 .modal-handle{width:36px;height:4px;background:#A5B4FC;border-radius:2px;margin:0 auto 14px;}
@@ -670,20 +677,11 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <button class="sb-item" id="sb-tables" onclick="setPage('tables')"><span class="sb-icon">🪑</span> Tables</button>
     <button class="sb-item" id="sb-rooms" onclick="setPage('rooms')"><span class="sb-icon">🛏️</span> Rooms</button>
     <button class="sb-item" id="sb-kitchen" onclick="setPage('kitchen')" style="position:relative"><span class="sb-icon">🍳</span> Kitchen<span id="sb-kitchen-badge" style="display:none;background:#DC2626;color:#fff;font-size:0.6rem;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:6px"></span></button>
-    <button class="sb-item" id="sb-staff" onclick="setPage('staff')"><span class="sb-icon">👥</span> Staff</button>
-    <button class="sb-item" id="sb-expenses" onclick="setPage('expenses')"><span class="sb-icon">💸</span> Expenses</button>
-    <button class="sb-item" id="sb-menu" onclick="setPage('menu')"><span class="sb-icon">🍜</span> Menu</button>
   </div>
   <div class="sb-section">Operations</div>
   <div class="sb-nav">
-    <button class="sb-item" id="sb-inventory" onclick="setPage('inventory')"><span class="sb-icon">📦</span> Inventory <span class="sb-badge" id="sb-lowstock-badge" style="display:none">!</span></button>
-    <button class="sb-item" id="sb-purchases" onclick="setPage('purchases')"><span class="sb-icon">🛒</span> Purchases</button>
+    <button class="sb-item" id="sb-manage" onclick="setPage('manage')"><span class="sb-icon">🗂️</span> Manage <span class="sb-badge" id="sb-lowstock-badge" style="display:none">!</span></button>
     <button class="sb-item" id="sb-loyalty" onclick="setPage('loyalty')"><span class="sb-icon">⭐</span> Loyalty</button>
-  </div>
-  <div class="sb-section">Analytics</div>
-  <div class="sb-nav">
-    <button class="sb-item" id="sb-reports" onclick="setPage('reports')"><span class="sb-icon">📊</span> Reports</button>
-    <button class="sb-item" id="sb-settings" onclick="setPage('settings')"><span class="sb-icon">⚙️</span> Settings</button>
   </div>
   <div class="sb-footer">
     <div class="sb-user">
@@ -692,6 +690,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
         <div class="sb-user-name" id="sb-role-name">Owner</div>
         <div class="sb-user-role" id="sb-lic-info">Loading...</div>
       </div>
+      <button class="sb-logout" onclick="setPage('settings')" title="Settings" style="margin-right:4px">⚙️</button>
       <button class="sb-logout" onclick="logoutConfirm()" title="Logout">🔒</button>
     </div>
   </div>
@@ -706,6 +705,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="dh-time" id="dh-time"></div>
     <div id="dh-sync" style="font-size:0.72rem;color:rgba(255,255,255,0.4)"></div>
     <span id="dh-role-badge" class="dh-role role-owner">👑 Owner</span>
+    <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="dh-btn" onclick="quickBill()">+ New Bill</button>
   </div>
 </div>
@@ -833,6 +833,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <span id="role-display" class="role-badge role-owner">👑 Owner</span>
     <div class="hdr-time" id="live-time"></div>
     <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
+    <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="logoutConfirm()">🔒</button>
   </div>
 </div>
@@ -955,6 +956,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
 
   <!-- ══════════════ MENU MANAGEMENT ══════════════ -->
   <div class="page" id="page-menu">
+    <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="page-title" style="margin:0">🍜 Menu</div>
       <button class="btn btn-primary btn-sm" onclick="openMenuModal()">+ Add Item</button>
@@ -965,6 +967,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
 
   <!-- ══════════════ INVENTORY ══════════════ -->
   <div class="page" id="page-inventory">
+    <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="page-title" style="margin:0">📦 Inventory</div>
       <button class="btn btn-primary btn-sm" onclick="openInventoryModal()">+ Add Item</button>
@@ -976,6 +979,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
 
   <!-- ══════════════ PURCHASES ══════════════ -->
   <div class="page" id="page-purchases">
+    <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div class="page-title" style="margin:0">🛒 Purchases</div>
       <div style="display:flex;gap:6px">
@@ -1027,8 +1031,50 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div id="kitchen-tickets"></div>
   </div>
 
+  <!-- MANAGE HUB PAGE (grouped: Staff, Expenses, Menu, Inventory, Purchases, Reports) -->
+  <div class="page" id="page-manage">
+    <div class="page-title">🗂️ Manage</div>
+    <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:14px">Back-office management — sab yahan se access karein</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <button class="manage-card" onclick="setPage('staff')">
+        <div class="manage-card-icon">👥</div>
+        <div class="manage-card-title">Staff</div>
+        <div class="manage-card-sub">Attendance, Salary</div>
+      </button>
+      <button class="manage-card" onclick="setPage('expenses')">
+        <div class="manage-card-icon">💸</div>
+        <div class="manage-card-title">Expenses</div>
+        <div class="manage-card-sub">Track spending</div>
+      </button>
+      <button class="manage-card" onclick="setPage('menu')">
+        <div class="manage-card-icon">🍜</div>
+        <div class="manage-card-title">Menu</div>
+        <div class="manage-card-sub">Items, Pricing</div>
+      </button>
+      <button class="manage-card" onclick="setPage('inventory')" style="position:relative">
+        <div class="manage-card-icon">📦</div>
+        <div class="manage-card-title">Stock</div>
+        <div class="manage-card-sub">Inventory levels</div>
+        <span id="manage-lowstock-badge" style="display:none;position:absolute;top:10px;right:10px;background:#DC2626;color:#fff;font-size:0.62rem;font-weight:800;padding:2px 7px;border-radius:12px"></span>
+      </button>
+      <button class="manage-card" onclick="setPage('purchases')">
+        <div class="manage-card-icon">🛒</div>
+        <div class="manage-card-title">Purchases</div>
+        <div class="manage-card-sub">Vendor orders</div>
+      </button>
+      <button class="manage-card" onclick="setPage('reports')">
+        <div class="manage-card-icon">📊</div>
+        <div class="manage-card-title">Reports</div>
+        <div class="manage-card-sub">Sales, GST, P&L</div>
+      </button>
+    </div>
+  </div>
+
   <!-- STAFF PAGE -->
   <div class="page" id="page-staff">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div class="page-title" style="margin:0">Staff</div>
       <div style="display:flex;gap:6px">
@@ -1072,6 +1118,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
 
   <!-- EXPENSES PAGE -->
   <div class="page" id="page-expenses">
+    <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div class="page-title">💸 Expense Tracker</div>
     <div class="stats-grid" id="exp-stats"></div>
     <div class="exp-cat-chips" id="exp-cat-chips"></div>
@@ -1080,6 +1127,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
   </div>
 
   <div class="page" id="page-reports">
+    <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div class="page-title">📊 Reports</div>
 
     <!-- Period selector -->
@@ -1323,14 +1371,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <button class="bnav" id="nav-tables" onclick="setPage('tables')"><span>🪑</span>Tables</button>
   <button class="bnav" id="nav-rooms" onclick="setPage('rooms')"><span>🛏️</span>Rooms</button>
   <button class="bnav" id="nav-kitchen" onclick="setPage('kitchen')" style="position:relative"><span>🍳</span>Kitchen<span id="nav-kitchen-badge" style="display:none;position:absolute;top:2px;right:8px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
-  <button class="bnav" id="nav-staff" onclick="setPage('staff')"><span>👥</span>Staff</button>
-  <button class="bnav" id="nav-expenses" onclick="setPage('expenses')"><span>💸</span>Expenses</button>
-  <button class="bnav" id="nav-menu" onclick="setPage('menu')"><span>🍜</span>Menu</button>
-  <button class="bnav" id="nav-inventory" onclick="setPage('inventory')"><span>📦</span>Stock</button>
-  <button class="bnav" id="nav-purchases" onclick="setPage('purchases')"><span>🛒</span>Purchase</button>
-  <button class="bnav" id="nav-reports" onclick="setPage('reports')"><span>📊</span>Reports</button>
+  <button class="bnav" id="nav-manage" onclick="setPage('manage')" style="position:relative"><span>🗂️</span>Manage<span id="nav-manage-badge" style="display:none;position:absolute;top:2px;right:8px;background:#FF6B35;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px">!</span></button>
   <button class="bnav" id="nav-loyalty" onclick="setPage('loyalty')"><span>⭐</span>Loyalty</button>
-  <button class="bnav" id="nav-settings" onclick="setPage('settings')"><span>⚙️</span>Settings</button>
 </div>
 
 <!-- MODAL -->
@@ -2517,16 +2559,62 @@ function applyFeatureGating() {
 }
 
 function showForgotPinInfo(){
-  var savedKey = (loadLicenseState() && loadLicenseState().key) || '';
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">🔑 PIN Bhool Gaye?</div>'
-    + '<div style="background:#FFF7ED;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.85rem;color:#92400E;line-height:1.6">'
-    + 'PIN security ke liye khud reset nahi ho sakta — apne BillBlitz service provider (jinse app li thi) ko contact karein. Unhe apni License Key batayein, wo Admin Panel se aapka PIN reset kar denge.'
+    + '<div style="background:#EFF6FF;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#1D4ED8;line-height:1.6">'
+    + 'Apni License Key type karke confirm karein — sirf Owner ko yeh pata honi chahiye, isliye yeh ek safe tareeka hai PIN reset karne ka.'
     + '</div>'
-    + (savedKey ? '<div class="form-group"><label class="form-label">Aapki License Key (support ko batayein)</label><div class="form-inp" style="background:#F7F9FF;font-weight:700;letter-spacing:1px;text-align:center">' + esc(savedKey) + '</div></div>' : '')
-    + '<button class="btn btn-primary btn-full" style="margin-top:8px" onclick="closeModal()">Theek Hai</button>';
+    + '<div class="form-group"><label class="form-label">License Key</label>'
+    + '<input class="form-inp" id="forgot-pin-key" placeholder="BB-XXXX-XXXX-XXXX" style="text-align:center;font-weight:700;letter-spacing:1px;text-transform:uppercase"/></div>'
+    + '<div id="forgot-pin-err" style="color:#DC2626;font-size:0.78rem;margin-bottom:10px;display:none">Galat License Key!</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="btn btn-outline" style="flex:1" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" style="flex:2" onclick="verifyForgotPinKey()">Verify Karein</button>'
+    + '</div>';
   openModal();
+}
+
+function verifyForgotPinKey(){
+  var entered = (document.getElementById('forgot-pin-key').value || '').trim().toUpperCase();
+  var saved = loadLicenseState();
+  var actualKey = (saved && saved.key || '').toUpperCase();
+  if (!entered || entered !== actualKey) {
+    var err = document.getElementById('forgot-pin-err');
+    if (err) err.style.display = 'block';
+    return;
+  }
+  showSetNewPinScreen();
+}
+
+function showSetNewPinScreen(){
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🔑 Naya PIN Set Karein</div>'
+    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px">License Key verify ho gayi ✅ — ab naya Owner PIN set karein.</div>'
+    + '<div class="form-group"><label class="form-label">Naya Owner PIN (4-digit)</label>'
+    + '<input class="form-inp" id="new-owner-pin" type="password" maxlength="4" inputmode="numeric" placeholder="4-digit PIN" style="text-align:center;font-size:1.3rem;letter-spacing:6px"/></div>'
+    + '<div class="form-group"><label class="form-label">PIN Confirm Karein</label>'
+    + '<input class="form-inp" id="confirm-owner-pin" type="password" maxlength="4" inputmode="numeric" placeholder="Dobara PIN daalein" style="text-align:center;font-size:1.3rem;letter-spacing:6px"/></div>'
+    + '<div id="new-pin-err" style="color:#DC2626;font-size:0.78rem;margin-bottom:10px;display:none">PIN match nahi hua ya 4-digit nahi hai!</div>'
+    + '<button class="btn btn-primary btn-full" onclick="saveNewOwnerPinFromReset()">✅ PIN Set Karein</button>';
+  openModal();
+}
+
+function saveNewOwnerPinFromReset(){
+  var pin = (document.getElementById('new-owner-pin').value || '').trim();
+  var confirmPin = (document.getElementById('confirm-owner-pin').value || '').trim();
+  if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
+    var err = document.getElementById('new-pin-err');
+    if (err) err.style.display = 'block';
+    return;
+  }
+  if (!db.settings) db.settings = {};
+  if (!db.settings.pins) db.settings.pins = {};
+  db.settings.pins.owner = hashPin(pin);
+  save();
+  closeModal();
+  toast('✅ Naya Owner PIN set ho gaya! Ab isi se login karein.', '#00A878');
 }
 
 function checkPin(){
@@ -2687,7 +2775,29 @@ function ensureJsPDFLib(cb) {
 function generateBillPDFBlob(o) {
   var info = db.settings?.restInfo || {};
   var jsPDF = window.jspdf.jsPDF;
-  var doc = new jsPDF({ unit: 'mm', format: [80, 150 + o.items.length * 6] }); // receipt-style narrow format
+  // fmt() uses ₹ which jsPDF's built-in fonts cannot render (shows as a
+  // broken glyph) — use "Rs." for anything drawn inside the PDF itself.
+  function fmtPDF(n) { return 'Rs.' + (+n||0).toFixed(2); }
+  var itemLineHeight = 4.2;
+
+  // A throwaway doc purely to measure how many lines each item name will
+  // wrap into (splitTextToSize doesn't depend on page height, so this is
+  // safe to do before we know the final page size).
+  var measureDoc = new jsPDF({ unit: 'mm', format: [80, 100] });
+  var wrappedNames = o.items.map(function(it) {
+    return measureDoc.splitTextToSize(it.qty + 'x ' + it.name, 50);
+  });
+  var itemsHeight = wrappedNames.reduce(function(sum, lines){ return sum + lines.length * itemLineHeight + 0.8; }, 0);
+
+  // Now compute the EXACT total page height needed: header + items + summary + footer
+  var headerHeight = 15 + (info.addr ? 4 : 0) + (info.phone ? 4 : 0);
+  var summaryHeight = 9 + (o.tax ? 4 : 0) + (o.discount ? 4 : 0) + 11;
+  var footerHeight = 16;
+  var totalHeight = headerHeight + itemsHeight + summaryHeight + footerHeight;
+
+  var doc = new jsPDF({ unit: 'mm', format: [80, totalHeight] });
+  doc.setFont('helvetica');
+
   var y = 8;
   doc.setFontSize(11); doc.setFont(undefined, 'bold');
   doc.text(info.name || 'My Restaurant', 40, y, { align: 'center' }); y += 5;
@@ -2703,21 +2813,23 @@ function generateBillPDFBlob(o) {
   doc.line(4, y, 76, y); y += 5;
 
   doc.setFont(undefined, 'bold');
-  o.items.forEach(function(it) {
-    doc.text(it.qty + 'x ' + it.name, 4, y, { maxWidth: 50 });
-    doc.text(fmt(it.price * it.qty), 76, y, { align: 'right' });
-    y += 5;
+  o.items.forEach(function(it, i) {
+    var lines = wrappedNames[i];
+    doc.text(lines, 4, y);
+    // Price stays aligned with the FIRST line of a wrapped item name.
+    doc.text(fmtPDF(it.price * it.qty), 76, y, { align: 'right' });
+    y += lines.length * itemLineHeight + 0.8; // advance by however many lines it actually took
   });
   doc.setFont(undefined, 'normal');
   y += 1; doc.line(4, y, 76, y); y += 4;
 
-  doc.text('Subtotal', 4, y); doc.text(fmt(o.subtotal), 76, y, { align: 'right' }); y += 4;
-  if (o.tax) { doc.text('Tax', 4, y); doc.text(fmt(o.tax), 76, y, { align: 'right' }); y += 4; }
-  if (o.discount) { doc.text('Discount', 4, y); doc.text('-' + fmt(o.discount), 76, y, { align: 'right' }); y += 4; }
+  doc.text('Subtotal', 4, y); doc.text(fmtPDF(o.subtotal), 76, y, { align: 'right' }); y += 4;
+  if (o.tax) { doc.text('Tax', 4, y); doc.text(fmtPDF(o.tax), 76, y, { align: 'right' }); y += 4; }
+  if (o.discount) { doc.text('Discount', 4, y); doc.text('-' + fmtPDF(o.discount), 76, y, { align: 'right' }); y += 4; }
   y += 1; doc.setLineWidth(0.4); doc.line(4, y, 76, y); y += 5;
 
   doc.setFontSize(10); doc.setFont(undefined, 'bold');
-  doc.text('TOTAL', 4, y); doc.text(fmt(o.total), 76, y, { align: 'right' }); y += 6;
+  doc.text('TOTAL', 4, y); doc.text(fmtPDF(o.total), 76, y, { align: 'right' }); y += 6;
   doc.setFontSize(7); doc.setFont(undefined, 'normal');
   doc.text('Payment: ' + o.payment.toUpperCase(), 4, y); y += 6;
 
@@ -2977,8 +3089,12 @@ let loyaltyTab='all';
 const PAGE_TITLES = {
   dashboard:'🏠 Dashboard', billing:'🧾 Billing / POS', menu:'🍜 Menu',
   inventory:'📦 Inventory', purchases:'🛒 Purchases', reports:'📊 Reports',
-  loyalty:'⭐ Loyalty', settings:'⚙️ Settings'
+  loyalty:'⭐ Loyalty', settings:'⚙️ Settings', manage:'🗂️ Manage'
 };
+
+// Pages grouped under the single "🗂️ Manage" nav tab — reduces bottom-nav
+// clutter (was causing tabs to overflow/hide on smaller screens).
+const MANAGE_SUBPAGES = ['staff','expenses','menu','inventory','purchases','reports'];
 
 function setPage(p){
   var pgFeat={tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display'};
@@ -2996,20 +3112,28 @@ function setPage(p){
   if(pg) pg.classList.add('active');
   if(nb) nb.classList.add('active');
   if(sb) sb.classList.add('active');
+  // If this page belongs to the grouped "Manage" tab, also highlight that
+  // tab so the person can see where they navigated from.
+  if(MANAGE_SUBPAGES.includes(p)){
+    var nbM=document.getElementById('nav-manage'); if(nbM) nbM.classList.add('active');
+    var sbM=document.getElementById('sb-manage'); if(sbM) sbM.classList.add('active');
+  }
   // Update desktop header title
   const dht=document.getElementById('dh-page-title');
   if(dht) dht.textContent=PAGE_TITLES[p]||p;
   currentPage=p;
   renderPage(p);
-  // Update low stock badge on sidebar — only if Inventory feature is active
+  // Update low stock badge — sidebar Manage tab, bottom-nav Manage tab,
+  // and the Stock card inside the Manage grid — only if Inventory feature is active
   const lsBadge=document.getElementById('sb-lowstock-badge');
-  if(lsBadge){
-    if(!hasFeature('inventory')) { lsBadge.style.display='none'; }
-    else {
-      const ls=db.inventory.filter(i=>i.qty<=i.minQty).length;
-      lsBadge.style.display=ls>0?'':'none'; lsBadge.textContent=ls;
-    }
-  }
+  const lsBadgeNav=document.getElementById('nav-manage-badge');
+  const lsBadgeCard=document.getElementById('manage-lowstock-badge');
+  const ls = hasFeature('inventory') ? db.inventory.filter(i=>i.qty<=i.minQty).length : 0;
+  [lsBadge, lsBadgeNav, lsBadgeCard].forEach(function(el){
+    if(!el) return;
+    el.style.display = ls>0 ? '' : 'none';
+    el.textContent = ls>0 ? ls : '';
+  });
 }
 
 function renderPage(p){
@@ -7866,8 +7990,8 @@ function renderExpenses() {
   const monthTotal = db.expenses.filter(e=>isThisMonth(e.date)).reduce((s,e)=>s+e.amount,0);
   const statsEl=document.getElementById('exp-stats');
   if(statsEl) statsEl.innerHTML=
-    '<div class="stat-card"><div class="stat-icon">📅</div><div class="stat-val" style="color:#DC2626">'+fmt(todayTotal)+'</div><div class="stat-lbl">Today</div></div>'+
-    '<div class="stat-card"><div class="stat-icon">📆</div><div class="stat-val" style="color:#D97706">'+fmt(monthTotal)+'</div><div class="stat-lbl">This Month</div></div>'+
+    '<div class="stat-card"><div class="stat-icon">💰</div><div class="stat-val" style="color:#DC2626">'+fmt(todayTotal)+'</div><div class="stat-lbl">Today</div></div>'+
+    '<div class="stat-card"><div class="stat-icon">📊</div><div class="stat-val" style="color:#D97706">'+fmt(monthTotal)+'</div><div class="stat-lbl">This Month</div></div>'+
     '<div class="stat-card"><div class="stat-icon">🧾</div><div class="stat-val">'+db.expenses.length+'</div><div class="stat-lbl">Total</div></div>';
   const chipsEl=document.getElementById('exp-cat-chips');
   if(chipsEl) chipsEl.innerHTML=['All',...EXP_CATS].map(c=>'<span class="ecc '+(activeExpCat===c?'active':'')+'" onclick="activeExpCat=\''+c+'\';renderExpenses()">'+c+'</span>').join('');
