@@ -513,7 +513,13 @@ tr:nth-child(even) td{background:#FFFFFF;}
     background: white !important; padding: 0 !important; }
   #print-overlay * { color: black !important; }
   .no-print { display: none !important; }
-  @page { size: 80mm auto; margin: 3mm; }
+  /* Deliberately NOT forcing `size: 80mm` here. Mobile/Android print
+     pipelines frequently ignore or mis-scale a custom page size, which was
+     scaling the receipt up and clipping its right edge. Letting the page be
+     `auto` (A4/Letter/roll — whatever the driver picks) and instead pinning
+     the receipt itself to a narrow fixed width guarantees it always fits,
+     on both a thermal roll and a normal sheet. */
+  @page { size: auto; margin: 4mm; }
 }
 #print-overlay {
   display: none;
@@ -529,14 +535,16 @@ tr:nth-child(even) td{background:#FFFFFF;}
     overflow: visible !important;
     height: auto !important;
   }
-  /* CRITICAL: the on-screen 320px (~84.7mm) width overflows an 80mm page
-     that only has ~74mm printable area after margins — that overflow was
-     silently cutting off the right-hand column (prices/totals) on every
-     printed bill. Constrain to the actual printable width when printing. */
+  /* Pin the receipt to a fixed narrow width that fits inside ANY paper size
+     (thermal roll or A4) — the earlier 320px on-screen width was wider than
+     a thermal page's printable area, which is what clipped the right-hand
+     price column. `max-width:100%` keeps it safe on very narrow rolls too. */
   .print-bill-wrap {
+    width: 70mm !important;
     max-width: 100% !important;
-    width: 100% !important;
+    margin: 0 auto !important;
     font-size: 11px !important;
+    box-sizing: border-box !important;
   }
   .print-bill-wrap td { font-size: 10.5px !important; word-break: break-word; }
   .print-bill-wrap h2 { font-size: 13px !important; }
@@ -2819,12 +2827,16 @@ function generateBillPDFBlob(o) {
   // safe to do before we know the final page size).
   var measureDoc = new jsPDF({ unit: 'mm', format: [80, 100] });
   var wrappedNames = o.items.map(function(it) {
-    return measureDoc.splitTextToSize(it.qty + 'x ' + it.name, 50);
+    return measureDoc.splitTextToSize(it.qty + 'x ' + it.name, 46);
   });
   var itemsHeight = wrappedNames.reduce(function(sum, lines){ return sum + lines.length * itemLineHeight + 0.8; }, 0);
 
   // Now compute the EXACT total page height needed: header + items + summary + footer
-  var headerHeight = 15 + (info.addr ? 4 : 0) + (info.phone ? 4 : 0);
+  // Header must account for names/addresses that wrap to multiple lines,
+  // otherwise the footer can spill past the bottom of the page.
+  var nameLineCount = measureDoc.splitTextToSize(info.name || 'My Restaurant', 70).length;
+  var addrLineCount = info.addr ? measureDoc.splitTextToSize(info.addr, 70).length : 0;
+  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + 15;
   var summaryHeight = 9 + (o.tax ? 4 : 0) + (o.discount ? 4 : 0) + 11;
   var footerHeight = 16;
   var totalHeight = headerHeight + itemsHeight + summaryHeight + footerHeight;
@@ -2834,9 +2846,15 @@ function generateBillPDFBlob(o) {
 
   var y = 8;
   doc.setFontSize(11); doc.setFont(undefined, 'bold');
-  doc.text(info.name || 'My Restaurant', 40, y, { align: 'center' }); y += 5;
+  // Wrap long restaurant names/addresses — an unwrapped centered string
+  // wider than the page silently bleeds off BOTH edges.
+  var nameLines = doc.splitTextToSize(info.name || 'My Restaurant', 70);
+  doc.text(nameLines, 40, y, { align: 'center' }); y += nameLines.length * 5;
   doc.setFontSize(7); doc.setFont(undefined, 'normal');
-  if (info.addr) { doc.text(info.addr, 40, y, { align: 'center' }); y += 4; }
+  if (info.addr) {
+    var addrLines = doc.splitTextToSize(info.addr, 70);
+    doc.text(addrLines, 40, y, { align: 'center' }); y += addrLines.length * 4;
+  }
   if (info.phone) { doc.text('Ph: ' + info.phone, 40, y, { align: 'center' }); y += 4; }
   y += 2;
   doc.setLineWidth(0.2); doc.line(4, y, 76, y); y += 4;

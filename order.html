@@ -375,6 +375,11 @@ async function placeOrder() {
     cart = {};
     updateCartBar();
     closeCart();
+    // Reset the button BEFORE showing confirmation. Previously it was left
+    // disabled with the text "Sending..." forever on success (only the catch
+    // block reset it), so the SECOND order could never be placed — the button
+    // stayed stuck showing "Sending...".
+    btn.disabled = false; btn.textContent = 'Place Order';
     showConfirmation(orderId);
   } catch(e) {
     alert('Order bhejne mein error: ' + e.message);
@@ -382,13 +387,19 @@ async function placeOrder() {
   }
 }
 
+var statusUnsub = null;
+
 function showConfirmation(orderId) {
   document.getElementById('confirm-screen').classList.add('show');
   document.getElementById('confirm-sub').textContent =
     (tableId ? (locationType==='room' ? tableName + ' room service ke liye ' : tableName + ' ke liye ') : '') + 'Aapka order restaurant ko bhej diya gaya hai. Staff jald hi confirm karega.';
 
+  // Detach any listener from a previous order — without this every new order
+  // stacked another live listener on the page.
+  if (statusUnsub) { try { statusUnsub(); } catch(e){} statusUnsub = null; }
+
   // Listen for status changes
-  firestoreDb.collection('restaurants').doc(restaurantId)
+  statusUnsub = firestoreDb.collection('restaurants').doc(restaurantId)
     .collection('qrOrders').doc(orderId)
     .onSnapshot(function(doc){
       if(!doc.exists) return;
@@ -406,8 +417,15 @@ function showConfirmation(orderId) {
 
 function startNewOrder() {
   document.getElementById('confirm-screen').classList.remove('show');
+  // Stop listening to the completed order's status.
+  if (statusUnsub) { try { statusUnsub(); } catch(e){} statusUnsub = null; }
+  currentOrderId = null;
   cart = {};
   updateCartBar();
+  // Belt-and-braces: guarantee the button is usable for the next order even
+  // if it was left in a stale state by any earlier path.
+  var btn = document.getElementById('place-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Place Order'; }
   renderMenu();
 }
 
