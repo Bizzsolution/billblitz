@@ -669,6 +669,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <button class="sb-item" id="sb-billing" onclick="setPage('billing')"><span class="sb-icon">🧾</span> Billing / POS</button>
     <button class="sb-item" id="sb-tables" onclick="setPage('tables')"><span class="sb-icon">🪑</span> Tables</button>
     <button class="sb-item" id="sb-rooms" onclick="setPage('rooms')"><span class="sb-icon">🛏️</span> Rooms</button>
+    <button class="sb-item" id="sb-kitchen" onclick="setPage('kitchen')" style="position:relative"><span class="sb-icon">🍳</span> Kitchen<span id="sb-kitchen-badge" style="display:none;background:#DC2626;color:#fff;font-size:0.6rem;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:6px"></span></button>
     <button class="sb-item" id="sb-staff" onclick="setPage('staff')"><span class="sb-icon">👥</span> Staff</button>
     <button class="sb-item" id="sb-expenses" onclick="setPage('expenses')"><span class="sb-icon">💸</span> Expenses</button>
     <button class="sb-item" id="sb-menu" onclick="setPage('menu')"><span class="sb-icon">🍜</span> Menu</button>
@@ -819,6 +820,9 @@ tr:nth-child(even) td{background:#FFFFFF;}
     </div>
     <div class="login-error" id="login-error"></div>
     <div style="text-align:center;margin-top:10px;font-size:0.68rem;color:#6B7A99">Default PIN — Owner: <b>1234</b> · Cashier: <b>0000</b></div>
+    <div style="text-align:center;margin-top:8px">
+      <a href="#" onclick="showForgotPinInfo();return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:underline">PIN Bhool Gaye?</a>
+    </div>
   </div>
 </div>
 
@@ -1014,6 +1018,13 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="table-stats" id="room-stats"></div>
     <div class="tables-grid" id="rooms-grid"></div>
     <button class="btn btn-outline btn-full" onclick="showAddRoomModal()" style="margin-top:4px">➕ Add New Room</button>
+  </div>
+
+  <!-- KITCHEN DISPLAY PAGE -->
+  <div class="page" id="page-kitchen">
+    <div class="page-title">🍳 Kitchen Orders</div>
+    <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Jaise hi koi KOT bheja jaata hai, yahan turant dikhega — Table/Room ke naam ke saath.</div>
+    <div id="kitchen-tickets"></div>
   </div>
 
   <!-- STAFF PAGE -->
@@ -1311,6 +1322,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <button class="bnav" id="nav-billing" onclick="setPage('billing')"><span>🧾</span>Billing</button>
   <button class="bnav" id="nav-tables" onclick="setPage('tables')"><span>🪑</span>Tables</button>
   <button class="bnav" id="nav-rooms" onclick="setPage('rooms')"><span>🛏️</span>Rooms</button>
+  <button class="bnav" id="nav-kitchen" onclick="setPage('kitchen')" style="position:relative"><span>🍳</span>Kitchen<span id="nav-kitchen-badge" style="display:none;position:absolute;top:2px;right:8px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
   <button class="bnav" id="nav-staff" onclick="setPage('staff')"><span>👥</span>Staff</button>
   <button class="bnav" id="nav-expenses" onclick="setPage('expenses')"><span>💸</span>Expenses</button>
   <button class="bnav" id="nav-menu" onclick="setPage('menu')"><span>🍜</span>Menu</button>
@@ -1674,6 +1686,14 @@ function listenToAnnouncements() {
       const seenKey = 'bb-ann-' + doc.id;
       if(localStorage.getItem(seenKey)) return;
 
+      // Mark as seen IMMEDIATELY when shown — not only when a specific
+      // close/OK button is tapped. Previously, dismissing via tapping
+      // outside the modal (or any path other than the exact button click)
+      // never set this flag, so the SAME announcement kept reappearing on
+      // every single app open. Marking it seen right away means it only
+      // ever shows once per device, no matter how it gets dismissed.
+      localStorage.setItem(seenKey, '1');
+
       // Check target — show only if for all or trial/active match
       const target = data.target || 'all';
       const myStatus = licenseState.status;
@@ -1771,19 +1791,38 @@ function scheduleSharedDataPush() {
   _cloudPushDebounce = setTimeout(function(){ pushSharedDataToCloud(); }, 1200);
 }
 
+var _lastPushedSnapshot = {}; // per-collection "what we last successfully pushed" — used to avoid re-pushing unchanged (possibly stale) local data and overwriting a newer update from another device
+
 async function pushSharedDataToCloud() {
   if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
   if (!hasHydratedFromCloud) return; // don't push until we've pulled real cloud data first — avoids wiping it with empty local state
   try {
     var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
-    await Promise.all([
-      restRef.collection('meta').doc('tables').set({ items: db.tables||[], _updatedAt: new Date().toISOString() }, { merge: true }),
-      restRef.collection('meta').doc('rooms').set({ items: db.rooms||[], _updatedAt: new Date().toISOString() }, { merge: true }),
-      restRef.collection('meta').doc('expenses').set({ items: db.expenses||[], _updatedAt: new Date().toISOString() }, { merge: true }),
-      restRef.collection('meta').doc('purchases').set({ items: db.purchases||[], _updatedAt: new Date().toISOString() }, { merge: true }),
-      restRef.collection('meta').doc('inventory').set({ items: db.inventory||[], _updatedAt: new Date().toISOString() }, { merge: true }),
-      restRef.collection('meta').doc('staff').set({ items: db.staff||[], _updatedAt: new Date().toISOString() }, { merge: true }),
-    ]);
+    var collections = {
+      tables: db.tables||[], rooms: db.rooms||[], expenses: db.expenses||[],
+      purchases: db.purchases||[], inventory: db.inventory||[], staff: db.staff||[]
+    };
+    var pushPromises = [];
+    Object.keys(collections).forEach(function(key) {
+      var json = JSON.stringify(collections[key]);
+      // Skip collections that haven't actually changed locally since our last
+      // push — this is what prevents a device doing unrelated activity from
+      // blindly re-pushing its own STALE copy of, say, staff data and
+      // silently overwriting a fresh change made moments ago on another
+      // device (e.g. an Owner setting a staff PIN elsewhere).
+      if (_lastPushedSnapshot[key] === json) return;
+      _lastPushedSnapshot[key] = json;
+      pushPromises.push(restRef.collection('meta').doc(key).set({ items: collections[key], _updatedAt: new Date().toISOString() }, { merge: true }));
+    });
+    // Settings (PINs, printer mode, restaurant location, attendance rules,
+    // etc.) is a single object, not an array — synced the same way but
+    // stored directly rather than wrapped in {items:[...]}.
+    var settingsJson = JSON.stringify(db.settings||{});
+    if (_lastPushedSnapshot.settings !== settingsJson) {
+      _lastPushedSnapshot.settings = settingsJson;
+      pushPromises.push(restRef.collection('meta').doc('settings').set({ data: db.settings||{}, _updatedAt: new Date().toISOString() }, { merge: true }));
+    }
+    if (pushPromises.length) await Promise.all(pushPromises);
   } catch(e) { /* will retry on next local change */ }
 }
 
@@ -1795,6 +1834,10 @@ function listenToSharedMeta(key, applyFn) {
     if (!doc.exists) return;
     var data = doc.data();
     if (!data.items) return;
+    // Keep our "last pushed" baseline in sync with what we just pulled, so
+    // an unchanged local copy is never mistaken for something that needs
+    // re-pushing (which would otherwise stomp on this very update).
+    _lastPushedSnapshot[key] = JSON.stringify(data.items);
     applyFn(data.items);
   }, function(err) { console.log('Sync listener error (' + key + '):', err); });
   cloudListeners.push(unsub);
@@ -1862,6 +1905,25 @@ function listenToStaffSync() {
     persistLocalOnly();
     refreshIfActive('staff', renderStaff);
   });
+}
+
+// Settings syncs as a single object (not an array), so it uses its own
+// listener rather than the generic listenToSharedMeta helper.
+function listenToSettingsSync() {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var ref = firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('settings');
+  var unsub = ref.onSnapshot(function(doc) {
+    if (!doc.exists) return;
+    var docData = doc.data();
+    if (!docData || !docData.data) return;
+    var json = JSON.stringify(docData.data);
+    _lastPushedSnapshot.settings = json;
+    if (json === JSON.stringify(db.settings||{})) return;
+    db.settings = docData.data;
+    persistLocalOnly();
+    refreshIfActive('settings', renderSettingsPage);
+  }, function(err) { console.log('Sync listener error (settings):', err); });
+  cloudListeners.push(unsub);
 }
 
 // ── Orders: multi-document collection — real-time via docChanges ──
@@ -1945,10 +2007,23 @@ async function hydrateAllFromCloud() {
             else if (key === 'inventory') db.inventory = data.items;
             else if (key === 'staff') db.staff = data.items;
             else if (key === 'menu') db.menu = data.items;
+            if (key !== 'menu') _lastPushedSnapshot[key] = JSON.stringify(data.items);
           }
         }
         await new Promise(function(r){ setTimeout(r, 60); });
       }
+
+      // Settings (PINs, printer mode, location, attendance rules) — single
+      // object, not an array, so handled separately from metaKeys above.
+      var settingsDoc = await restRef.collection('meta').doc('settings').get();
+      if (settingsDoc && settingsDoc.exists) {
+        var settingsData = settingsDoc.data();
+        if (settingsData && settingsData.data) {
+          db.settings = Object.assign({}, db.settings||{}, settingsData.data);
+          _lastPushedSnapshot.settings = JSON.stringify(settingsData.data);
+        }
+      }
+      await new Promise(function(r){ setTimeout(r, 60); });
 
       var ordersSnap = await restRef.collection('orders').orderBy('date','desc').limit(100).get();
       if (!ordersSnap.empty) db.orders = ordersSnap.docs.map(function(d){ return d.data(); });
@@ -1994,6 +2069,8 @@ function startAllRealtimeSync() {
   listenToStaffSync();
   listenToOrdersSync();
   listenToCustomersSync();
+  listenToSettingsSync();
+  listenToKitchenOrdersSync();
 }
 
 async function pushAllDataToCloud() {
@@ -2388,6 +2465,7 @@ function applyFeatureGating() {
   var navMap = {
     'tables':    ['nav-tables',    'sb-tables'],
     'room_service': ['nav-rooms',  'sb-rooms'],
+    'kitchen_display': ['nav-kitchen', 'sb-kitchen'],
     'staff':     ['nav-staff',     'sb-staff'],
     'expenses':  ['nav-expenses',  'sb-expenses'],
     'inventory': ['nav-inventory', 'sb-inventory'],
@@ -2430,12 +2508,25 @@ function applyFeatureGating() {
   var currentPage = document.querySelector('.page.active');
   if(currentPage) {
     var pageId = currentPage.id.replace('page-','');
-    var pageMap = {tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service'};
+    var pageMap = {tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display'};
     if(pageMap[pageId] && !hasFeature(pageMap[pageId])) {
       setPage('dashboard');
       toast('Yeh feature ab available nahi. Admin se contact karein.','#FF6B35');
     }
   }
+}
+
+function showForgotPinInfo(){
+  var savedKey = (loadLicenseState() && loadLicenseState().key) || '';
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🔑 PIN Bhool Gaye?</div>'
+    + '<div style="background:#FFF7ED;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.85rem;color:#92400E;line-height:1.6">'
+    + 'PIN security ke liye khud reset nahi ho sakta — apne BillBlitz service provider (jinse app li thi) ko contact karein. Unhe apni License Key batayein, wo Admin Panel se aapka PIN reset kar denge.'
+    + '</div>'
+    + (savedKey ? '<div class="form-group"><label class="form-label">Aapki License Key (support ko batayein)</label><div class="form-inp" style="background:#F7F9FF;font-weight:700;letter-spacing:1px;text-align:center">' + esc(savedKey) + '</div></div>' : '')
+    + '<button class="btn btn-primary btn-full" style="margin-top:8px" onclick="closeModal()">Theek Hai</button>';
+  openModal();
 }
 
 function checkPin(){
@@ -2582,6 +2673,91 @@ function doInstallPWA() {
 // ╔══════════════════════════════════════════════════════╗
 // ║                 WHATSAPP BILL SEND                   ║
 // ╚══════════════════════════════════════════════════════╝
+
+// ── jsPDF loader (real PDF generation, not just print-to-PDF) ──
+function ensureJsPDFLib(cb) {
+  if (window.jspdf && window.jspdf.jsPDF) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  s.onload = cb;
+  s.onerror = function(){ toast('PDF library load nahi hui. Internet check karein.', '#FF6B35'); };
+  document.head.appendChild(s);
+}
+
+function generateBillPDFBlob(o) {
+  var info = db.settings?.restInfo || {};
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ unit: 'mm', format: [80, 150 + o.items.length * 6] }); // receipt-style narrow format
+  var y = 8;
+  doc.setFontSize(11); doc.setFont(undefined, 'bold');
+  doc.text(info.name || 'My Restaurant', 40, y, { align: 'center' }); y += 5;
+  doc.setFontSize(7); doc.setFont(undefined, 'normal');
+  if (info.addr) { doc.text(info.addr, 40, y, { align: 'center' }); y += 4; }
+  if (info.phone) { doc.text('Ph: ' + info.phone, 40, y, { align: 'center' }); y += 4; }
+  y += 2;
+  doc.setLineWidth(0.2); doc.line(4, y, 76, y); y += 4;
+  doc.setFontSize(8);
+  doc.text('Order #' + o.id.slice(-6).toUpperCase(), 4, y);
+  doc.text(fmtDate(o.date), 76, y, { align: 'right' }); y += 4;
+  doc.text(fmtTime(o.date), 76, y, { align: 'right' }); y += 4;
+  doc.line(4, y, 76, y); y += 5;
+
+  doc.setFont(undefined, 'bold');
+  o.items.forEach(function(it) {
+    doc.text(it.qty + 'x ' + it.name, 4, y, { maxWidth: 50 });
+    doc.text(fmt(it.price * it.qty), 76, y, { align: 'right' });
+    y += 5;
+  });
+  doc.setFont(undefined, 'normal');
+  y += 1; doc.line(4, y, 76, y); y += 4;
+
+  doc.text('Subtotal', 4, y); doc.text(fmt(o.subtotal), 76, y, { align: 'right' }); y += 4;
+  if (o.tax) { doc.text('Tax', 4, y); doc.text(fmt(o.tax), 76, y, { align: 'right' }); y += 4; }
+  if (o.discount) { doc.text('Discount', 4, y); doc.text('-' + fmt(o.discount), 76, y, { align: 'right' }); y += 4; }
+  y += 1; doc.setLineWidth(0.4); doc.line(4, y, 76, y); y += 5;
+
+  doc.setFontSize(10); doc.setFont(undefined, 'bold');
+  doc.text('TOTAL', 4, y); doc.text(fmt(o.total), 76, y, { align: 'right' }); y += 6;
+  doc.setFontSize(7); doc.setFont(undefined, 'normal');
+  doc.text('Payment: ' + o.payment.toUpperCase(), 4, y); y += 6;
+
+  doc.setFontSize(7);
+  doc.text(info.msg || 'Thank you for dining with us!', 40, y, { align: 'center' }); y += 4;
+  doc.text('Powered by BillBlitz', 40, y, { align: 'center' });
+
+  return doc.output('blob');
+}
+
+async function whatsappBillPDF(orderId) {
+  const o = db.orders.find(x=>x.id===orderId); if(!o) return;
+  toast('📄 PDF ban raha hai...', '#2563EB');
+  ensureJsPDFLib(async function() {
+    try {
+      var blob = generateBillPDFBlob(o);
+      var file = new File([blob], 'Bill-' + o.id.slice(-6).toUpperCase() + '.pdf', { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Bill Receipt',
+          text: 'Aapka bill — Order #' + o.id.slice(-6).toUpperCase()
+        });
+      } else {
+        // Fallback for browsers without file-sharing support — download PDF
+        // and open WhatsApp text separately so the person can attach manually.
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = file.name; a.click();
+        URL.revokeObjectURL(url);
+        toast('📄 PDF download ho gayi! WhatsApp mein manually attach kar dein.', '#FFD700');
+        setTimeout(function(){ whatsappBill(orderId); }, 1500);
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') toast('PDF share mein error: ' + e.message, '#FF6B35');
+    }
+  });
+}
+
 function whatsappBill(orderId){
   const o = db.orders.find(x=>x.id===orderId); if(!o) return;
   const info = db.settings?.restInfo || {};
@@ -2590,7 +2766,7 @@ function whatsappBill(orderId){
   msg += `📋 *Receipt — Order #${o.id.slice(-4).toUpperCase()}*\n`;
   msg += `📅 ${fmtDate(o.date)} ${fmtTime(o.date)}\n\n`;
   msg += `*Items:*\n`;
-  o.items.forEach(i=>{ msg += `• ${i.qty}× ${i.name} — $₹${(i.price*i.qty).toFixed(2)}\n`; });
+  o.items.forEach(i=>{ msg += `• ${i.qty}× ${i.name} — ₹${(i.price*i.qty).toFixed(2)}\n`; });
   msg += `\n`;
   if(o.tax) msg += `Tax: ₹${o.tax.toFixed(2)}\n`;
   if(o.discount) msg += `Discount: -₹${o.discount.toFixed(2)}\n`;
@@ -2805,7 +2981,7 @@ const PAGE_TITLES = {
 };
 
 function setPage(p){
-  var pgFeat={tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service'};
+  var pgFeat={tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display'};
   if(pgFeat[p]&&!hasFeature(pgFeat[p])){ toast('Yeh feature aapke plan mein nahi hai!','#FF6B35'); return; }
   if(currentRole==='cashier'){
     const access=getCashierAccess();
@@ -2841,6 +3017,7 @@ function renderPage(p){
   else if(p==='billing') renderBilling();
   else if(p==='tables') renderTables();
   else if(p==='rooms') renderRooms();
+  else if(p==='kitchen') renderKitchenPage();
   else if(p==='staff') renderStaff();
   else if(p==='expenses') renderExpenses();
   else if(p==='menu') renderMenuPage();
@@ -3126,6 +3303,112 @@ function renderOrderItems(){
 // ╔══════════════════════════════════════════════════════════╗
 // ║       MULTI-ROUND KOT — Send new items to kitchen         ║
 // ╚══════════════════════════════════════════════════════════╝
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║       KITCHEN DISPLAY SYSTEM — live order queue for          ║
+// ║       kitchen staff, table/room-wise, real-time synced      ║
+// ╚══════════════════════════════════════════════════════════╝
+function createKitchenTicket(items, roundNum) {
+  if (!hasFeature('kitchen_display')) return; // premium feature — KOT printing itself still always works
+  var ticket = {
+    id: uid(),
+    tableId: order.tableId || null,
+    tableName: order.tableName || 'Takeaway',
+    locationType: order.locationType || 'table',
+    round: roundNum,
+    items: items,
+    status: 'pending', // pending -> preparing -> ready -> served
+    createdAt: new Date().toISOString(),
+    readyAt: null
+  };
+  if (!db.kitchenOrders) db.kitchenOrders = [];
+  db.kitchenOrders.push(ticket);
+  save();
+  if (isFirebaseReady && firestoreDb && restaurantId) {
+    firestoreDb.collection('restaurants').doc(restaurantId).collection('kitchenOrders').doc(ticket.id)
+      .set(ticket).catch(function(){});
+  }
+}
+
+function listenToKitchenOrdersSync() {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var ref = firestoreDb.collection('restaurants').doc(restaurantId).collection('kitchenOrders')
+    .where('status', 'in', ['pending', 'preparing', 'ready']);
+  var unsub = ref.onSnapshot(function(snap) {
+    if (!db.kitchenOrders) db.kitchenOrders = [];
+    var changed = false;
+    snap.docChanges().forEach(function(change) {
+      var data = change.doc.data();
+      var idx = db.kitchenOrders.findIndex(function(t){ return t.id === change.doc.id; });
+      if (change.type === 'removed') {
+        if (idx !== -1) { db.kitchenOrders.splice(idx, 1); changed = true; }
+      } else {
+        if (idx !== -1) { db.kitchenOrders[idx] = data; changed = true; }
+        else { db.kitchenOrders.push(data); changed = true; }
+      }
+    });
+    if (!changed) return;
+    persistLocalOnly();
+    refreshIfActive('kitchen', renderKitchenPage);
+    renderKitchenBadge();
+  }, function(err) { console.log('Kitchen sync error:', err); });
+  cloudListeners.push(unsub);
+}
+
+function renderKitchenBadge() {
+  var badge = document.getElementById('nav-kitchen-badge');
+  if (!badge) return;
+  var pending = (db.kitchenOrders || []).filter(function(t){ return t.status !== 'served'; }).length;
+  badge.textContent = pending > 0 ? pending : '';
+  badge.style.display = pending > 0 ? '' : 'none';
+}
+
+function renderKitchenPage() {
+  var el = document.getElementById('kitchen-tickets');
+  if (!el) return;
+  var tickets = (db.kitchenOrders || []).filter(function(t){ return t.status !== 'served'; })
+    .sort(function(a,b){ return new Date(a.createdAt) - new Date(b.createdAt); });
+
+  if (!tickets.length) { el.innerHTML = '<div class="empty" style="padding:2rem">✅ Kitchen mein koi pending order nahi hai.</div>'; renderKitchenBadge(); return; }
+
+  el.innerHTML = tickets.map(function(t) {
+    var icon = t.locationType === 'room' ? '🛏️' : '🪑';
+    var statusColor = t.status === 'pending' ? '#DC2626' : (t.status === 'preparing' ? '#D97706' : '#16A34A');
+    var statusLabel = t.status === 'pending' ? 'NAYA' : (t.status === 'preparing' ? 'BAN RAHA HAI' : 'READY');
+    var elapsed = Math.round((new Date() - new Date(t.createdAt)) / 60000);
+    var itemsHtml = t.items.map(function(it){ return '<div style="font-weight:700;font-size:0.9rem">' + it.qty + 'x ' + esc(it.name) + '</div>'; }).join('');
+    var nextBtn = '';
+    if (t.status === 'pending') nextBtn = '<button class="btn btn-yellow" style="flex:1" data-tid="' + t.id + '" onclick="advanceKitchenTicket(this.dataset.tid,\'preparing\')">👨‍🍳 Banana Shuru Karo</button>';
+    else if (t.status === 'preparing') nextBtn = '<button class="btn btn-green" style="flex:1" data-tid="' + t.id + '" onclick="advanceKitchenTicket(this.dataset.tid,\'ready\')">✅ Ready!</button>';
+    else nextBtn = '<button class="btn btn-outline" style="flex:1" data-tid="' + t.id + '" onclick="advanceKitchenTicket(this.dataset.tid,\'served\')">📤 Serve Ho Gaya</button>';
+
+    return '<div style="background:#fff;border:2px solid ' + statusColor + '33;border-left:6px solid ' + statusColor + ';border-radius:12px;padding:14px;margin-bottom:10px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<div style="font-weight:800;font-size:1rem">' + icon + ' ' + esc(t.tableName) + '</div>'
+      + '<span style="background:' + statusColor + '22;color:' + statusColor + ';font-size:0.68rem;font-weight:800;padding:3px 10px;border-radius:20px">' + statusLabel + '</span>'
+      + '</div>'
+      + '<div style="font-size:0.68rem;color:#9CA3AF;margin-bottom:8px">Round ' + t.round + ' · ' + elapsed + ' min pehle</div>'
+      + '<div style="margin-bottom:10px">' + itemsHtml + '</div>'
+      + '<div style="display:flex;gap:8px">' + nextBtn + '</div>'
+      + '</div>';
+  }).join('');
+  renderKitchenBadge();
+}
+
+function advanceKitchenTicket(ticketId, newStatus) {
+  var t = (db.kitchenOrders || []).find(function(x){ return x.id === ticketId; });
+  if (!t) return;
+  t.status = newStatus;
+  if (newStatus === 'ready') t.readyAt = new Date().toISOString();
+  save();
+  if (isFirebaseReady && firestoreDb && restaurantId) {
+    firestoreDb.collection('restaurants').doc(restaurantId).collection('kitchenOrders').doc(ticketId)
+      .set(t, { merge: true }).catch(function(){});
+  }
+  renderKitchenPage();
+  if (newStatus === 'ready') toast('✅ ' + t.tableName + ' ka order ready hai!', '#00A878');
+}
+
 function sendKOTRound(forceMode) {
   if (!order.items.length) { toast('Pehle items add karein!', '#FF6B35'); return; }
   if (!order.kotSent) order.kotSent = {};
@@ -3146,6 +3429,8 @@ function sendKOTRound(forceMode) {
   order.kotRound = (order.kotRound || 0) + 1;
   var roundNum = order.kotRound;
   var mode = forceMode || getPrinterMode();
+
+  createKitchenTicket(newItems, roundNum);
 
   if (mode === 'bt') {
     if (typeof btConnected !== 'undefined' && btConnected) printKOTRoundViaBT(newItems, roundNum);
@@ -3651,7 +3936,7 @@ function showBillReceipt(o){
     <div class="btn-row" style="margin-top:12px">
       ${getBillPrintButtonsHtml(o.id)}
               <button class="btn btn-sm btn-outline" style="color:#fff" onclick="btPrintKOT('${o.id}')">🍳 KOT</button>
-      <button class="btn btn-gold" onclick="whatsappBill('${o.id}')">📲 WhatsApp</button>
+      <button class="btn btn-gold" onclick="whatsappBillPDF('${o.id}')">📄 Share PDF</button>
       <button class="btn btn-sm" style="background:rgba(220,38,38,0.15);color:#EF4444" onclick="showReturnItemModal('${o.id}')">↩️ Return Item</button>
       <button class="btn btn-outline" onclick="closeModal()">Close</button>
     </div>`;
@@ -4996,7 +5281,7 @@ function viewOrder(id){
     <div class="btn-row" style="margin-top:12px">
       ${getBillPrintButtonsHtml(o.id)}
               <button class="btn btn-sm btn-outline" style="color:#fff" onclick="btPrintKOT('${o.id}')">🍳 KOT</button>
-      <button class="btn btn-gold" onclick="whatsappBill('${o.id}')">📲 WhatsApp</button>
+      <button class="btn btn-gold" onclick="whatsappBillPDF('${o.id}')">📄 Share PDF</button>
       <button class="btn btn-sm" style="background:rgba(220,38,38,0.15);color:#EF4444" onclick="showReturnItemModal('${o.id}')">↩️ Return Item</button>
       <button class="btn btn-outline" onclick="closeModal()">Close</button>
     </div>`;

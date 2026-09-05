@@ -309,6 +309,15 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
           </div>
         </div>
 
+        <!-- Client Support Tools -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-hdr"><div class="card-title">🛠️ Client Support Tools</div></div>
+          <div class="card-body">
+            <div style="font-size:0.78rem;color:rgba(255,255,255,0.5);margin-bottom:10px">Jab client PIN bhool jaaye ya locked ho jaaye, yahan se reset karein.</div>
+            <button class="btn btn-outline btn-full" onclick="resetClientPins()">🔑 Reset Owner/Cashier PIN (default: 1234/0000)</button>
+          </div>
+        </div>
+
         <!-- Admin's central AI keys (one-time setup) -->
         <div class="card" style="margin-bottom:14px" id="mu-key-card">
           <div class="card-hdr"><div class="card-title">🔑 AI Engine Keys (One-Time Setup)</div></div>
@@ -807,9 +816,11 @@ function showClientKeyResult(client) {
   document.getElementById('modal-view-client').classList.add('open');
 }
 
+var currentClientFilter = 'all';
+
 function renderClients() {
   const search = (document.getElementById('client-search')?.value||'').toLowerCase();
-  const clients = adminData.clients.filter(c =>
+  let clients = adminData.clients.filter(c =>
     !search ||
     c.name.toLowerCase().includes(search) ||
     (c.owner||'').toLowerCase().includes(search) ||
@@ -817,17 +828,29 @@ function renderClients() {
     (c.city||'').toLowerCase().includes(search)
   );
 
+  // Apply status filter (active/trial/expired/blocked)
+  if (currentClientFilter !== 'all') {
+    clients = clients.filter(function(c) {
+      var daysLeft = c.expiry ? Math.ceil((new Date(c.expiry)-new Date())/86400000) : 999;
+      var status = c.status==='blocked' ? 'blocked'
+        : daysLeft <= 0 ? 'expired'
+        : c.plan==='trial' ? 'trial'
+        : 'active';
+      return status === currentClientFilter;
+    });
+  }
+
   // Filter buttons
   const statuses = ['all','active','trial','expired','blocked'];
   const filterEl = document.getElementById('client-filter-btns');
   if(filterEl && !filterEl.dataset.rendered) {
-    filterEl.innerHTML = statuses.map(s=>`<button class="btn btn-sm ${s==='all'?'btn-gold':'btn-outline'}" onclick="filterClients('${s}',this)">${s.toUpperCase()}</button>`).join('');
+    filterEl.innerHTML = statuses.map(s=>`<button class="btn btn-sm ${s===currentClientFilter?'btn-gold':'btn-outline'}" data-status="${s}" onclick="filterClients(this.dataset.status,this)">${s.toUpperCase()}</button>`).join('');
     filterEl.dataset.rendered = '1';
   }
 
   const tbody = document.getElementById('clients-tbody');
   if(!tbody) return;
-  if(!clients.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.3);padding:20px">No clients yet</td></tr>'; return; }
+  if(!clients.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.3);padding:20px">No clients match this filter</td></tr>'; return; }
 
   tbody.innerHTML = clients.map((c,i) => {
     const daysLeft = c.expiry ? Math.ceil((new Date(c.expiry)-new Date())/86400000) : 999;
@@ -859,11 +882,12 @@ function renderClients() {
 }
 
 function filterClients(status, btn) {
+  currentClientFilter = status;
   document.querySelectorAll('#client-filter-btns .btn').forEach(b=>{
     b.className = 'btn btn-sm btn-outline';
   });
   btn.className = 'btn btn-sm btn-gold';
-  // filter logic can be extended
+  renderClients();
 }
 
 function viewClient(clientId) {
@@ -1275,6 +1299,7 @@ var ALL_FEATURES = [
   {id:'wa_alerts',  name:'WhatsApp Alerts',     tier:'premium',  always:false},
   {id:'qr_menu',    name:'QR Table Ordering',   tier:'premium',  always:false, desc:'Customer scans table QR, orders directly — syncs live into Billing'},
   {id:'room_service', name:'Hotel Room Service', tier:'premium', always:false, desc:'For attached hotels — separate Rooms module with room-wise QR ordering & KOT'},
+  {id:'kitchen_display', name:'Kitchen Display System', tier:'premium', always:false, desc:'Live kitchen order queue, table/room-wise — kitchen staff sees KOTs in real time'},
 ];
 
 var TIER_FEATURES = {
@@ -1333,6 +1358,25 @@ function saveAdminAiKeys() {
   adminData.settings.aiProvider = provider;
   save();
   toast('✅ Keys saved! Provider: ' + (provider === 'groq' ? 'Groq' : 'Gemini'), '#00C896');
+}
+
+async function resetClientPins() {
+  if (!muCurrentRestaurantId) { toast('Pehle client select karein!', '#FF6B35'); return; }
+  if (!confirm('Is client ka Owner PIN 1234 aur Cashier PIN 0000 (default) pe reset karna hai?')) return;
+  try {
+    var docRef = db_admin.collection('restaurants').doc(muCurrentRestaurantId).collection('meta').doc('settings');
+    var doc = await docRef.get();
+    if (doc.exists && doc.data().data) {
+      // Clear ONLY the pins field via dot-path update — leaves printer mode,
+      // location, attendance rules etc untouched.
+      await docRef.update({ 'data.pins': {}, _updatedAt: new Date().toISOString() });
+    } else {
+      await docRef.set({ data: { pins: {} }, _updatedAt: new Date().toISOString() }, { merge: true });
+    }
+    toast('✅ PIN reset ho gaya! Client ka Owner PIN ab 1234, Cashier PIN 0000 hai.', '#00C896');
+  } catch (e) {
+    toast('Reset fail hua: ' + e.message, '#FF6B35');
+  }
 }
 
 async function loadClientMenu() {
