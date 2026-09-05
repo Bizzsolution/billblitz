@@ -529,6 +529,24 @@ tr:nth-child(even) td{background:#FFFFFF;}
     overflow: visible !important;
     height: auto !important;
   }
+  /* CRITICAL: the on-screen 320px (~84.7mm) width overflows an 80mm page
+     that only has ~74mm printable area after margins — that overflow was
+     silently cutting off the right-hand column (prices/totals) on every
+     printed bill. Constrain to the actual printable width when printing. */
+  .print-bill-wrap {
+    max-width: 100% !important;
+    width: 100% !important;
+    font-size: 11px !important;
+  }
+  .print-bill-wrap td { font-size: 10.5px !important; word-break: break-word; }
+  .print-bill-wrap h2 { font-size: 13px !important; }
+  .print-bill-wrap .pc { font-size: 10px !important; }
+  /* Never let a long item name push the price column off the page.
+     NOTE: uses `td + td` (not :last-child) on purpose — KOT slips render
+     single-column rows, and a :last-child rule would wrongly squeeze and
+     right-align those too. `td + td` only ever matches a real 2nd column. */
+  .print-bill-wrap table { table-layout: fixed !important; width: 100% !important; }
+  .print-bill-wrap td + td { width: 38% !important; text-align: right !important; }
 }
 .print-bill-wrap {
   font-family: 'Courier New', monospace;
@@ -705,7 +723,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="dh-time" id="dh-time"></div>
     <div id="dh-sync" style="font-size:0.72rem;color:rgba(255,255,255,0.4)"></div>
     <span id="dh-role-badge" class="dh-role role-owner">👑 Owner</span>
-    <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="setPage('settings')" title="Settings">⚙️</button>
+    <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
+    <button class="dh-btn" id="dh-settings-btn" style="background:rgba(255,255,255,0.12)" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="dh-btn" onclick="quickBill()">+ New Bill</button>
   </div>
 </div>
@@ -833,7 +852,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <span id="role-display" class="role-badge role-owner">👑 Owner</span>
     <div class="hdr-time" id="live-time"></div>
     <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
-    <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="setPage('settings')" title="Settings">⚙️</button>
+    <button class="hdr-btn" id="hdr-printer-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
+    <button class="hdr-btn" id="hdr-settings-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="logoutConfirm()">🔒</button>
   </div>
 </div>
@@ -1036,33 +1056,33 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="page-title">🗂️ Manage</div>
     <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:14px">Back-office management — sab yahan se access karein</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <button class="manage-card" onclick="setPage('staff')">
+      <button class="manage-card" id="mc-staff" onclick="setPage('staff')">
         <div class="manage-card-icon">👥</div>
         <div class="manage-card-title">Staff</div>
         <div class="manage-card-sub">Attendance, Salary</div>
       </button>
-      <button class="manage-card" onclick="setPage('expenses')">
+      <button class="manage-card" id="mc-expenses" onclick="setPage('expenses')">
         <div class="manage-card-icon">💸</div>
         <div class="manage-card-title">Expenses</div>
         <div class="manage-card-sub">Track spending</div>
       </button>
-      <button class="manage-card" onclick="setPage('menu')">
+      <button class="manage-card" id="mc-menu" onclick="setPage('menu')">
         <div class="manage-card-icon">🍜</div>
         <div class="manage-card-title">Menu</div>
         <div class="manage-card-sub">Items, Pricing</div>
       </button>
-      <button class="manage-card" onclick="setPage('inventory')" style="position:relative">
+      <button class="manage-card" id="mc-inventory" onclick="setPage('inventory')" style="position:relative">
         <div class="manage-card-icon">📦</div>
         <div class="manage-card-title">Stock</div>
         <div class="manage-card-sub">Inventory levels</div>
         <span id="manage-lowstock-badge" style="display:none;position:absolute;top:10px;right:10px;background:#DC2626;color:#fff;font-size:0.62rem;font-weight:800;padding:2px 7px;border-radius:12px"></span>
       </button>
-      <button class="manage-card" onclick="setPage('purchases')">
+      <button class="manage-card" id="mc-purchases" onclick="setPage('purchases')">
         <div class="manage-card-icon">🛒</div>
         <div class="manage-card-title">Purchases</div>
         <div class="manage-card-sub">Vendor orders</div>
       </button>
-      <button class="manage-card" onclick="setPage('reports')">
+      <button class="manage-card" id="mc-reports" onclick="setPage('reports')">
         <div class="manage-card-icon">📊</div>
         <div class="manage-card-title">Reports</div>
         <div class="manage-card-sub">Sales, GST, P&L</div>
@@ -2128,9 +2148,12 @@ async function pushAllDataToCloud() {
         orderCount: db.orders.length,
         customerCount: db.customers.length,
         todaySales: db.orders.filter(o => isToday(o.date)).reduce((s,o) => s+o.total, 0),
-        restaurantName: db.settings?.restInfo?.name || 'Unknown',
+        // Write '' (not 'Unknown') when unset — a truthy 'Unknown' string was
+        // defeating order.html's own `|| 'Restaurant'` fallback, so the QR
+        // page literally displayed "Unknown" as the restaurant name.
+        restaurantName: db.settings?.restInfo?.name || '',
         phone: db.settings?.restInfo?.phone || '',
-      }),
+      }, { merge: true }),
     ]);
     // Sync recent orders (last 100)
     const recentOrders = db.orders.slice(0, 100);
@@ -2530,7 +2553,7 @@ function applyFeatureGating() {
 
   // Individual UI cards/buttons for non-nav features (Settings, Reports pages)
   var elementMap = {
-    'bt_printer':   ['feat-card-bt_printer'],
+    'bt_printer':   ['feat-card-bt_printer', 'hdr-printer-btn'],
     'wa_alerts':    ['feat-btn-wa_alerts-1', 'feat-btn-wa_alerts-2'],
     'qr_menu':      ['feat-btn-qr_menu'],
     'pdf_reports':  ['feat-btn-pdf_reports-1'],
@@ -2651,7 +2674,15 @@ function checkPin(){
 }
 
 function applyRoleRestrictions(){
-  if(currentRole === 'owner') {
+  // Settings gear in the header is owner-only (Settings page itself is in
+  // CASHIER_BLOCKED_PAGES). The Printer button stays visible for EVERY role,
+  // because Bluetooth must be paired separately on each staff device.
+  var isOwner = (currentRole === 'owner');
+  ['hdr-settings-btn','dh-settings-btn'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = isOwner ? '' : 'none';
+  });
+  if(isOwner) {
     document.querySelectorAll('.bnav,.sb-item').forEach(b=>b.style.display='');
     return;
   }
@@ -2660,6 +2691,9 @@ function applyRoleRestrictions(){
     const allowed = access[p] !== undefined ? access[p] : !CASHIER_BLOCKED_PAGES.includes(p);
     const nb=document.getElementById('nav-'+p); if(nb) nb.style.display=allowed?'':'none';
     const sb=document.getElementById('sb-'+p); if(sb) sb.style.display=allowed?'':'none';
+    // These pages now live behind the grouped "Manage" hub, so their entry
+    // cards must respect the same cashier restrictions as the old nav tabs.
+    const mc=document.getElementById('mc-'+p); if(mc) mc.style.display=allowed?'':'none';
   });
 }
 
@@ -3029,6 +3063,19 @@ function renderSettingsPage(){
     </label>`).join('');
 }
 
+function pushRestaurantInfo(){
+  // Pushes just the identity fields that the customer-facing QR order page
+  // (order.html) reads from meta/info. Called immediately on save so the QR
+  // page reflects a name change right away instead of waiting for the next
+  // full sync cycle.
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var info = (db.settings && db.settings.restInfo) || {};
+  firestoreDb.collection('restaurants').doc(restaurantId)
+    .collection('meta').doc('info')
+    .set({ restaurantName: info.name || '', phone: info.phone || '' }, { merge: true })
+    .catch(function(){});
+}
+
 function saveRestInfo(){
   if(!db.settings) db.settings = {};
   db.settings.restInfo = {
@@ -3040,7 +3087,9 @@ function saveRestInfo(){
     city:  document.getElementById('set-rest-city')?.value.trim()||'',
     msg:   document.getElementById('set-rest-msg').value.trim(),
   };
-  save(); toast('Restaurant info saved!');
+  save();
+  pushRestaurantInfo();
+  toast('Restaurant info saved!');
 }
 
 function savePINs(){
@@ -8520,23 +8569,64 @@ async function btSend(data) {
 }
 
 function btSetUI(status, name, sub) {
-  var dot   = document.getElementById('bt-dot');
-  var nameEl= document.getElementById('bt-name');
-  var subEl = document.getElementById('bt-sub');
-  var btn   = document.getElementById('bt-btn');
-  var prints= document.getElementById('bt-print-btns');
-  if(dot)  { dot.className='bt-dot'+(status?' '+status:''); }
-  if(nameEl) nameEl.textContent = name||'Not connected';
-  if(subEl)  subEl.textContent  = sub||'';
-  if(btn) {
-    if(status==='connected') {
-      btn.textContent='⏏ Disconnect';btn.className='bt-conn-btn disconnect';btn.onclick=btDisconnect;
-    } else {
-      btn.textContent=status==='connecting'?'⏳...':'🔵 Connect';
-      btn.className='bt-conn-btn connect';btn.onclick=btConnect;
+  // Two possible UIs exist: the full card on the Settings page (owner-only),
+  // and the lightweight Printer modal (available to every role, including
+  // cashier/staff, since Web Bluetooth must be paired separately on EACH
+  // device). Update whichever ones are currently in the DOM.
+  [['bt-dot','bt-name','bt-sub','bt-btn','bt-print-btns'],
+   ['bt2-dot','bt2-name','bt2-sub','bt2-btn','bt2-print-btns']].forEach(function(ids){
+    var dot   = document.getElementById(ids[0]);
+    var nameEl= document.getElementById(ids[1]);
+    var subEl = document.getElementById(ids[2]);
+    var btn   = document.getElementById(ids[3]);
+    var prints= document.getElementById(ids[4]);
+    if(dot)  { dot.className='bt-dot'+(status?' '+status:''); }
+    if(nameEl) nameEl.textContent = name||'Not connected';
+    if(subEl)  subEl.textContent  = sub||'';
+    if(btn) {
+      if(status==='connected') {
+        btn.textContent='⏏ Disconnect';btn.className='bt-conn-btn disconnect';btn.onclick=btDisconnect;
+      } else {
+        btn.textContent=status==='connecting'?'⏳...':'🔵 Connect';
+        btn.className='bt-conn-btn connect';btn.onclick=btConnect;
+      }
     }
-  }
-  if(prints) prints.style.display = status==='connected'?'grid':'none';
+    if(prints) prints.style.display = status==='connected'?'grid':'none';
+  });
+}
+
+// Printer connect UI available to ALL roles (staff included) — Bluetooth
+// pairing is per-device, so a cashier working on their own phone must be able
+// to pair a printer without needing the owner-only Settings page.
+function showPrinterModal() {
+  if (!checkFeatureAccess('bt_printer')) return;
+  var connected = (typeof btConnected !== 'undefined' && btConnected);
+  var devName = (btDevice && btDevice.name) ? btDevice.name : 'Connected';
+  var savedPaper = String(btPaper || 58);
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🖨️ Bluetooth Printer</div>'
+    + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Har device pe printer alag se connect karna padta hai — apne is device ke liye yahan se connect karein.</div>'
+    + '<div style="background:#1A2B3C;border-radius:12px;padding:12px;margin-bottom:10px">'
+    + '<div class="bt-bar">'
+    + '<div class="bt-dot' + (connected?' connected':'') + '" id="bt2-dot"></div>'
+    + '<div class="bt-info">'
+    + '<div class="bt-name" id="bt2-name">' + (connected ? esc(devName) : 'Not connected') + '</div>'
+    + '<div class="bt-sub" id="bt2-sub">' + (connected ? 'Ready to print' : 'Tap Connect to pair printer') + '</div>'
+    + '</div>'
+    + '<button class="bt-conn-btn ' + (connected?'disconnect':'connect') + '" id="bt2-btn" onclick="' + (connected?'btDisconnect()':'btConnect()') + '">' + (connected?'⏏ Disconnect':'🔵 Connect') + '</button>'
+    + '</div>'
+    + '<div class="bt-paper-row">'
+    + '<span style="font-size:0.8rem;font-weight:700;color:rgba(255,255,255,0.5)">📄 Paper:</span>'
+    + '<select class="bt-paper-sel" id="bt2-paper" onchange="btSetPaper(this.value)">'
+    + '<option value="58"' + (savedPaper==='58'?' selected':'') + '>58mm (Pocket)</option>'
+    + '<option value="80"' + (savedPaper==='80'?' selected':'') + '>80mm (Standard)</option>'
+    + '</select>'
+    + '<button class="btn btn-sm btn-outline" onclick="showBtHelp()" style="color:#fff">❓</button>'
+    + '</div>'
+    + '</div>'
+    + '<button class="btn btn-outline btn-full" onclick="closeModal()">Close</button>';
+  openModal();
 }
 
 function btSetPaper(w) {
