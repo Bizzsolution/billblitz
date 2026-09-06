@@ -731,6 +731,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="dh-time" id="dh-time"></div>
     <div id="dh-sync" style="font-size:0.72rem;color:rgba(255,255,255,0.4)"></div>
     <span id="dh-role-badge" class="dh-role role-owner">👑 Owner</span>
+    <button class="dh-btn" id="dh-alerts-btn" style="background:rgba(255,255,255,0.12);position:relative;display:none" onclick="showOwnerAlertsModal()" title="Notifications">🔔<span id="dh-alerts-count" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
     <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
     <button class="dh-btn" id="dh-settings-btn" style="background:rgba(255,255,255,0.12)" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="dh-btn" onclick="quickBill()">+ New Bill</button>
@@ -825,6 +826,11 @@ tr:nth-child(even) td{background:#FFFFFF;}
         <div class="rb-name">Cashier</div>
         <div class="rb-desc">Billing only</div>
       </button>
+      <button class="role-btn" id="role-kitchen" onclick="selectRole('kitchen')" style="grid-column:1/-1">
+        <div class="rb-icon">🍳</div>
+        <div class="rb-name">Kitchen</div>
+        <div class="rb-desc">Sirf kitchen orders — kitchen device ke liye</div>
+      </button>
     </div>
     <div class="pin-dots" id="pin-dots">
       <div class="pin-dot" id="pd0"></div>
@@ -860,6 +866,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <span id="role-display" class="role-badge role-owner">👑 Owner</span>
     <div class="hdr-time" id="live-time"></div>
     <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
+    <button class="hdr-btn" id="hdr-alerts-btn" style="background:rgba(255,255,255,0.12);color:#fff;position:relative;display:none" onclick="showOwnerAlertsModal()" title="Notifications">🔔<span id="hdr-alerts-count" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
     <button class="hdr-btn" id="hdr-printer-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
     <button class="hdr-btn" id="hdr-settings-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="logoutConfirm()">🔒</button>
@@ -1237,6 +1244,10 @@ tr:nth-child(even) td{background:#FFFFFF;}
             <label class="form-label">🧾 Cashier PIN</label>
             <input class="form-inp" id="set-cashier-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">🍳 Kitchen PIN <span style="font-weight:400;color:#9CA3AF">(kitchen device ke liye — sirf Kitchen tab dikhega)</span></label>
+          <input class="form-inp" id="set-kitchen-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
         </div>
         <button class="btn btn-primary btn-full" onclick="savePINs()">Save PINs</button>
       </div>
@@ -2141,6 +2152,7 @@ function startAllRealtimeSync() {
   listenToCustomersSync();
   listenToSettingsSync();
   listenToKitchenOrdersSync();
+  listenToOwnerAlertsSync();
 }
 
 async function pushAllDataToCloud() {
@@ -2440,7 +2452,7 @@ let currentRole = null;
 let pinBuffer = '';
 let selectedLoginRole = 'owner';
 
-const DEFAULT_PINS = { owner: '1234', cashier: '0000' };
+const DEFAULT_PINS = { owner: '1234', cashier: '0000', kitchen: '1111' };
 const CASHIER_BLOCKED_PAGES = ['reports','settings','purchases'];
 const ACCESS_LABELS = {
   menu: '🍜 Edit Menu',
@@ -2461,6 +2473,7 @@ function selectRole(r){
   document.getElementById('login-error').textContent = '';
   document.getElementById('role-owner').classList.toggle('selected', r==='owner');
   document.getElementById('role-cashier').classList.toggle('selected', r==='cashier');
+  var rk=document.getElementById('role-kitchen'); if(rk) rk.classList.toggle('selected', r==='kitchen');
 }
 
 function pinKey(k){
@@ -2655,25 +2668,32 @@ function checkPin(){
     currentRole = selectedLoginRole;
     document.getElementById('login-screen').style.display = 'none';
     // Mobile header badge
+    var ROLE_LABEL = {owner:'👑 Owner', cashier:'🧾 Cashier', kitchen:'🍳 Kitchen'};
+    var ROLE_ICON  = {owner:'👑', cashier:'🧾', kitchen:'🍳'};
+    var ROLE_NAME  = {owner:'Owner', cashier:'Cashier', kitchen:'Kitchen'};
     const badge = document.getElementById('role-display');
-    badge.textContent = currentRole==='owner' ? '👑 Owner' : '🧾 Cashier';
+    badge.textContent = ROLE_LABEL[currentRole] || '🧾 Cashier';
     badge.className = 'role-badge ' + (currentRole==='owner'?'role-owner':'role-cashier');
     // Desktop sidebar user
     const sbAvatar=document.getElementById('sb-avatar');
     const sbRoleName=document.getElementById('sb-role-name');
     const dhRoleBadge=document.getElementById('dh-role-badge');
     const restName=db.settings?.restInfo?.name||'My Restaurant';
-    if(sbAvatar) sbAvatar.textContent=currentRole==='owner'?'👑':'🧾';
-    if(sbRoleName){ sbRoleName.textContent=currentRole==='owner'?'Owner':'Cashier'; }
+    if(sbAvatar) sbAvatar.textContent=ROLE_ICON[currentRole]||'🧾';
+    if(sbRoleName){ sbRoleName.textContent=ROLE_NAME[currentRole]||'Cashier'; }
     if(dhRoleBadge){
-      dhRoleBadge.textContent=currentRole==='owner'?'👑 Owner':'🧾 Cashier';
+      dhRoleBadge.textContent=ROLE_LABEL[currentRole]||'🧾 Cashier';
       dhRoleBadge.className='dh-role '+(currentRole==='owner'?'role-owner':'role-cashier');
     }
     // Update sidebar license info
     const sbLic=document.getElementById('sb-lic-info');
     if(sbLic) sbLic.textContent=licenseState.status==='active'?'✓ Licensed':'⏳ Trial';
     applyRoleRestrictions();
-    renderDashboard();
+    // A kitchen device must land straight on the Kitchen queue, never the
+    // dashboard (which it isn't allowed to see).
+    renderAlertsBadge();
+    if(currentRole==='kitchen'){ setPage('kitchen'); }
+    else { renderDashboard(); }
   } else {
     document.getElementById('login-error').textContent = '❌ Wrong PIN. Try again.';
     pinBuffer = '';
@@ -2690,6 +2710,26 @@ function applyRoleRestrictions(){
     var el = document.getElementById(id);
     if(el) el.style.display = isOwner ? '' : 'none';
   });
+
+  // KITCHEN DEVICE MODE — a device logged in as "kitchen" is a dedicated
+  // screen sitting in the kitchen. It must show ONLY the Kitchen order
+  // queue: every other nav item, the +Bill button and the alerts bell are
+  // hidden so kitchen staff can't reach billing/reports/settings at all.
+  if (currentRole === 'kitchen') {
+    document.querySelectorAll('.bnav,.sb-item').forEach(function(b){
+      var isKitchenTab = (b.id === 'nav-kitchen' || b.id === 'sb-kitchen');
+      b.style.display = isKitchenTab ? '' : 'none';
+    });
+    ['hdr-alerts-btn','dh-alerts-btn'].forEach(function(id){
+      var el=document.getElementById(id); if(el) el.style.display='none';
+    });
+    document.querySelectorAll('.hdr-btn,.dh-btn').forEach(function(b){
+      var t=(b.textContent||'').trim();
+      if(t.indexOf('Bill')!==-1) b.style.display='none';
+    });
+    return;
+  }
+
   if(isOwner) {
     document.querySelectorAll('.bnav,.sb-item').forEach(b=>b.style.display='');
     return;
@@ -3113,14 +3153,17 @@ function saveRestInfo(){
 function savePINs(){
   const op = document.getElementById('set-owner-pin').value;
   const cp = document.getElementById('set-cashier-pin').value;
-  if((op && op.length!==4)||( cp && cp.length!==4)){ toast('PINs must be 4 digits','#FF6B35'); return; }
+  const kp = (document.getElementById('set-kitchen-pin')||{}).value || '';
+  if((op && op.length!==4)||( cp && cp.length!==4)||( kp && kp.length!==4)){ toast('PINs must be 4 digits','#FF6B35'); return; }
   if(!db.settings) db.settings = {};
   if(!db.settings.pins) db.settings.pins = {};
   if(op) db.settings.pins.owner = hashPin(op);
   if(cp) db.settings.pins.cashier = hashPin(cp);
+  if(kp) db.settings.pins.kitchen = hashPin(kp);
   save();
   document.getElementById('set-owner-pin').value = '';
   document.getElementById('set-cashier-pin').value = '';
+  if(document.getElementById('set-kitchen-pin')) document.getElementById('set-kitchen-pin').value = '';
   toast('PINs updated! 🔐');
 }
 
@@ -3164,6 +3207,9 @@ const PAGE_TITLES = {
 const MANAGE_SUBPAGES = ['staff','expenses','menu','inventory','purchases','reports'];
 
 function setPage(p){
+  // Kitchen-device lockdown: this role can ONLY ever be on the Kitchen page,
+  // no matter how navigation is triggered (nav tap, redirect, deep link).
+  if(currentRole==='kitchen' && p!=='kitchen'){ p='kitchen'; }
   var pgFeat={tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display'};
   if(pgFeat[p]&&!hasFeature(pgFeat[p])){ toast('Yeh feature aapke plan mein nahi hai!','#FF6B35'); return; }
   if(currentRole==='cashier'){
@@ -3975,18 +4021,127 @@ function showReturnItemModal(orderId) {
   openModal();
 }
 
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║   OWNER ALERTS — in-app notifications synced across        ║
+// ║   devices (used for returns, so staff aren't blocked by    ║
+// ║   an approval prompt but the owner still always knows)     ║
+// ╚══════════════════════════════════════════════════════════╝
+function createOwnerAlert(type, title, message) {
+  var alert = {
+    id: uid(),
+    type: type,
+    title: title,
+    message: message,
+    by: currentRole === 'owner' ? 'Owner' : (currentRole === 'kitchen' ? 'Kitchen' : 'Cashier'),
+    date: new Date().toISOString(),
+    read: false
+  };
+  if (!db.ownerAlerts) db.ownerAlerts = [];
+  db.ownerAlerts.unshift(alert);
+  save();
+  if (isFirebaseReady && firestoreDb && restaurantId) {
+    firestoreDb.collection('restaurants').doc(restaurantId)
+      .collection('ownerAlerts').doc(alert.id).set(alert).catch(function(){});
+  }
+  renderAlertsBadge();
+}
+
+function listenToOwnerAlertsSync() {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var ref = firestoreDb.collection('restaurants').doc(restaurantId)
+    .collection('ownerAlerts').orderBy('date', 'desc').limit(50);
+  var unsub = ref.onSnapshot(function(snap) {
+    if (!db.ownerAlerts) db.ownerAlerts = [];
+    var changed = false;
+    snap.docChanges().forEach(function(change) {
+      var data = change.doc.data();
+      var idx = db.ownerAlerts.findIndex(function(a){ return a.id === change.doc.id; });
+      if (change.type === 'removed') {
+        if (idx !== -1) { db.ownerAlerts.splice(idx, 1); changed = true; }
+      } else if (idx !== -1) {
+        db.ownerAlerts[idx] = data; changed = true;
+      } else {
+        db.ownerAlerts.push(data); changed = true;
+        // Only pop a toast for the owner, and only for genuinely new alerts
+        // that someone else raised.
+        if (currentRole === 'owner' && data.by !== 'Owner' && !data.read) {
+          toast('🔔 ' + data.title, '#FF6B35');
+        }
+      }
+    });
+    if (!changed) return;
+    db.ownerAlerts.sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    persistLocalOnly();
+    renderAlertsBadge();
+  }, function(err) { console.log('Owner alerts sync error:', err); });
+  cloudListeners.push(unsub);
+}
+
+function renderAlertsBadge() {
+  var unread = (db.ownerAlerts || []).filter(function(a){ return !a.read; }).length;
+  ['hdr-alerts-count','dh-alerts-count'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = unread > 0 ? unread : '';
+    el.style.display = unread > 0 ? '' : 'none';
+  });
+  // The bell itself is owner-only
+  ['hdr-alerts-btn','dh-alerts-btn'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.style.display = (currentRole === 'owner') ? '' : 'none';
+  });
+}
+
+function showOwnerAlertsModal() {
+  var alerts = (db.ownerAlerts || []);
+  var html = '<div class="modal-handle"></div><div class="modal-title">🔔 Notifications</div>';
+  if (!alerts.length) {
+    html += '<div class="empty" style="padding:2rem">Koi notification nahi hai.</div>';
+  } else {
+    html += alerts.map(function(a){
+      return '<div style="background:' + (a.read ? '#F7F9FF' : '#FFF7ED') + ';border-left:4px solid ' + (a.read ? '#CBD5E1' : '#FF6B35') + ';border-radius:10px;padding:11px 13px;margin-bottom:8px">'
+        + '<div style="font-weight:800;font-size:0.86rem;color:#1A2B3C">' + esc(a.title) + '</div>'
+        + '<div style="font-size:0.8rem;color:#475569;margin-top:4px;white-space:pre-line">' + esc(a.message) + '</div>'
+        + '<div style="font-size:0.68rem;color:#9CA3AF;margin-top:6px">' + esc(a.by) + ' · ' + fmtDate(a.date) + ' ' + fmtTime(a.date) + '</div>'
+        + '</div>';
+    }).join('');
+    html += '<button class="btn btn-outline btn-full" style="margin-top:6px" onclick="markAllAlertsRead()">✓ Sab Read Mark Karein</button>';
+  }
+  html += '<button class="btn btn-primary btn-full" style="margin-top:8px" onclick="closeModal()">Close</button>';
+  document.getElementById('modal-body').innerHTML = html;
+  openModal();
+}
+
+function markAllAlertsRead() {
+  (db.ownerAlerts || []).forEach(function(a){
+    if (a.read) return;
+    a.read = true;
+    if (isFirebaseReady && firestoreDb && restaurantId) {
+      firestoreDb.collection('restaurants').doc(restaurantId)
+        .collection('ownerAlerts').doc(a.id).set({ read: true }, { merge: true }).catch(function(){});
+    }
+  });
+  save();
+  renderAlertsBadge();
+  closeModal();
+  toast('✓ Sab notifications read mark ho gaye', '#00A878');
+}
+
 function confirmReturnWithApproval(orderId) {
-  // Capture the current return-modal input values BEFORE showing the approval prompt
+  // NOTE: returns no longer block on an Owner PIN prompt. Staff can process
+  // the return immediately (so the customer isn't kept waiting) and the owner
+  // is informed instead via an in-app alert carrying the staff's stated
+  // reason — see createOwnerAlert() below.
   var inputs = document.querySelectorAll('#return-items-list input[type=number]');
   var snapshot = [];
   inputs.forEach(function(inp) {
     snapshot.push({ value: inp.value, price: inp.dataset.price, name: inp.dataset.name, menuid: inp.dataset.menuid, max: inp.dataset.max });
   });
   var reason = (document.getElementById('ret-reason').value || '').trim();
+  if (!reason) { toast('Reason likhna zaroori hai — owner ko yeh bheja jaayega.', '#FF6B35'); return; }
 
-  requestOwnerApproval('Bill return/adjustment', function() {
-    processReturn(orderId, snapshot, reason);
-  });
+  processReturn(orderId, snapshot, reason);
 }
 
 function updateReturnPreview() {
@@ -4040,6 +4195,21 @@ function processReturn(orderId, snapshot, reason) {
 
   save();
   cloudSave('orders', orderId, o);
+
+  // Notify the owner in-app (replaces the old blocking Owner-PIN approval).
+  // Skipped when the owner is the one doing it — no point alerting yourself.
+  if (currentRole !== 'owner') {
+    var itemsTxt = returns.map(function(r){ return r.qty + 'x ' + r.name; }).join(', ');
+    createOwnerAlert(
+      'return',
+      'Item Return — Order #' + orderId.slice(-6).toUpperCase(),
+      'Returned: ' + itemsTxt
+        + '\nRefund: ' + fmt(returnAmt)
+        + '\nNew bill total: ' + fmt(newTotal)
+        + '\nReason: ' + (reason || '—')
+    );
+  }
+
   closeModal();
   toast('✅ Return processed! Refund: ' + fmt(returnAmt) + ' · New total: ' + fmt(newTotal), '#00A878');
 
