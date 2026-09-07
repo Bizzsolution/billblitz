@@ -2932,6 +2932,146 @@ function generateBillPDFBlob(o) {
   return doc.output('blob');
 }
 
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║   SEND BILL TO ANY NUMBER — works for customers whose      ║
+// ║   number is NOT saved in the phone's contacts              ║
+// ╚══════════════════════════════════════════════════════════╝
+function normalisePhoneForWA(raw) {
+  var digits = (raw || '').replace(/[^0-9]/g, '');
+  // Strip a leading 0 (common when people write 0XXXXXXXXXX)
+  if (digits.length === 11 && digits.charAt(0) === '0') digits = digits.slice(1);
+  // Add India country code when a bare 10-digit number is given
+  if (digits.length === 10) digits = '91' + digits;
+  return digits;
+}
+
+function showSendBillModal(orderId) {
+  var o = db.orders.find(function(x){ return x.id === orderId; });
+  if (!o) { toast('Order nahi mila!', '#FF6B35'); return; }
+
+  // Pre-fill from the loyalty customer attached to this bill, if any
+  var cust = o.customerId ? db.customers.find(function(c){ return c.id === o.customerId; }) : null;
+  var preName  = (cust && cust.name)  ? cust.name  : (o.customerName || '');
+  var prePhone = (cust && cust.phone) ? cust.phone : (o.customerPhone || '');
+
+  // Quick-pick list of saved customers who have a phone number
+  var withPhone = (db.customers || []).filter(function(c){ return c.phone; }).slice(0, 8);
+  var quickPick = withPhone.length
+    ? '<div style="font-size:0.72rem;font-weight:700;color:#6B7A99;margin-bottom:6px">Saved customers</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+      + withPhone.map(function(c){
+          return '<button class="btn btn-sm btn-outline" data-n="' + esc(c.name) + '" data-p="' + esc(c.phone) + '" onclick="fillSendBillContact(this.dataset.n,this.dataset.p)">' + esc(c.name) + '</button>';
+        }).join('')
+      + '</div>'
+    : '';
+
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">📲 Send Bill to Customer</div>'
+    + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Number save kiye bina bhi bill bhej sakte hain — number type karein aur send karein.</div>'
+    + quickPick
+    + '<div class="form-group"><label class="form-label">Customer Name (optional)</label>'
+    + '<input class="form-inp" id="sb-cust-name" placeholder="e.g. Rahul" value="' + esc(preName) + '"/></div>'
+    + '<div class="form-group"><label class="form-label">WhatsApp Number *</label>'
+    + '<input class="form-inp" id="sb-cust-phone" type="tel" inputmode="numeric" placeholder="10-digit number" value="' + esc(prePhone) + '"/>'
+    + '<div style="font-size:0.68rem;color:#9CA3AF;margin-top:4px">India ke liye 10-digit kaafi hai (+91 apne aap lag jaayega). Doosre desh ke liye country code ke saath likhein.</div></div>'
+    + '<div id="sb-err" style="color:#DC2626;font-size:0.78rem;margin-bottom:10px;display:none">Sahi WhatsApp number daalein!</div>'
+    + '<button class="btn btn-green btn-full" style="margin-bottom:8px" data-oid="' + orderId + '" onclick="sendBillTextToNumber(this.dataset.oid)">📲 Send Bill on WhatsApp</button>'
+    + '<button class="btn btn-outline btn-full" style="margin-bottom:8px" data-oid="' + orderId + '" onclick="sendBillPdfToNumber(this.dataset.oid)">📄 PDF Download + Chat Kholo</button>'
+    + '<button class="btn btn-outline btn-full" onclick="closeModal()">Cancel</button>';
+  openModal();
+}
+
+function fillSendBillContact(name, phone) {
+  var n = document.getElementById('sb-cust-name');
+  var p = document.getElementById('sb-cust-phone');
+  if (n) n.value = name || '';
+  if (p) p.value = phone || '';
+}
+
+function getSendBillContact() {
+  var name  = (document.getElementById('sb-cust-name').value || '').trim();
+  var phone = normalisePhoneForWA(document.getElementById('sb-cust-phone').value);
+  if (phone.length < 10) {
+    var err = document.getElementById('sb-err');
+    if (err) err.style.display = 'block';
+    return null;
+  }
+  return { name: name, phone: phone };
+}
+
+// Remembers the number on the order so a re-send doesn't need re-typing
+function rememberBillContact(orderId, contact) {
+  var o = db.orders.find(function(x){ return x.id === orderId; });
+  if (!o) return;
+  o.customerPhone = contact.phone;
+  if (contact.name) o.customerName = contact.name;
+  save();
+  cloudSave('orders', orderId, o);
+}
+
+function sendBillTextToNumber(orderId) {
+  var contact = getSendBillContact();
+  if (!contact) return;
+  var o = db.orders.find(function(x){ return x.id === orderId; });
+  if (!o) return;
+  rememberBillContact(orderId, contact);
+  var msg = buildBillWhatsAppText(o, contact.name);
+  closeModal();
+  window.open('https://wa.me/' + contact.phone + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+function sendBillPdfToNumber(orderId) {
+  var contact = getSendBillContact();
+  if (!contact) return;
+  var o = db.orders.find(function(x){ return x.id === orderId; });
+  if (!o) return;
+  rememberBillContact(orderId, contact);
+  toast('📄 PDF ban raha hai...', '#2563EB');
+  ensureJsPDFLib(function() {
+    try {
+      var blob = generateBillPDFBlob(o);
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'Bill-' + o.id.slice(-6).toUpperCase() + '.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+      closeModal();
+      // WhatsApp's URL scheme can only pre-fill TEXT for a specific number —
+      // it cannot auto-attach a file. So we download the PDF, open the chat
+      // with the number, and the person attaches it in one tap.
+      toast('PDF download ho gayi — chat mein 📎 se attach kar dein.', '#FFD700');
+      setTimeout(function() {
+        var msg = buildBillWhatsAppText(o, contact.name);
+        window.open('https://wa.me/' + contact.phone + '?text=' + encodeURIComponent(msg), '_blank');
+      }, 1200);
+    } catch (e) {
+      toast('PDF banane mein error: ' + e.message, '#FF6B35');
+    }
+  });
+}
+
+// Shared bill text builder (used by both the plain share and send-to-number)
+function buildBillWhatsAppText(o, custName) {
+  var info = db.settings && db.settings.restInfo ? db.settings.restInfo : {};
+  var name = info.name || 'BillBlitz Restaurant';
+  var msg = '';
+  if (custName) msg += 'Hi ' + custName + ' 👋\n\n';
+  msg += '🍽️ *' + name + '*\n';
+  msg += '📋 *Receipt — Order #' + o.id.slice(-4).toUpperCase() + '*\n';
+  msg += '📅 ' + fmtDate(o.date) + ' ' + fmtTime(o.date) + '\n\n';
+  msg += '*Items:*\n';
+  o.items.forEach(function(i){ msg += '• ' + i.qty + '× ' + i.name + ' — ₹' + (i.price*i.qty).toFixed(2) + '\n'; });
+  msg += '\n';
+  if (o.tax) msg += 'Tax: ₹' + o.tax.toFixed(2) + '\n';
+  if (o.discount) msg += 'Discount: -₹' + o.discount.toFixed(2) + '\n';
+  msg += '*TOTAL: ₹' + o.total.toFixed(2) + '* (' + o.payment + ')\n\n';
+  msg += info.msg || 'Thank you for dining with us! 🙏';
+  return msg;
+}
+
 async function whatsappBillPDF(orderId) {
   const o = db.orders.find(x=>x.id===orderId); if(!o) return;
   toast('📄 PDF ban raha hai...', '#2563EB');
@@ -2964,18 +3104,9 @@ async function whatsappBillPDF(orderId) {
 
 function whatsappBill(orderId){
   const o = db.orders.find(x=>x.id===orderId); if(!o) return;
-  const info = db.settings?.restInfo || {};
-  const name = info.name || 'BillBlitz Restaurant';
-  let msg = `🍽️ *${name}*\n`;
-  msg += `📋 *Receipt — Order #${o.id.slice(-4).toUpperCase()}*\n`;
-  msg += `📅 ${fmtDate(o.date)} ${fmtTime(o.date)}\n\n`;
-  msg += `*Items:*\n`;
-  o.items.forEach(i=>{ msg += `• ${i.qty}× ${i.name} — ₹${(i.price*i.qty).toFixed(2)}\n`; });
-  msg += `\n`;
-  if(o.tax) msg += `Tax: ₹${o.tax.toFixed(2)}\n`;
-  if(o.discount) msg += `Discount: -₹${o.discount.toFixed(2)}\n`;
-  msg += `*TOTAL: ₹${o.total.toFixed(2)}* (${o.payment})\n\n`;
-  msg += info.msg || 'Thank you for dining with us! 🙏';
+  // Uses the shared builder so the bill wording stays identical whether it's
+  // shared via the contact picker or sent straight to a typed number.
+  const msg = buildBillWhatsAppText(o, o.customerName || '');
   const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url,'_blank');
 }
@@ -4297,6 +4428,7 @@ function showBillReceipt(o){
     <div class="btn-row" style="margin-top:12px">
       ${getBillPrintButtonsHtml(o.id)}
               <button class="btn btn-sm btn-outline" style="color:#fff" onclick="btPrintKOT('${o.id}')">🍳 KOT</button>
+      <button class="btn btn-green" onclick="showSendBillModal('${o.id}')">📲 Send to Customer</button>
       <button class="btn btn-gold" onclick="whatsappBillPDF('${o.id}')">📄 Share PDF</button>
       <button class="btn btn-sm" style="background:rgba(220,38,38,0.15);color:#EF4444" onclick="showReturnItemModal('${o.id}')">↩️ Return Item</button>
       <button class="btn btn-outline" onclick="closeModal()">Close</button>
@@ -5642,6 +5774,7 @@ function viewOrder(id){
     <div class="btn-row" style="margin-top:12px">
       ${getBillPrintButtonsHtml(o.id)}
               <button class="btn btn-sm btn-outline" style="color:#fff" onclick="btPrintKOT('${o.id}')">🍳 KOT</button>
+      <button class="btn btn-green" onclick="showSendBillModal('${o.id}')">📲 Send to Customer</button>
       <button class="btn btn-gold" onclick="whatsappBillPDF('${o.id}')">📄 Share PDF</button>
       <button class="btn btn-sm" style="background:rgba(220,38,38,0.15);color:#EF4444" onclick="showReturnItemModal('${o.id}')">↩️ Return Item</button>
       <button class="btn btn-outline" onclick="closeModal()">Close</button>
