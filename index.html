@@ -950,6 +950,11 @@ tr:nth-child(even) td{background:#FFFFFF;}
         </div>
       </div>
     </div>
+    <!-- Quick search (large menus were previously scroll-only here) -->
+    <div style="position:relative;margin-bottom:8px">
+      <input class="search-inp" id="pos-search" placeholder="🔍 Item dhoondein…" oninput="renderPOSMenu()" style="padding-right:38px"/>
+      <button id="pos-search-clear" onclick="clearPosSearch()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:#E2E8F5;color:#475569;width:24px;height:24px;border-radius:50%;font-size:0.8rem;cursor:pointer">✕</button>
+    </div>
     <!-- Category tabs -->
     <div class="menu-cat-tabs" id="pos-cat-tabs"></div>
     <!-- Menu items -->
@@ -3529,7 +3534,7 @@ function getTableOrder(tableId) {
 function switchToTable(tableId, tableName) {
   // Save current order back to its table
   if(order.tableId) {
-    tableOrders[order.tableId] = { items:[...order.items], customerId:order.customerId, tableId:order.tableId, tableName:order.tableName, locationType:order.locationType||'table', kotSent:Object.assign({},order.kotSent), kotRound:order.kotRound||0, taxManuallySet:order.taxManuallySet||false };
+    tableOrders[order.tableId] = { items:[...order.items], customerId:order.customerId, tableId:order.tableId, tableName:order.tableName, locationType:order.locationType||'table', kotSent:Object.assign({},order.kotSent), kotRound:order.kotRound||0, kotHistory:(order.kotHistory||[]).slice(), taxManuallySet:order.taxManuallySet||false };
   }
   // Load the new table's order
   if(tableId) {
@@ -3541,6 +3546,7 @@ function switchToTable(tableId, tableName) {
     order.locationType = saved.locationType || (db.rooms && db.rooms.some(function(r){return r.id===tableId;}) ? 'room' : 'table');
     order.kotSent = Object.assign({}, saved.kotSent||{});
     order.kotRound = saved.kotRound || 0;
+    order.kotHistory = (saved.kotHistory||[]).slice();
     order.taxManuallySet = saved.taxManuallySet || false;
   } else {
     order.items = [];
@@ -3550,6 +3556,7 @@ function switchToTable(tableId, tableName) {
     order.locationType = 'table';
     order.kotSent = {};
     order.kotRound = 0;
+    order.kotHistory = [];
     order.taxManuallySet = false;
   }
 }
@@ -3612,8 +3619,62 @@ function updateCustStamps(){
 
 function setPOSCat(c){ posCat=c; document.getElementById('pos-cat-tabs').innerHTML=CATS.map(x=>`<button class="cat-tab ${posCat===x?'active':''}" onclick="setPOSCat('${x}')">${x}</button>`).join(''); renderPOSMenu(); }
 
+// ── SMART MENU SEARCH ────────────────────────────────────────
+// Ranked matching so a single letter or a few letters immediately narrow a
+// long menu. Handles: prefix match, any-word prefix ("bc" -> "Butter Chicken"
+// via initials), plain substring, and a loose subsequence fallback for typos
+// / partial typing ("btrchk" -> "Butter Chicken").
+function menuSearchScore(item, q) {
+  if (!q) return 0;
+  var name = (item.name || '').toLowerCase();
+  var cat  = (item.category || '').toLowerCase();
+  var words = name.split(/\s+/).filter(Boolean);
+  var initials = words.map(function(w){ return w.charAt(0); }).join('');
+
+  if (name === q) return 1000;
+  if (name.indexOf(q) === 0) return 900;                       // starts with
+  if (initials.indexOf(q) === 0) return 850;                   // "bc" -> butter chicken
+  for (var i = 0; i < words.length; i++) {
+    if (words[i].indexOf(q) === 0) return 800 - i;             // any word starts with
+  }
+  if (name.indexOf(q) !== -1) return 700;                      // contains
+  if (cat.indexOf(q) !== -1) return 500;                       // category match
+
+  // Loose subsequence: every letter of q appears in order within the name
+  var qi = 0;
+  for (var j = 0; j < name.length && qi < q.length; j++) {
+    if (name.charAt(j) === q.charAt(qi)) qi++;
+  }
+  if (qi === q.length) return 300;
+  return -1; // no match
+}
+
+function searchMenuItems(list, rawQuery) {
+  var q = (rawQuery || '').trim().toLowerCase();
+  if (!q) return list;
+  var scored = [];
+  list.forEach(function(m) {
+    var sc = menuSearchScore(m, q);
+    if (sc >= 0) scored.push({ m: m, sc: sc });
+  });
+  scored.sort(function(a, b) { return b.sc - a.sc || a.m.name.localeCompare(b.m.name); });
+  return scored.map(function(x){ return x.m; });
+}
+
+function clearPosSearch(){
+  var inp = document.getElementById('pos-search');
+  if (inp) inp.value = '';
+  renderPOSMenu();
+}
+
 function renderPOSMenu(){
-  const items=posCat==='All'?db.menu:db.menu.filter(m=>m.category===posCat);
+  var searchQ = (document.getElementById('pos-search')||{}).value || '';
+  var clearBtn = document.getElementById('pos-search-clear');
+  if (clearBtn) clearBtn.style.display = searchQ ? '' : 'none';
+  // While searching, ignore the category filter so results come from the
+  // WHOLE menu — otherwise a match sitting in another category looks missing.
+  var base = searchQ.trim() ? db.menu : (posCat==='All' ? db.menu : db.menu.filter(m=>m.category===posCat));
+  const items = searchMenuItems(base, searchQ);
   document.getElementById('pos-menu-grid').innerHTML=items.map(function(m){
     const inOrder = order.items.find(function(i){return i.menuId===m.id;});
     const qty = inOrder ? inOrder.qty : 0;
@@ -3623,7 +3684,7 @@ function renderPOSMenu(){
       + '<div class="mi-name">'+esc(m.name)+'</div>'
       + '<div class="mi-price">'+fmt(m.price)+'</div>'
       + '</div>';
-  }).join('')||'<div style="grid-column:1/-1;text-align:center;padding:1.5rem;color:#6B7A99;opacity:0.6">No items in this category.</div>';
+  }).join('')||'<div style="grid-column:1/-1;text-align:center;padding:1.5rem;color:#6B7A99;opacity:0.6">'+(searchQ.trim()?'"'+esc(searchQ)+'" ke liye koi item nahi mila.':'No items in this category.')+'</div>';
 }
 
 function addToOrder(menuId){
@@ -3816,10 +3877,17 @@ function sendKOTRound(forceMode) {
     order.kotSent[it.menuId] = it.qty;
   });
 
+  // Keep a record of exactly what each round contained, so a damaged/lost
+  // slip can be re-printed later. Purely additive — nothing in the existing
+  // send flow reads this.
+  if (!order.kotHistory) order.kotHistory = [];
+  order.kotHistory.push({ round: roundNum, items: newItems.slice(), at: new Date().toISOString() });
+
   // Persist into per-table storage too
   if (order.tableId && tableOrders[order.tableId]) {
     tableOrders[order.tableId].kotSent = Object.assign({}, order.kotSent);
     tableOrders[order.tableId].kotRound = order.kotRound;
+    tableOrders[order.tableId].kotHistory = order.kotHistory.slice();
   }
 
   renderOrderItems();
@@ -3873,6 +3941,58 @@ function printKOTRoundViaOverlay(items, roundNum) {
   overlay.style.display = 'block';
 }
 
+// ── KOT REPRINT ──────────────────────────────────────────────
+// Re-prints an ALREADY-dispatched round (e.g. the slip tore or smudged).
+// Deliberately does NOT touch order.kotRound / order.kotSent and does NOT
+// create another kitchen ticket — it is purely a re-print of existing paper,
+// so the live send flow and the Kitchen queue stay exactly as they were.
+function showReprintKotModal() {
+  var hist = order.kotHistory || [];
+  if (!hist.length) { toast('Abhi tak koi KOT bheja nahi gaya.', '#FF6B35'); return; }
+  var mode = getPrinterMode();
+  var rows = hist.slice().reverse().map(function(h) {
+    var itemsTxt = h.items.map(function(i){ return i.qty + 'x ' + i.name; }).join(', ');
+    var btns = '';
+    if (mode === 'bt') {
+      btns = '<button class="btn btn-sm btn-outline" data-r="'+h.round+'" onclick="reprintKotRound(this.dataset.r,\'bt\')">📡 Reprint</button>';
+    } else if (mode === 'normal') {
+      btns = '<button class="btn btn-sm btn-outline" data-r="'+h.round+'" onclick="reprintKotRound(this.dataset.r,\'normal\')">🖨️ Reprint</button>';
+    } else {
+      btns = '<button class="btn btn-sm btn-outline" data-r="'+h.round+'" onclick="reprintKotRound(this.dataset.r,\'bt\')">📡</button>'
+           + '<button class="btn btn-sm btn-outline" style="margin-left:4px" data-r="'+h.round+'" onclick="reprintKotRound(this.dataset.r,\'normal\')">🖨️</button>';
+    }
+    return '<div style="background:#F7F9FF;border:1px solid #E2E8F5;border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+      + '<div style="flex:1"><div style="font-weight:800;font-size:0.86rem">Round ' + h.round + '</div>'
+      + '<div style="font-size:0.74rem;color:#6B7A99;margin-top:2px">' + esc(itemsTxt) + '</div>'
+      + '<div style="font-size:0.66rem;color:#9CA3AF;margin-top:2px">' + fmtTime(h.at) + '</div></div>'
+      + '<div style="white-space:nowrap">' + btns + '</div>'
+      + '</div></div>';
+  }).join('');
+
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🔄 Reprint KOT</div>'
+    + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Slip kharab ho gayi? Wahi KOT dobara nikaal lein — kitchen ko naya order nahi jaayega, sirf print dobara hoga.</div>'
+    + rows
+    + '<button class="btn btn-outline btn-full" style="margin-top:4px" onclick="closeModal()">Close</button>';
+  openModal();
+}
+
+function reprintKotRound(roundNum, mode) {
+  var r = parseInt(roundNum);
+  var h = (order.kotHistory || []).find(function(x){ return x.round === r; });
+  if (!h) { toast('Yeh round nahi mila.', '#FF6B35'); return; }
+  closeModal();
+  if (mode === 'bt') {
+    if (typeof btConnected !== 'undefined' && btConnected) printKOTRoundViaBT(h.items, h.round);
+    else toast('Bluetooth printer connect nahi hai!', '#FF6B35');
+  } else {
+    printKOTRoundViaOverlay(h.items, h.round);
+  }
+  toast('🔄 Round ' + h.round + ' dobara print kiya gaya (duplicate)', '#FFD700');
+}
+
 function renderKotSendButtons() {
   var area = document.getElementById('kot-send-btn-area');
   if (!area) return;
@@ -3886,6 +4006,10 @@ function renderKotSendButtons() {
       + '<button class="btn btn-outline" style="flex:1" onclick="sendKOTRound(\'bt\')">📡 Bluetooth KOT</button>'
       + '<button class="btn btn-outline" style="flex:1" onclick="sendKOTRound(\'normal\')">🖨️ Print KOT</button>'
       + '</div>';
+  }
+  // Reprint entry point appears only once at least one round has been sent.
+  if ((order.kotHistory || []).length) {
+    area.innerHTML += '<button class="btn btn-outline btn-full" style="margin-top:6px;border-color:#D97706;color:#D97706" onclick="showReprintKotModal()">🔄 Reprint KOT (duplicate)</button>';
   }
 }
 
@@ -4444,7 +4568,9 @@ function quickBill(){ setPage('billing'); }
 
 function renderMenuPage(){
   const q=(document.getElementById('menu-search')||{}).value||'';
-  const items=db.menu.filter(m=>m.name.toLowerCase().includes(q.toLowerCase())||m.category.toLowerCase().includes(q.toLowerCase()));
+  // Same ranked smart search as the billing screen (prefix / initials /
+  // substring / fuzzy) instead of the old strict substring-only filter.
+  const items = searchMenuItems(db.menu, q);
   document.getElementById('menu-list').innerHTML=items.length?items.map(m=>`
     <div class="list-row">
       <div class="list-icon" style="background:#F7F9FF;font-size:1.4rem">${esc(m.icon||'🍽️')}</div>
@@ -5908,6 +6034,16 @@ function closeModalOnBg(e){ if(e.target===document.getElementById('overlay')) cl
 // ╚══════════════════════════════════════════════════════╝
 let voiceRecognition = null;
 let isListening = false;
+// Voice input state — supports slow speech (silence-based finish instead of
+// cutting off at the first pause).
+var voiceSilenceTimer = null;
+var voiceHeardSomething = false;
+var voiceAlreadyProcessed = false;
+var finishVoiceInput = function(){};
+// Accumulated finalised speech for the current mic session, and a running
+// tally of what was added live so we can show one clear summary at the end.
+var voiceFinalText = '';
+var voiceLiveAdded = 0;
 
 function renderSmartSuggestions() {
   const el = document.getElementById('smart-suggestions');
@@ -6021,6 +6157,35 @@ function fuzzyFindMenu(query) {
   return best;
 }
 
+// Parses ONE freshly-spoken phrase and adds any matching items straight into
+// the current order — this is what makes continuous dictation work ("do
+// butter chicken ... ek naan ... teen lassi") without stopping the mic.
+function addItemsFromVoiceChunk(chunk) {
+  var parsed = parseOrderText(chunk);
+  if (!parsed.length) return;
+
+  var addedNames = [];
+  var missed = [];
+  parsed.forEach(function(p) {
+    if (p.match) {
+      var existing = order.items.find(function(i){ return i.menuId === p.match.id; });
+      if (existing) existing.qty += p.qty;
+      else order.items.push({ menuId: p.match.id, name: p.match.name, price: p.match.price, qty: p.qty });
+      addedNames.push(p.qty + '× ' + p.match.name);
+      voiceLiveAdded++;
+    } else if ((p.name || '').trim()) {
+      missed.push(p.name.trim());
+    }
+  });
+
+  if (addedNames.length) {
+    renderOrderItems();
+    toast('✅ ' + addedNames.join(', '), '#00A878');
+  } else if (missed.length) {
+    toast('❓ "' + missed.join(', ') + '" menu mein nahi mila', '#FF6B35');
+  }
+}
+
 function processSmartOrder() {
   const inp = document.getElementById('smart-inp');
   const text = inp.value.trim();
@@ -6040,7 +6205,7 @@ function processSmartOrder() {
       addedCount++;
       resultHTML += `<div class="smart-result-item">
         <span>${p.qty}× ${esc(p.match.icon||'🍽️')} <strong>${esc(p.match.name)}</strong></span>
-        <span class="sr-found">✅ $${(p.match.price * p.qty).toFixed(2)}</span>
+        <span class="sr-found">✅ ${fmt(p.match.price * p.qty)}</span>
       </div>`;
     } else {
       resultHTML += `<div class="smart-result-item">
@@ -6073,7 +6238,9 @@ function toggleVoice() {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
     showVoiceNotSupported(); return;
   }
-  if (isListening) { stopVoice(); return; }
+  // Tapping the mic again ends the dictation session cleanly (shows the
+  // summary) instead of just killing recognition mid-way.
+  if (isListening) { finishVoiceInput(); return; }
   // Ask mic permission first then start
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     navigator.mediaDevices.getUserMedia({audio:true})
@@ -6139,9 +6306,12 @@ function startVoice() {
   try { if(voiceRecognition) { voiceRecognition.stop(); voiceRecognition=null; } } catch(e){}
 
   voiceRecognition = new SR();
-  voiceRecognition.continuous  = false;
+  // continuous:true so a natural pause mid-sentence does NOT end the session.
+  // Previously (continuous:false) anyone speaking slowly got cut off after
+  // their first phrase and the order was processed half-complete.
+  voiceRecognition.continuous  = true;
   voiceRecognition.interimResults = true;
-  voiceRecognition.maxAlternatives = 1;
+  voiceRecognition.maxAlternatives = 3;
   // English (India) — best balance: recognizes English menu names correctly
   // while handling Indian accents well; broadly supported across Android devices
   voiceRecognition.lang = 'en-IN';
@@ -6149,27 +6319,68 @@ function startVoice() {
   var btn = document.getElementById('voice-btn');
   var inp = document.getElementById('smart-inp');
   var voiceTimeout = null;
+  voiceSilenceTimer = null;
+  voiceHeardSomething = false;
+  voiceFinalText = '';
+  voiceLiveAdded = 0;
+
+  // Ends listening and processes whatever was heard. Safe to call more than
+  // once — guarded so a manual stop + silence-timer can't double-process.
+  finishVoiceInput = function() {
+    if(voiceTimeout){ clearTimeout(voiceTimeout); voiceTimeout=null; }
+    if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
+    if(voiceAlreadyProcessed) return;
+    voiceAlreadyProcessed = true;
+    stopVoice();
+    // Items were already added live during speech, so DON'T re-parse the
+    // whole transcript here — that would double every item.
+    if(voiceLiveAdded > 0){
+      toast('🎤 ' + voiceLiveAdded + ' item(s) add ho gaye', '#00A878');
+      var si = document.getElementById('smart-inp');
+      if(si) si.value = '';
+    } else if(voiceHeardSomething){
+      // Nothing matched while speaking — fall back to a full parse so the
+      // person still sees what went wrong.
+      processSmartOrder();
+    }
+  };
+  voiceAlreadyProcessed = false;
 
   voiceRecognition.onstart = function() {
     isListening = true;
     if(btn){ btn.classList.add('listening'); btn.textContent='🔴'; }
-    if(inp) inp.placeholder='🎤 Bol raha hun... order bolein';
-    toast('Bol do order! Jaise: 2 butter chicken 1 naan','#2563EB');
-    // Auto stop after 10 seconds if no result
-    voiceTimeout = setTimeout(function(){ stopVoice(); }, 10000);
+    if(inp) inp.placeholder='🎤 Sun raha hun... ek ke baad ek bolte jaayein';
+    toast('Bolte jaayein — items add hote jaayenge. Rokne ke liye mic dobara dabayein.','#2563EB');
+    // Overall safety cap — generous so slow speakers aren't rushed.
+    voiceTimeout = setTimeout(function(){ finishVoiceInput(); }, 90000);
   };
 
   voiceRecognition.onresult = function(e) {
-    if(voiceTimeout){ clearTimeout(voiceTimeout); voiceTimeout=null; }
-    var transcript = '';
-    for(var i=0;i<e.results.length;i++){
-      transcript += e.results[i][0].transcript;
+    // LIVE MODE: each finalised phrase is added to the order IMMEDIATELY and
+    // the mic keeps listening. So the person taps the mic once and can keep
+    // saying items one after another — they get added as they speak, instead
+    // of everything being parsed only after they stop.
+    var finalNew = '', interim = '';
+    for(var i = e.resultIndex; i < e.results.length; i++){
+      var t = e.results[i][0].transcript;
+      if(e.results[i].isFinal) finalNew += t + ' ';
+      else interim += t;
     }
-    if(inp) inp.value = transcript;
-    if(e.results[e.results.length-1].isFinal) {
-      stopVoice();
-      processSmartOrder();
+
+    if(inp) inp.value = (voiceFinalText + finalNew + interim).trim();
+
+    if(finalNew.trim()){
+      voiceFinalText += finalNew;
+      voiceHeardSomething = true;
+      addItemsFromVoiceChunk(finalNew);
+    } else if(interim.trim()){
+      voiceHeardSomething = true;
     }
+
+    // Only auto-stop after a LONG silence — a short thinking pause must not
+    // end the session, since the person may still have items to say.
+    if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); }
+    voiceSilenceTimer = setTimeout(function(){ finishVoiceInput(); }, 8000);
   };
 
   voiceRecognition.onerror = function(e) {
@@ -6190,6 +6401,10 @@ function startVoice() {
 
   voiceRecognition.onend = function() {
     if(voiceTimeout){ clearTimeout(voiceTimeout); voiceTimeout=null; }
+    // With continuous:true some browsers still fire onend on a long pause.
+    // If we heard speech, treat it as the end of input and process it.
+    if(voiceHeardSomething && !voiceAlreadyProcessed) { finishVoiceInput(); return; }
+    if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
     stopVoice();
   };
 
