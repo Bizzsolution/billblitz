@@ -6057,6 +6057,10 @@ var voiceInstanceSeq = 0;
 // Recently-added phrases (text + timestamp) — blocks the same phrase being
 // re-delivered by Android across a restart from adding the item twice.
 var voiceRecentChunks = [];
+// Buffers finalised speech briefly so word-by-word fragments combine into
+// one complete phrase before matching against the menu.
+var voicePendingBuffer = '';
+var voiceMatchTimer = null;
 
 function renderSmartSuggestions() {
   const el = document.getElementById('smart-suggestions');
@@ -6145,38 +6149,62 @@ function parseOrderText(text) {
   return results;
 }
 
+// Rewritten for higher precision ("Alexa-style") matching. The old version
+// scored a match on ANY substring/word overlap — so a single generic word
+// like "garlic" alone would confidently match a two-word item "Garlic
+// Bread". Combined with Android sometimes finalising speech word-by-word,
+// that was the exact cause of quantities equal to the item's word count
+// (each word independently "found" the same item and bumped its qty).
+//
+// New rule: every word actually spoken must correspond to a word in the
+// menu item (whole-word or a >=3-letter prefix/suffix) — i.e. the person
+// must have said the WHOLE relevant name, not just one word of it. A
+// single spoken word can only match a single-word menu item, never a
+// multi-word one. Among valid candidates, the item whose name is most
+// fully covered by what was said wins (so "chicken biryani" confidently
+// beats "chicken tikka" / "chicken 65" when both share "chicken").
 function fuzzyFindMenu(query) {
   if (!query) return null;
   const q = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  if (!q) return null;
+  const qWords = q.split(/\s+/).filter(Boolean);
   let best = null, bestScore = 0;
+
+  function wordsMatch(a, b) {
+    if (a === b) return true;
+    if (a.length >= 3 && b.indexOf(a) === 0) return true;
+    if (b.length >= 3 && a.indexOf(b) === 0) return true;
+    return false;
+  }
 
   db.menu.forEach(m => {
     const mName = m.name.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-    let score = 0;
+    if (mName === q) { if (100 > bestScore) { bestScore = 100; best = m; } return; }
 
-    if (mName === q) score = 100;                          // exact
-    else if (mName.includes(q) || q.includes(mName)) score = 80; // contains
-    else {
-      // word overlap score
-      const qWords = q.split(/\s+/);
-      const mWords = mName.split(/\s+/);
-      const overlap = qWords.filter(w => mWords.some(mw => mw.includes(w) || w.includes(mw)));
-      score = (overlap.length / Math.max(qWords.length, mWords.length)) * 70;
-    }
+    const mWords = mName.split(/\s+/).filter(Boolean);
+    const matchedQ = qWords.filter(qw => mWords.some(mw => wordsMatch(qw, mw))).length;
+    if (matchedQ !== qWords.length) return; // every spoken word must be accounted for
 
-    if (score > bestScore && score > 25) { bestScore = score; best = m; }
+    // A lone spoken word can never confidently claim a multi-word item —
+    // this is the specific guard against the word-count-as-quantity bug.
+    if (qWords.length === 1 && mWords.length > 1) return;
+
+    const matchedM = mWords.filter(mw => qWords.some(qw => wordsMatch(qw, mw))).length;
+    const coverage = matchedM / mWords.length; // how much of the ITEM's name was said
+    const score = 40 + coverage * 55;          // 40..95
+
+    if (score > bestScore) { bestScore = score; best = m; }
   });
 
-  return best;
+  return bestScore >= 55 ? best : null;
 }
 
 // Parses ONE freshly-spoken phrase and adds any matching items straight into
 // the current order — this is what makes continuous dictation work ("do
 // butter chicken ... ek naan ... teen lassi") without stopping the mic.
 function addItemsFromVoiceChunk(chunk) {
-  // GUARD: Android's speech engine sometimes re-delivers the SAME final
-  // phrase — most often right after recognition auto-restarts, where the
-  // result-index map has been reset and so can't catch it. If we see an
+  // GUARD 1: Android's speech engine sometimes re-delivers the SAME final
+  // phrase — most often right after recognition auto-restarts. If we see an
   // identical phrase again within a few seconds, treat it as a duplicate
   // delivery rather than the person genuinely repeating themselves.
   var norm = (chunk || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -6188,20 +6216,34 @@ function addItemsFromVoiceChunk(chunk) {
   }
   voiceRecentChunks.push({ text: norm, at: now });
 
-  var parsed = parseOrderText(chunk);
-  if (!parsed.length) return;
+  // NOTE: quantity is deliberately NOT parsed from speech at all here.
+  // Every recognised item is added with qty 1 — the person adjusts
+  // quantities manually afterwards (before sending the KOT), exactly as
+  // requested. This also removes the earlier "do/ek/teen" number-word
+  // parsing from the voice path entirely, since it's no longer needed.
+  //
+  // A phrase may still name more than one DISTINCT item ("garlic bread aur
+  // butter chicken"), so we split on natural connectors first, then match
+  // each piece as one complete unit — never word-by-word.
+  var segments = norm
+    .replace(/\band\b|\baur\b|\bplus\b|\balso\b/g, ',')
+    .split(/[,\n]+/)
+    .map(function(s){ return s.trim(); })
+    .filter(Boolean);
+  if (!segments.length) return;
 
   var addedNames = [];
   var missed = [];
-  parsed.forEach(function(p) {
-    if (p.match) {
-      var existing = order.items.find(function(i){ return i.menuId === p.match.id; });
-      if (existing) existing.qty += p.qty;
-      else order.items.push({ menuId: p.match.id, name: p.match.name, price: p.match.price, qty: p.qty });
-      addedNames.push(p.qty + '× ' + p.match.name);
+  segments.forEach(function(seg) {
+    var m = fuzzyFindMenu(seg);
+    if (m) {
+      var existing = order.items.find(function(i){ return i.menuId === m.id; });
+      if (existing) existing.qty += 1;
+      else order.items.push({ menuId: m.id, name: m.name, price: m.price, qty: 1 });
+      addedNames.push(m.name);
       voiceLiveAdded++;
-    } else if ((p.name || '').trim()) {
-      missed.push(p.name.trim());
+    } else {
+      missed.push(seg);
     }
   });
 
@@ -6343,6 +6385,8 @@ function startVoice() {
   voiceLiveAdded       = 0;
   voiceProcessedIdx    = {};   // which result indices are already added
   voiceRecentChunks    = [];
+  voicePendingBuffer   = '';
+  if(voiceMatchTimer){ clearTimeout(voiceMatchTimer); voiceMatchTimer=null; }
   voiceInstanceSeq++;          // invalidate any lingering old instance
   if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
   if(voiceHardTimeout){ clearTimeout(voiceHardTimeout); voiceHardTimeout=null; }
@@ -6390,7 +6434,19 @@ function startVoice() {
       if(finalNew.trim()){
         voiceFinalText += finalNew;
         voiceHeardSomething = true;
-        addItemsFromVoiceChunk(finalNew);
+        // Buffer instead of matching immediately. Android sometimes finalises
+        // ONE spoken item name as several separate word-by-word results
+        // ("garlic", then "bread") — matching each fragment on its own was
+        // exactly what caused quantities equal to the item's word count.
+        // Waiting briefly lets the fragments arrive and combine into the
+        // complete phrase before we try to match anything against the menu.
+        voicePendingBuffer += finalNew;
+        if(voiceMatchTimer){ clearTimeout(voiceMatchTimer); }
+        voiceMatchTimer = setTimeout(function(){
+          var toMatch = voicePendingBuffer;
+          voicePendingBuffer = '';
+          if(toMatch.trim()) addItemsFromVoiceChunk(toMatch);
+        }, 900);
       } else if(interim.trim()){
         voiceHeardSomething = true;
       }
@@ -6451,6 +6507,11 @@ function startVoice() {
     voiceSessionActive    = false;
     if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
     if(voiceHardTimeout){ clearTimeout(voiceHardTimeout); voiceHardTimeout=null; }
+    // Flush anything still sitting in the debounce buffer so the LAST item
+    // said isn't silently dropped just because the mic was closed right
+    // after it.
+    if(voiceMatchTimer){ clearTimeout(voiceMatchTimer); voiceMatchTimer=null; }
+    if(voicePendingBuffer.trim()){ addItemsFromVoiceChunk(voicePendingBuffer); voicePendingBuffer=''; }
     stopVoice();
     if(voiceLiveAdded > 0){
       toast('🎤 ' + voiceLiveAdded + ' item(s) add ho gaye', '#00A878');
