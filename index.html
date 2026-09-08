@@ -6051,6 +6051,12 @@ var voiceSessionActive = false;
 // re-delivery of final results from adding the same item twice.
 var voiceProcessedIdx = {};
 var voiceHardTimeout = null;
+// Increments on every recognition (re)start; used to ignore events arriving
+// late from a previous, already-replaced instance.
+var voiceInstanceSeq = 0;
+// Recently-added phrases (text + timestamp) — blocks the same phrase being
+// re-delivered by Android across a restart from adding the item twice.
+var voiceRecentChunks = [];
 
 function renderSmartSuggestions() {
   const el = document.getElementById('smart-suggestions');
@@ -6168,6 +6174,20 @@ function fuzzyFindMenu(query) {
 // the current order — this is what makes continuous dictation work ("do
 // butter chicken ... ek naan ... teen lassi") without stopping the mic.
 function addItemsFromVoiceChunk(chunk) {
+  // GUARD: Android's speech engine sometimes re-delivers the SAME final
+  // phrase — most often right after recognition auto-restarts, where the
+  // result-index map has been reset and so can't catch it. If we see an
+  // identical phrase again within a few seconds, treat it as a duplicate
+  // delivery rather than the person genuinely repeating themselves.
+  var norm = (chunk || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!norm) return;
+  var now = Date.now();
+  voiceRecentChunks = voiceRecentChunks.filter(function(c){ return now - c.at < 6000; });
+  if (voiceRecentChunks.some(function(c){ return c.text === norm; })) {
+    return; // duplicate delivery — already added
+  }
+  voiceRecentChunks.push({ text: norm, at: now });
+
   var parsed = parseOrderText(chunk);
   if (!parsed.length) return;
 
@@ -6322,11 +6342,19 @@ function startVoice() {
   voiceFinalText       = '';
   voiceLiveAdded       = 0;
   voiceProcessedIdx    = {};   // which result indices are already added
+  voiceRecentChunks    = [];
+  voiceInstanceSeq++;          // invalidate any lingering old instance
   if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
   if(voiceHardTimeout){ clearTimeout(voiceHardTimeout); voiceHardTimeout=null; }
 
   function buildRecognition() {
     var rec = new SR();
+    // Every restart gets a unique id. Android often keeps delivering events
+    // from the OLD instance for a moment after we've built a new one — those
+    // late events were re-adding items that had already been added.
+    var myId = ++voiceInstanceSeq;
+    rec._voiceId = myId;
+    rec._isCurrent = function(){ return myId === voiceInstanceSeq; };
     rec.continuous      = true;
     rec.interimResults  = true;
     rec.maxAlternatives = 3;
@@ -6339,6 +6367,7 @@ function startVoice() {
     };
 
     rec.onresult = function(e) {
+      if(!rec._isCurrent()) return;   // stale instance — ignore
       // DEDUPE BY RESULT INDEX. Chrome re-delivers already-final results in
       // later onresult events (and `resultIndex` is not reliable across
       // Android builds), which is what was adding every item twice. Tracking
@@ -6389,16 +6418,19 @@ function startVoice() {
     };
 
     rec.onend = function() {
+      if(!rec._isCurrent()) return;   // stale instance — ignore
       // AUTO-RESTART. Android Chrome ends recognition after each pause even
       // with continuous:true — previously that ended the whole session, so
       // the mic had to be tapped again for every single item. Restarting
       // here keeps ONE tap listening until the person actually stops.
       if(voiceSessionActive && !voiceAlreadyProcessed){
         try {
+          // Fully detach the finished instance so it can't fire anything else.
+          try { rec.onresult=null; rec.onend=null; rec.onerror=null; } catch(e2){}
           voiceRecognition = buildRecognition();
-          // Indices restart from 0 on a fresh instance, so the dedupe map
-          // must reset too — the already-spoken text is safely kept in
-          // voiceFinalText and its items are already in the order.
+          // Indices restart from 0 on a fresh instance, so the index map must
+          // reset. Duplicate PHRASES across restarts are caught separately by
+          // the recent-phrase guard in addItemsFromVoiceChunk().
           voiceProcessedIdx = {};
           voiceRecognition.start();
           return;
