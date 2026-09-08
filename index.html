@@ -6044,6 +6044,13 @@ var finishVoiceInput = function(){};
 // tally of what was added live so we can show one clear summary at the end.
 var voiceFinalText = '';
 var voiceLiveAdded = 0;
+// True while ONE mic session is running. Recognition may internally stop and
+// be auto-restarted many times within a single session.
+var voiceSessionActive = false;
+// Result indices already turned into order items — prevents Chrome's
+// re-delivery of final results from adding the same item twice.
+var voiceProcessedIdx = {};
+var voiceHardTimeout = null;
 
 function renderSmartSuggestions() {
   const el = document.getElementById('smart-suggestions');
@@ -6303,114 +6310,132 @@ function startVoice() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR) { showVoiceNotSupported(); return; }
 
-  try { if(voiceRecognition) { voiceRecognition.stop(); voiceRecognition=null; } } catch(e){}
-
-  voiceRecognition = new SR();
-  // continuous:true so a natural pause mid-sentence does NOT end the session.
-  // Previously (continuous:false) anyone speaking slowly got cut off after
-  // their first phrase and the order was processed half-complete.
-  voiceRecognition.continuous  = true;
-  voiceRecognition.interimResults = true;
-  voiceRecognition.maxAlternatives = 3;
-  // English (India) — best balance: recognizes English menu names correctly
-  // while handling Indian accents well; broadly supported across Android devices
-  voiceRecognition.lang = 'en-IN';
+  try { if(voiceRecognition) { voiceRecognition.onend=null; voiceRecognition.stop(); voiceRecognition=null; } } catch(e){}
 
   var btn = document.getElementById('voice-btn');
   var inp = document.getElementById('smart-inp');
-  var voiceTimeout = null;
-  voiceSilenceTimer = null;
-  voiceHeardSomething = false;
-  voiceFinalText = '';
-  voiceLiveAdded = 0;
 
-  // Ends listening and processes whatever was heard. Safe to call more than
-  // once — guarded so a manual stop + silence-timer can't double-process.
+  // ── Session state (one mic session = many spoken items) ──
+  voiceSessionActive   = true;
+  voiceAlreadyProcessed= false;
+  voiceHeardSomething  = false;
+  voiceFinalText       = '';
+  voiceLiveAdded       = 0;
+  voiceProcessedIdx    = {};   // which result indices are already added
+  if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
+  if(voiceHardTimeout){ clearTimeout(voiceHardTimeout); voiceHardTimeout=null; }
+
+  function buildRecognition() {
+    var rec = new SR();
+    rec.continuous      = true;
+    rec.interimResults  = true;
+    rec.maxAlternatives = 3;
+    rec.lang            = 'en-IN';
+
+    rec.onstart = function() {
+      isListening = true;
+      if(btn){ btn.classList.add('listening'); btn.textContent='🔴'; }
+      if(inp) inp.placeholder='🎤 Sun raha hun... ek ke baad ek bolte jaayein';
+    };
+
+    rec.onresult = function(e) {
+      // DEDUPE BY RESULT INDEX. Chrome re-delivers already-final results in
+      // later onresult events (and `resultIndex` is not reliable across
+      // Android builds), which is what was adding every item twice. Tracking
+      // the indices we've already consumed makes re-delivery harmless.
+      var finalNew = '', interim = '';
+      for(var i = 0; i < e.results.length; i++){
+        var txt = e.results[i][0].transcript;
+        if(e.results[i].isFinal){
+          if(!voiceProcessedIdx[i]){
+            voiceProcessedIdx[i] = true;
+            finalNew += txt + ' ';
+          }
+        } else {
+          interim += txt;
+        }
+      }
+
+      if(inp) inp.value = (voiceFinalText + finalNew + interim).trim();
+
+      if(finalNew.trim()){
+        voiceFinalText += finalNew;
+        voiceHeardSomething = true;
+        addItemsFromVoiceChunk(finalNew);
+      } else if(interim.trim()){
+        voiceHeardSomething = true;
+      }
+
+      // Long silence = person is done. Short thinking pauses are fine.
+      if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); }
+      voiceSilenceTimer = setTimeout(function(){ finishVoiceInput(); }, 8000);
+    };
+
+    rec.onerror = function(e) {
+      // 'no-speech' / 'aborted' during a long dictation are NOT fatal — the
+      // auto-restart in onend keeps the session alive.
+      if(e.error === 'no-speech' || e.error === 'aborted') return;
+      var msgs = {
+        'not-allowed':     'Microphone block hai! Settings mein allow karo.',
+        'network':         'Network error. Internet check karo.',
+        'audio-capture':   'Microphone kaam nahi kar raha.',
+        'service-not-allowed': 'Voice service allow nahi. HTTPS pe use karo.'
+      };
+      var msg = msgs[e.error] || ('Error: '+e.error);
+      voiceSessionActive = false;
+      if(msg) toast(msg,'#FF6B35');
+      if(e.error==='not-allowed') showMicPermissionGuide();
+      finishVoiceInput();
+    };
+
+    rec.onend = function() {
+      // AUTO-RESTART. Android Chrome ends recognition after each pause even
+      // with continuous:true — previously that ended the whole session, so
+      // the mic had to be tapped again for every single item. Restarting
+      // here keeps ONE tap listening until the person actually stops.
+      if(voiceSessionActive && !voiceAlreadyProcessed){
+        try {
+          voiceRecognition = buildRecognition();
+          // Indices restart from 0 on a fresh instance, so the dedupe map
+          // must reset too — the already-spoken text is safely kept in
+          // voiceFinalText and its items are already in the order.
+          voiceProcessedIdx = {};
+          voiceRecognition.start();
+          return;
+        } catch(err) { /* fall through to finish */ }
+      }
+      if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
+      stopVoice();
+    };
+
+    return rec;
+  }
+
+  // Ends the whole dictation session and shows the summary. Safe to call
+  // more than once.
   finishVoiceInput = function() {
-    if(voiceTimeout){ clearTimeout(voiceTimeout); voiceTimeout=null; }
-    if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
     if(voiceAlreadyProcessed) return;
     voiceAlreadyProcessed = true;
+    voiceSessionActive    = false;
+    if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
+    if(voiceHardTimeout){ clearTimeout(voiceHardTimeout); voiceHardTimeout=null; }
     stopVoice();
-    // Items were already added live during speech, so DON'T re-parse the
-    // whole transcript here — that would double every item.
     if(voiceLiveAdded > 0){
       toast('🎤 ' + voiceLiveAdded + ' item(s) add ho gaye', '#00A878');
-      var si = document.getElementById('smart-inp');
-      if(si) si.value = '';
+      if(inp) inp.value = '';
     } else if(voiceHeardSomething){
-      // Nothing matched while speaking — fall back to a full parse so the
-      // person still sees what went wrong.
       processSmartOrder();
     }
   };
-  voiceAlreadyProcessed = false;
 
-  voiceRecognition.onstart = function() {
-    isListening = true;
-    if(btn){ btn.classList.add('listening'); btn.textContent='🔴'; }
-    if(inp) inp.placeholder='🎤 Sun raha hun... ek ke baad ek bolte jaayein';
-    toast('Bolte jaayein — items add hote jaayenge. Rokne ke liye mic dobara dabayein.','#2563EB');
-    // Overall safety cap — generous so slow speakers aren't rushed.
-    voiceTimeout = setTimeout(function(){ finishVoiceInput(); }, 90000);
-  };
-
-  voiceRecognition.onresult = function(e) {
-    // LIVE MODE: each finalised phrase is added to the order IMMEDIATELY and
-    // the mic keeps listening. So the person taps the mic once and can keep
-    // saying items one after another — they get added as they speak, instead
-    // of everything being parsed only after they stop.
-    var finalNew = '', interim = '';
-    for(var i = e.resultIndex; i < e.results.length; i++){
-      var t = e.results[i][0].transcript;
-      if(e.results[i].isFinal) finalNew += t + ' ';
-      else interim += t;
-    }
-
-    if(inp) inp.value = (voiceFinalText + finalNew + interim).trim();
-
-    if(finalNew.trim()){
-      voiceFinalText += finalNew;
-      voiceHeardSomething = true;
-      addItemsFromVoiceChunk(finalNew);
-    } else if(interim.trim()){
-      voiceHeardSomething = true;
-    }
-
-    // Only auto-stop after a LONG silence — a short thinking pause must not
-    // end the session, since the person may still have items to say.
-    if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); }
-    voiceSilenceTimer = setTimeout(function(){ finishVoiceInput(); }, 8000);
-  };
-
-  voiceRecognition.onerror = function(e) {
-    if(voiceTimeout){ clearTimeout(voiceTimeout); voiceTimeout=null; }
-    stopVoice();
-    var msgs = {
-      'not-allowed':     'Microphone block hai! Settings mein allow karo.',
-      'no-speech':       'Koi awaaz nahi suni. Dobara try karo.',
-      'network':         'Network error. Internet check karo.',
-      'audio-capture':   'Microphone kaam nahi kar raha.',
-      'service-not-allowed': 'Voice service allow nahi. HTTPS pe use karo.',
-      'aborted':         ''
-    };
-    var msg = msgs[e.error] || ('Error: '+e.error);
-    if(msg) toast(msg,'#FF6B35');
-    if(e.error==='not-allowed') showMicPermissionGuide();
-  };
-
-  voiceRecognition.onend = function() {
-    if(voiceTimeout){ clearTimeout(voiceTimeout); voiceTimeout=null; }
-    // With continuous:true some browsers still fire onend on a long pause.
-    // If we heard speech, treat it as the end of input and process it.
-    if(voiceHeardSomething && !voiceAlreadyProcessed) { finishVoiceInput(); return; }
-    if(voiceSilenceTimer){ clearTimeout(voiceSilenceTimer); voiceSilenceTimer=null; }
-    stopVoice();
-  };
+  toast('Bolte jaayein — items add hote jaayenge. Rokne ke liye mic dobara dabayein.','#2563EB');
+  voiceHardTimeout = setTimeout(function(){ finishVoiceInput(); }, 120000);
 
   try {
+    voiceRecognition = buildRecognition();
     voiceRecognition.start();
   } catch(e) {
+    voiceSessionActive = false;
     stopVoice();
     toast('Voice start nahi hua. Dobara try karo.','#FF6B35');
   }
@@ -6422,7 +6447,13 @@ function stopVoice() {
   if(btn){ btn.classList.remove('listening'); btn.textContent='🎤'; }
   var inp = document.getElementById('smart-inp');
   if(inp) inp.placeholder='e.g. "2 butter chicken, 1 naan, 3 lassi"';
-  if(voiceRecognition){ try{ voiceRecognition.stop(); }catch(e){} voiceRecognition=null; }
+  if(voiceRecognition){
+    // Detach onend BEFORE stopping, otherwise the auto-restart handler would
+    // immediately spin recognition back up when we're deliberately stopping.
+    try{ voiceRecognition.onend = null; }catch(e){}
+    try{ voiceRecognition.stop(); }catch(e){}
+    voiceRecognition = null;
+  }
 }
 
 // ╔══════════════════════════════════════════════════════╗
