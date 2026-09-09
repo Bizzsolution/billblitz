@@ -831,6 +831,11 @@ tr:nth-child(even) td{background:#FFFFFF;}
         <div class="rb-name">Kitchen</div>
         <div class="rb-desc">Sirf kitchen orders — kitchen device ke liye</div>
       </button>
+      <button class="role-btn" id="role-order_manager" onclick="selectRole('order_manager')" style="grid-column:1/-1;display:none">
+        <div class="rb-icon">📝</div>
+        <div class="rb-name">Order Manager</div>
+        <div class="rb-desc">Sirf KOT bhejna aur Bill generate karna</div>
+      </button>
     </div>
     <div class="pin-dots" id="pin-dots">
       <div class="pin-dot" id="pd0"></div>
@@ -1254,7 +1259,23 @@ tr:nth-child(even) td{background:#FFFFFF;}
           <label class="form-label">🍳 Kitchen PIN <span style="font-weight:400;color:#9CA3AF">(kitchen device ke liye — sirf Kitchen tab dikhega)</span></label>
           <input class="form-inp" id="set-kitchen-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
         </div>
+        <div class="form-group" id="set-om-pin-group" style="display:none">
+          <label class="form-label">📝 Order Manager PIN <span style="font-weight:400;color:#9CA3AF">(sirf KOT + Bill generate kar sakega)</span></label>
+          <input class="form-inp" id="set-order_manager-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
+        </div>
         <button class="btn btn-primary btn-full" onclick="savePINs()">Save PINs</button>
+      </div>
+    </div>
+
+    <!-- Order Manager authorization (feature-gated, appears only if enabled) -->
+    <div class="card" style="margin-bottom:10px;display:none" id="om-auth-card">
+      <div class="card-header"><div class="card-title">📝 Order Manager Permissions</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Default: Order Manager sirf KOT bhej sakta hai aur Bill generate kar sakta hai. Payment collect karna aur table clear karna Cashier ka kaam rehta hai — jab tak yahan se authorize na karein.</div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="om-can-clear" onchange="saveOrderManagerAuth()" style="width:20px;height:20px;accent-color:#16A34A"/>
+          <span style="font-size:0.85rem;font-weight:600">Order Manager ko bhi Payment Done / Clear Table karne dein</span>
+        </label>
       </div>
     </div>
 
@@ -2543,7 +2564,7 @@ let currentRole = null;
 let pinBuffer = '';
 let selectedLoginRole = 'owner';
 
-const DEFAULT_PINS = { owner: '1234', cashier: '0000', kitchen: '1111' };
+const DEFAULT_PINS = { owner: '1234', cashier: '0000', kitchen: '1111', order_manager: '2222' };
 const CASHIER_BLOCKED_PAGES = ['reports','settings','purchases'];
 const ACCESS_LABELS = {
   menu: '🍜 Edit Menu',
@@ -2565,6 +2586,7 @@ function selectRole(r){
   document.getElementById('role-owner').classList.toggle('selected', r==='owner');
   document.getElementById('role-cashier').classList.toggle('selected', r==='cashier');
   var rk=document.getElementById('role-kitchen'); if(rk) rk.classList.toggle('selected', r==='kitchen');
+  var rom=document.getElementById('role-order_manager'); if(rom) rom.classList.toggle('selected', r==='order_manager');
 }
 
 function pinKey(k){
@@ -2638,6 +2660,12 @@ function loadFeaturesFromLicense(d) {
 }
 
 function applyFeatureGating() {
+  // Order Manager is an OPTIONAL role — the login button only shows for
+  // clients whose plan has this feature enabled. Runs every time features
+  // are (re)loaded, including live admin toggles, so it updates instantly.
+  var omBtn = document.getElementById('role-order_manager');
+  if (omBtn) omBtn.style.display = hasFeature('order_manager_role') ? '' : 'none';
+
   // Map feature id → nav element ids
   var navMap = {
     'tables':    ['nav-tables',    'sb-tables'],
@@ -2759,9 +2787,9 @@ function checkPin(){
     currentRole = selectedLoginRole;
     document.getElementById('login-screen').style.display = 'none';
     // Mobile header badge
-    var ROLE_LABEL = {owner:'👑 Owner', cashier:'🧾 Cashier', kitchen:'🍳 Kitchen'};
-    var ROLE_ICON  = {owner:'👑', cashier:'🧾', kitchen:'🍳'};
-    var ROLE_NAME  = {owner:'Owner', cashier:'Cashier', kitchen:'Kitchen'};
+    var ROLE_LABEL = {owner:'👑 Owner', cashier:'🧾 Cashier', kitchen:'🍳 Kitchen', order_manager:'📝 Order Mgr'};
+    var ROLE_ICON  = {owner:'👑', cashier:'🧾', kitchen:'🍳', order_manager:'📝'};
+    var ROLE_NAME  = {owner:'Owner', cashier:'Cashier', kitchen:'Kitchen', order_manager:'Order Manager'};
     const badge = document.getElementById('role-display');
     badge.textContent = ROLE_LABEL[currentRole] || '🧾 Cashier';
     badge.className = 'role-badge ' + (currentRole==='owner'?'role-owner':'role-cashier');
@@ -2792,6 +2820,18 @@ function checkPin(){
   }
 }
 
+// Owner controls, per Settings toggle, whether Order Manager is ALSO
+// allowed to mark payment received / clear a table or room. By default
+// (toggle off) they do NOT get this — that stays the Cashier's job,
+// matching the requested workflow: Order Manager generates the bill, the
+// customer pays at the counter, Cashier confirms payment & clears the table.
+// tableAction()/roomAction() call this directly when deciding whether to
+// render those two buttons at all.
+function canClearTableOrRoom() {
+  if (currentRole === 'order_manager') return !!(db.settings && db.settings.orderManagerCanClearTable);
+  return true; // owner/cashier/unrestricted roles always could already
+}
+
 function applyRoleRestrictions(){
   // Settings gear in the header is owner-only (Settings page itself is in
   // CASHIER_BLOCKED_PAGES). The Printer button stays visible for EVERY role,
@@ -2817,6 +2857,23 @@ function applyRoleRestrictions(){
     document.querySelectorAll('.hdr-btn,.dh-btn').forEach(function(b){
       var t=(b.textContent||'').trim();
       if(t.indexOf('Bill')!==-1) b.style.display='none';
+    });
+    return;
+  }
+
+  // ORDER MANAGER — narrow role for whoever just takes orders, sends KOT,
+  // and generates the bill. Everything else (Manage hub: Staff/Expenses/
+  // Menu/Stock/Purchases/Reports, Settings, Kitchen queue, Loyalty) is
+  // hidden — they only get Billing + Tables + Rooms (to pick a table and
+  // work the order). "Payment Done" / "Clear Table" are handled separately
+  // below (owner-authorisable).
+  if (currentRole === 'order_manager') {
+    document.querySelectorAll('.bnav,.sb-item').forEach(function(b){
+      var allowedIds = ['nav-billing','sb-billing','nav-tables','sb-tables','nav-rooms','sb-rooms'];
+      b.style.display = allowedIds.indexOf(b.id) !== -1 ? '' : 'none';
+    });
+    ['hdr-alerts-btn','dh-alerts-btn'].forEach(function(id){
+      var el=document.getElementById(id); if(el) el.style.display='none';
     });
     return;
   }
@@ -3321,6 +3378,15 @@ function renderSettingsPage(){
   renderWeekOffGrid();
   renderLocationStatus();
   renderAttendanceRulesUI();
+  // Order Manager PIN field + authorization card only make sense when this
+  // client actually has the feature enabled.
+  var omEnabled = hasFeature('order_manager_role');
+  var omPinGroup = document.getElementById('set-om-pin-group');
+  if(omPinGroup) omPinGroup.style.display = omEnabled ? '' : 'none';
+  var omAuthCard = document.getElementById('om-auth-card');
+  if(omAuthCard) omAuthCard.style.display = omEnabled ? '' : 'none';
+  var omChk = document.getElementById('om-can-clear');
+  if(omChk) omChk.checked = !!(db.settings && db.settings.orderManagerCanClearTable);
   var pmSel = document.getElementById('printer-mode-sel');
   if(pmSel) pmSel.value = db.settings?.printerMode || 'both';
   var op = document.getElementById('set-owner-phone');
@@ -3376,17 +3442,29 @@ function savePINs(){
   const op = document.getElementById('set-owner-pin').value;
   const cp = document.getElementById('set-cashier-pin').value;
   const kp = (document.getElementById('set-kitchen-pin')||{}).value || '';
-  if((op && op.length!==4)||( cp && cp.length!==4)||( kp && kp.length!==4)){ toast('PINs must be 4 digits','#FF6B35'); return; }
+  const omp = (document.getElementById('set-order_manager-pin')||{}).value || '';
+  if((op && op.length!==4)||( cp && cp.length!==4)||( kp && kp.length!==4)||( omp && omp.length!==4)){ toast('PINs must be 4 digits','#FF6B35'); return; }
   if(!db.settings) db.settings = {};
   if(!db.settings.pins) db.settings.pins = {};
   if(op) db.settings.pins.owner = hashPin(op);
   if(cp) db.settings.pins.cashier = hashPin(cp);
   if(kp) db.settings.pins.kitchen = hashPin(kp);
+  if(omp) db.settings.pins.order_manager = hashPin(omp);
   save();
   document.getElementById('set-owner-pin').value = '';
   document.getElementById('set-cashier-pin').value = '';
   if(document.getElementById('set-kitchen-pin')) document.getElementById('set-kitchen-pin').value = '';
+  if(document.getElementById('set-order_manager-pin')) document.getElementById('set-order_manager-pin').value = '';
   toast('PINs updated! 🔐');
+}
+
+function saveOrderManagerAuth() {
+  var chk = document.getElementById('om-can-clear');
+  if (!chk) return;
+  if (!db.settings) db.settings = {};
+  db.settings.orderManagerCanClearTable = chk.checked;
+  save();
+  toast(chk.checked ? '✅ Order Manager ab Payment/Clear kar sakta hai' : 'Order Manager ka Payment/Clear access hata diya', chk.checked ? '#00A878' : '#FF6B35');
 }
 
 function saveAccessControls(){
@@ -6746,8 +6824,8 @@ function tableAction(tableId) {
       '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();loadTableToBilling(this.dataset.tid,this.dataset.tname)">➕ Add Items</button>'+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
-      (o?'<button class="btn btn-outline btn-full" onclick="closeModal();completeTablePayment(\''+t.id+'\')">✅ Payment Done</button>':'')+
-      '<button class="btn btn-red btn-full" onclick="closeModal();clearTable(\''+t.id+'\')">🗑️ Clear Table</button>'+
+      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();completeTablePayment(\''+t.id+'\')">✅ Payment Done</button>':'')+
+      (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearTable(\''+t.id+'\')">🗑️ Clear Table</button>':'')+
       '</div>';
     openModal();
   }
@@ -6890,8 +6968,8 @@ function roomAction(roomId) {
       '<button class="btn btn-primary btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="closeModal();loadRoomToBilling(this.dataset.rid,this.dataset.rname)">➕ Add Items</button>'+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
-      (o?'<button class="btn btn-outline btn-full" onclick="closeModal();completeRoomPayment(\''+r.id+'\')">✅ Payment Done</button>':'')+
-      '<button class="btn btn-red btn-full" onclick="closeModal();clearRoom(\''+r.id+'\')">🗑️ Clear Room</button>'+
+      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();completeRoomPayment(\''+r.id+'\')">✅ Payment Done</button>':'')+
+      (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearRoom(\''+r.id+'\')">🗑️ Clear Room</button>':'')+
       '</div>';
     openModal();
   }
