@@ -3412,21 +3412,31 @@ function renderDashboardOrders() {
   if (!el) return;
 
   if (filter === 'active') {
-    // Currently open (unbilled) tables & rooms with items in progress
+    // Currently open (unbilled) tables & rooms with items in progress.
+    // IMPORTANT: tableOrders[tableId] is only written back inside
+    // switchToTable() — i.e. at the moment you leave THAT table for another.
+    // If someone adds items to a table and then comes straight to the
+    // Dashboard (without switching to a different table first),
+    // tableOrders[that table] is still the OLD/stale snapshot from before
+    // those items were added. For the ONE table/room currently loaded into
+    // the live `order` object, we must read `order.items` directly instead
+    // — that's what was showing item counts but ₹0.00.
     var activeLocs = [];
     (db.tables || []).forEach(function(t) {
-      var to = tableOrders[t.id];
-      if (t.status !== 'empty' || (to && to.items && to.items.length)) {
-        var itemCount = to ? to.items.reduce(function(s,i){return s+i.qty;},0) : 0;
-        var runningTotal = to ? to.items.reduce(function(s,i){return s+i.price*i.qty;},0) : 0;
+      var isLive = (order.tableId === t.id);
+      var items = isLive ? order.items : ((tableOrders[t.id] && tableOrders[t.id].items) || []);
+      if (t.status !== 'empty' || items.length) {
+        var itemCount = items.reduce(function(s,i){return s+i.qty;},0);
+        var runningTotal = items.reduce(function(s,i){return s+i.price*i.qty;},0);
         activeLocs.push({ id:t.id, name:t.name, icon:'🪑', status:t.status, itemCount:itemCount, total:runningTotal });
       }
     });
     (db.rooms || []).forEach(function(r) {
-      var ro = tableOrders[r.id];
-      if (r.status !== 'empty' || (ro && ro.items && ro.items.length)) {
-        var itemCount2 = ro ? ro.items.reduce(function(s,i){return s+i.qty;},0) : 0;
-        var runningTotal2 = ro ? ro.items.reduce(function(s,i){return s+i.price*i.qty;},0) : 0;
+      var isLiveR = (order.tableId === r.id);
+      var itemsR = isLiveR ? order.items : ((tableOrders[r.id] && tableOrders[r.id].items) || []);
+      if (r.status !== 'empty' || itemsR.length) {
+        var itemCount2 = itemsR.reduce(function(s,i){return s+i.qty;},0);
+        var runningTotal2 = itemsR.reduce(function(s,i){return s+i.price*i.qty;},0);
         activeLocs.push({ id:r.id, name:r.name, icon:'🛏️', status:r.status, itemCount:itemCount2, total:runningTotal2 });
       }
     });
@@ -6624,8 +6634,12 @@ function tableAction(tableId) {
     // there is no db.orders entry yet — the running total lives in
     // tableOrders[]. Previously the amount only ever came from `o`, which is
     // null in that case, so nothing displayed at all for active orders.
-    var liveOrder = tableOrders[t.id];
-    var displayTotal = o ? o.total : (liveOrder ? liveOrder.items.reduce(function(s,i){return s+i.price*i.qty;},0) : 0);
+    // Same staleness issue as the Dashboard Active list: if THIS table is
+    // the one currently loaded into the live `order` object, tableOrders[]
+    // may not have been written back yet (that only happens on the next
+    // switchToTable call) — read the live items directly in that case.
+    var liveItems = (order.tableId === t.id) ? order.items : ((tableOrders[t.id] && tableOrders[t.id].items) || []);
+    var displayTotal = o ? o.total : liveItems.reduce(function(s,i){return s+i.price*i.qty;},0);
     var qrBtn2 = hasFeature('qr_menu')
       ? '<button class="btn btn-outline btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();showTableQRCode(this.dataset.tid,this.dataset.tname)">📱 Show QR (More Orders)</button>'
       : '';
@@ -6766,8 +6780,8 @@ function roomAction(roomId) {
     // Same fix as tableAction() — an occupied room with an in-progress
     // (unbilled) order has no db.orders entry yet, so fall back to the live
     // running total from tableOrders[] instead of showing nothing.
-    var liveOrderR = tableOrders[r.id];
-    var displayTotalR = o ? o.total : (liveOrderR ? liveOrderR.items.reduce(function(s,i){return s+i.price*i.qty;},0) : 0);
+    var liveItemsR = (order.tableId === r.id) ? order.items : ((tableOrders[r.id] && tableOrders[r.id].items) || []);
+    var displayTotalR = o ? o.total : liveItemsR.reduce(function(s,i){return s+i.price*i.qty;},0);
     var qrBtn2 = hasFeature('qr_menu')
       ? '<button class="btn btn-outline btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="closeModal();showTableQRCode(this.dataset.rid,this.dataset.rname,\'room\')">📱 Show QR (More Orders)</button>'
       : '';
