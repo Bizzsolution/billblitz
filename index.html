@@ -1879,6 +1879,81 @@ function scheduleSharedDataPush() {
 
 var _lastPushedSnapshot = {}; // per-collection "what we last successfully pushed" — used to avoid re-pushing unchanged (possibly stale) local data and overwriting a newer update from another device
 
+// ── LIVE (in-progress, unbilled) ORDER SYNC ─────────────────────
+// tableOrders[] holds the cart for every table/room that has an order in
+// progress but not yet billed. This was NEVER pushed to Firestore before —
+// so Dashboard's "Active" view / a table tap on a DIFFERENT device had no
+// way to see what another device's cashier was currently adding. This is
+// what makes that live, cross-device.
+var _liveOrderSyncTimer = null;
+
+function syncCurrentOrderIntoTableOrders() {
+  // Mirrors what switchToTable() does when leaving a table — but here it
+  // runs on every cart edit, so tableOrders[] never goes stale on THIS
+  // device either (fixes the same-device edge case, not just cross-device).
+  if (order.tableId) {
+    tableOrders[order.tableId] = {
+      items: [...order.items], customerId: order.customerId, tableId: order.tableId,
+      tableName: order.tableName, locationType: order.locationType || 'table',
+      kotSent: Object.assign({}, order.kotSent), kotRound: order.kotRound || 0,
+      kotHistory: (order.kotHistory || []).slice(), taxManuallySet: order.taxManuallySet || false
+    };
+  }
+}
+
+function scheduleLiveOrderSync() {
+  syncCurrentOrderIntoTableOrders();
+  if (_liveOrderSyncTimer) clearTimeout(_liveOrderSyncTimer);
+  _liveOrderSyncTimer = setTimeout(pushLiveOrdersToCloud, 1200);
+}
+
+async function pushLiveOrdersToCloud() {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  if (!hasHydratedFromCloud) return; // same safety gate as the other shared collections
+  try {
+    var json = JSON.stringify(tableOrders);
+    if (_lastPushedSnapshot.tableOrders === json) return; // nothing actually changed
+    _lastPushedSnapshot.tableOrders = json;
+    await firestoreDb.collection('restaurants').doc(restaurantId)
+      .collection('meta').doc('tableOrders')
+      .set({ data: tableOrders, _updatedAt: new Date().toISOString() }, { merge: false });
+  } catch (e) { /* will retry on next edit */ }
+}
+
+function listenToLiveOrdersSync() {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var ref = firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('tableOrders');
+  var unsub = ref.onSnapshot(function(doc) {
+    if (!doc.exists) return;
+    var docData = doc.data();
+    if (!docData || !docData.data) return;
+    var json = JSON.stringify(docData.data);
+    _lastPushedSnapshot.tableOrders = json;
+    if (json === JSON.stringify(tableOrders)) return; // our own echo
+
+    // Merge incoming remote carts, but never clobber the ONE table/room
+    // currently being edited live on THIS device — that one stays authored
+    // locally and gets pushed on its own next edit.
+    var incoming = docData.data;
+    Object.keys(incoming).forEach(function(tid) {
+      if (order.tableId === tid) return; // skip — being actively edited here
+      tableOrders[tid] = incoming[tid];
+    });
+    // Also drop any table this device thinks is active but the cloud no
+    // longer has (e.g. someone else completed/cleared it elsewhere).
+    Object.keys(tableOrders).forEach(function(tid) {
+      if (order.tableId === tid) return;
+      if (!(tid in incoming)) delete tableOrders[tid];
+    });
+
+    persistLocalOnly();
+    refreshIfActive('dashboard', renderDashboard);
+    refreshIfActive('tables', renderTables);
+    refreshIfActive('rooms', renderRooms);
+  }, function(err) { console.log('Live order sync error:', err); });
+  cloudListeners.push(unsub);
+}
+
 async function pushSharedDataToCloud() {
   if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
   if (!hasHydratedFromCloud) return; // don't push until we've pulled real cloud data first — avoids wiping it with empty local state
@@ -2111,6 +2186,16 @@ async function hydrateAllFromCloud() {
       }
       await new Promise(function(r){ setTimeout(r, 60); });
 
+      // Live (unbilled) carts from other devices, so a fresh/reloaded device
+      // immediately sees any table/room currently being worked on elsewhere.
+      var liveOrdersDoc = await restRef.collection('meta').doc('tableOrders').get();
+      if (liveOrdersDoc.exists && liveOrdersDoc.data() && liveOrdersDoc.data().data) {
+        var incomingLive = liveOrdersDoc.data().data;
+        Object.keys(incomingLive).forEach(function(tid){ tableOrders[tid] = incomingLive[tid]; });
+        _lastPushedSnapshot.tableOrders = JSON.stringify(incomingLive);
+      }
+      await new Promise(function(r){ setTimeout(r, 60); });
+
       var ordersSnap = await restRef.collection('orders').orderBy('date','desc').limit(100).get();
       if (!ordersSnap.empty) db.orders = ordersSnap.docs.map(function(d){ return d.data(); });
       await new Promise(function(r){ setTimeout(r, 60); });
@@ -2158,6 +2243,7 @@ function startAllRealtimeSync() {
   listenToSettingsSync();
   listenToKitchenOrdersSync();
   listenToOwnerAlertsSync();
+  listenToLiveOrdersSync();
 }
 
 async function pushAllDataToCloud() {
@@ -3718,6 +3804,11 @@ function clearOrder(){ order.items=[]; order.taxManuallySet=false; renderOrderIt
 
 function renderOrderItems(){
   renderPOSMenu(); // Update qty badges on menu items
+  // Push the in-progress cart to the cloud so OTHER devices' Dashboard
+  // "Active" view / table taps see it live too. renderOrderItems() runs
+  // after every single cart change (add/remove/qty edit/voice/smart-order),
+  // so hooking here covers all of them from one place.
+  scheduleLiveOrderSync();
   const el=document.getElementById('order-items-list');
   if(!order.items.length){ el.innerHTML='<div class="empty" style="padding:1rem">No items added yet.</div>'; }
   else{ el.innerHTML=order.items.map(i=>{
@@ -4521,6 +4612,7 @@ function completeBill(payment){
     var tbl = db.tables ? db.tables.find(function(x){return x.id===order.tableId;}) : null;
     if(tbl) { tbl.status='bill'; tbl.orderId=orderId; }
     delete tableOrders[order.tableId];
+  scheduleLiveOrderSync(); // remove this table's now-finished cart from other devices too
   }
   showBillReceipt(o);
   order={items:[],customerId:document.getElementById('pos-customer').value||'',tableId:null,tableName:'',kotSent:{},kotRound:0,taxManuallySet:false};
@@ -6681,6 +6773,7 @@ function completeTablePayment(tableId) {
   var t = db.tables.find(function(x){return x.id===tableId;}); if(!t) return;
   t.status='empty'; t.orderId=null;
   delete tableOrders[tableId];
+  scheduleLiveOrderSync(); // remove this table's cart from other devices too
   if(order.tableId === tableId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
@@ -6695,6 +6788,7 @@ function clearTable(tableId) {
   var t = db.tables.find(function(x){return x.id===tableId;}); if(!t) return;
   t.status='empty'; t.orderId=null;
   delete tableOrders[tableId];
+  scheduleLiveOrderSync(); // remove this table's cart from other devices too
   if(order.tableId === tableId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
@@ -6865,6 +6959,7 @@ function completeRoomPayment(roomId) {
   var r = db.rooms.find(function(x){return x.id===roomId;}); if(!r) return;
   r.status='empty'; r.orderId=null;
   delete tableOrders[roomId];
+  scheduleLiveOrderSync(); // remove this room's cart from other devices too
   if(order.tableId === roomId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',locationType:'table',kotSent:{},kotRound:0,taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
@@ -6879,6 +6974,7 @@ function clearRoom(roomId) {
   var r = db.rooms.find(function(x){return x.id===roomId;}); if(!r) return;
   r.status='empty'; r.orderId=null;
   delete tableOrders[roomId];
+  scheduleLiveOrderSync(); // remove this room's cart from other devices too
   if(order.tableId === roomId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',locationType:'table',kotSent:{},kotRound:0,taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
