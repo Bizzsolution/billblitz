@@ -6620,6 +6620,12 @@ function tableAction(tableId) {
     openModal();
   } else {
     const o = t.orderId ? db.orders.find(x=>x.id===t.orderId) : null;
+    // For a table that's OCCUPIED (an order in progress but not yet billed),
+    // there is no db.orders entry yet — the running total lives in
+    // tableOrders[]. Previously the amount only ever came from `o`, which is
+    // null in that case, so nothing displayed at all for active orders.
+    var liveOrder = tableOrders[t.id];
+    var displayTotal = o ? o.total : (liveOrder ? liveOrder.items.reduce(function(s,i){return s+i.price*i.qty;},0) : 0);
     var qrBtn2 = hasFeature('qr_menu')
       ? '<button class="btn btn-outline btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();showTableQRCode(this.dataset.tid,this.dataset.tname)">📱 Show QR (More Orders)</button>'
       : '';
@@ -6628,7 +6634,7 @@ function tableAction(tableId) {
       '<div class="modal-title">🪑 '+esc(t.name)+'</div>'+
       '<div style="background:#FEF3C7;border-radius:12px;padding:12px;margin-bottom:14px;text-align:center">'+
       '<div style="font-weight:700;font-size:0.85rem;color:#92400E">'+(t.status==='occupied'?'OCCUPIED':'BILL PENDING')+'</div>'+
-      (o?'<div style="font-size:1.3rem;font-weight:800;margin-top:4px">₹'+o.total.toFixed(2)+'</div>':'')+
+      '<div style="font-size:1.3rem;font-weight:800;margin-top:4px">₹'+displayTotal.toFixed(2)+'</div>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:8px">'+
       '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();loadTableToBilling(this.dataset.tid,this.dataset.tname)">➕ Add Items</button>'+
@@ -6757,6 +6763,11 @@ function roomAction(roomId) {
     openModal();
   } else {
     const o = r.orderId ? db.orders.find(x=>x.id===r.orderId) : null;
+    // Same fix as tableAction() — an occupied room with an in-progress
+    // (unbilled) order has no db.orders entry yet, so fall back to the live
+    // running total from tableOrders[] instead of showing nothing.
+    var liveOrderR = tableOrders[r.id];
+    var displayTotalR = o ? o.total : (liveOrderR ? liveOrderR.items.reduce(function(s,i){return s+i.price*i.qty;},0) : 0);
     var qrBtn2 = hasFeature('qr_menu')
       ? '<button class="btn btn-outline btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="closeModal();showTableQRCode(this.dataset.rid,this.dataset.rname,\'room\')">📱 Show QR (More Orders)</button>'
       : '';
@@ -6765,7 +6776,7 @@ function roomAction(roomId) {
       '<div class="modal-title">🛏️ '+esc(r.name)+'</div>'+
       '<div style="background:#FEF3C7;border-radius:12px;padding:12px;margin-bottom:14px;text-align:center">'+
       '<div style="font-weight:700;font-size:0.85rem;color:#92400E">'+(r.status==='occupied'?'OCCUPIED':'BILL PENDING')+'</div>'+
-      (o?'<div style="font-size:1.3rem;font-weight:800;margin-top:4px">₹'+o.total.toFixed(2)+'</div>':'')+
+      '<div style="font-size:1.3rem;font-weight:800;margin-top:4px">₹'+displayTotalR.toFixed(2)+'</div>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:8px">'+
       '<button class="btn btn-primary btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="closeModal();loadRoomToBilling(this.dataset.rid,this.dataset.rname)">➕ Add Items</button>'+
