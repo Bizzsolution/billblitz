@@ -6938,7 +6938,7 @@ function tableAction(tableId) {
       (t.status==='occupied'?'<button class="btn btn-green btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="quickGenerateBillForTable(this.dataset.tid,this.dataset.tname)">🧾 Generate Bill</button>':'')+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
-      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+t.id+'\',\'table\')">✅ Payment Done</button>':'')+
+      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+t.id+'\',\'table\')">💰 Collect Payment</button>':'')+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearTable(\''+t.id+'\')">🗑️ Clear Table</button>':'')+
       '</div>';
     openModal();
@@ -6966,16 +6966,35 @@ function startManualTableBilling(tableId, tableName) {
 // this step (Cashier/Owner, and Order Manager only if explicitly
 // authorised via canClearTableOrRoom()) — Order Manager's "Generate Bill"
 // action never shows a payment-mode choice at all.
+// This is the screen shown BEFORE anything is marked paid — it shows the
+// full itemized bill directly (no separate "View Bill" step that could
+// navigate away and get stuck) AND the payment-method buttons on the SAME
+// screen. Nothing is "done" until one of Cash/Card/UPI is actually tapped.
 function showPaymentModeModal(id, kind) {
   var collection = kind === 'room' ? db.rooms : db.tables;
   var t = collection.find(function(x){ return x.id === id; });
   if (!t) return;
   var o = t.orderId ? db.orders.find(function(x){ return x.id === t.orderId; }) : null;
+
+  var billHtml = '';
+  if (o) {
+    billHtml = '<div class="card" style="margin-bottom:12px"><div class="card-body">'
+      + o.items.map(function(i){ return '<div class="bill-row"><span>'+esc(i.name)+' ×'+i.qty+'</span><span>'+fmt(i.price*i.qty)+'</span></div>'; }).join('')
+      + '<div class="divider"></div>'
+      + '<div class="bill-row"><span>Subtotal</span><span>'+fmt(o.subtotal)+'</span></div>'
+      + (o.tax ? '<div class="bill-row"><span>Tax</span><span>'+fmt(o.tax)+'</span></div>' : '')
+      + (o.discount ? '<div class="bill-row"><span>Discount</span><span>-'+fmt(o.discount)+'</span></div>' : '')
+      + '<div class="bill-total"><span>TOTAL</span><span>'+fmt(o.total)+'</span></div>'
+      + '</div></div>'
+      + '<button class="btn btn-outline btn-full" style="margin-bottom:12px" onclick="printBill(\''+o.id+'\')">🖨️ Print Bill</button>';
+  } else {
+    billHtml = '<div style="background:#FEE2E2;color:#DC2626;border-radius:10px;padding:10px;margin-bottom:12px;font-size:0.82rem">⚠️ Bill data nahi mila — table/room dobara kholke try karein.</div>';
+  }
+
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
-    + '<div class="modal-title">✅ Payment Received</div>'
-    + (o ? '<div style="background:#F7F9FF;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center"><div style="font-size:0.78rem;color:#6B7A99">' + esc(t.name) + ' · Total</div><div style="font-size:1.6rem;font-weight:800;color:#1A2B3C">' + fmt(o.total) + '</div></div>' : '')
-    + (o ? '<button class="btn btn-outline btn-full" style="margin-bottom:12px" data-oid="' + o.id + '" onclick="showBillReceipt(db.orders.find(function(x){return x.id===this.dataset.oid;}))">👁️ View Bill (Verify Before Payment)</button>' : '')
+    + '<div class="modal-title">💰 Collect Payment — ' + esc(t.name) + '</div>'
+    + billHtml
     + '<div style="font-size:0.8rem;font-weight:700;color:#6B7A99;margin-bottom:8px">Payment Method Chunein</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
     + '<button style="padding:14px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();confirmPaymentReceived(\'' + id + '\',\'' + kind + '\',\'cash\')">💵 Cash</button>'
@@ -7126,7 +7145,7 @@ function roomAction(roomId) {
       (r.status==='occupied'?'<button class="btn btn-green btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="quickGenerateBillForRoom(this.dataset.rid,this.dataset.rname)">🧾 Generate Bill</button>':'')+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
-      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+r.id+'\',\'room\')">✅ Payment Done</button>':'')+
+      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+r.id+'\',\'room\')">💰 Collect Payment</button>':'')+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearRoom(\''+r.id+'\')">🗑️ Clear Room</button>':'')+
       '</div>';
     openModal();
