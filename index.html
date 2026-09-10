@@ -826,7 +826,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
         <div class="rb-name">Cashier</div>
         <div class="rb-desc">Billing only</div>
       </button>
-      <button class="role-btn" id="role-kitchen" onclick="selectRole('kitchen')" style="grid-column:1/-1">
+      <button class="role-btn" id="role-kitchen" onclick="selectRole('kitchen')" style="grid-column:1/-1;display:none">
         <div class="rb-icon">🍳</div>
         <div class="rb-name">Kitchen</div>
         <div class="rb-desc">Sirf kitchen orders — kitchen device ke liye</div>
@@ -1255,7 +1255,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
             <input class="form-inp" id="set-cashier-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
           </div>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="set-kitchen-pin-group" style="display:none">
           <label class="form-label">🍳 Kitchen PIN <span style="font-weight:400;color:#9CA3AF">(kitchen device ke liye — sirf Kitchen tab dikhega)</span></label>
           <input class="form-inp" id="set-kitchen-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
         </div>
@@ -1695,6 +1695,15 @@ async function authenticateClient(licKey, retryCount) {
     // which is far more likely when many operations fire in a tight burst
     // right after auth completes.
     await new Promise(function(r){ setTimeout(r, 250); });
+    // License/feature control attaches FIRST, in parallel with the data
+    // hydration below rather than waiting behind it. Previously this only
+    // started listening AFTER the full (multi-second, sequential) data
+    // hydration finished — so an admin's feature toggle (e.g. disabling
+    // Kitchen Display) could take several seconds to actually reach the
+    // app, making it look like the toggle "didn't work" if checked too
+    // soon. This is independent of the business-data hydration below and
+    // touches nothing it depends on.
+    listenToLicenseControl(licKey);
     setSyncStatus('syncing', 'Loading your data...');
     startCloudSync();
     // ⚠️ CRITICAL: pull real cloud data FIRST and WAIT for it — guaranteed,
@@ -1702,9 +1711,8 @@ async function authenticateClient(licKey, retryCount) {
     // prevents local (empty/stale) state from ever overwriting good cloud data.
     await hydrateAllFromCloud();
     setSyncStatus('', 'Synced ✓');
-    // Listeners attached one at a time with a small stagger — avoids firing
-    // many concurrent onSnapshot calls in the same tick.
-    listenToLicenseControl(licKey);
+    // Remaining listeners attached one at a time with a small stagger —
+    // avoids firing many concurrent onSnapshot calls in the same tick.
     await new Promise(function(r){ setTimeout(r, 100); });
     listenToAnnouncements();
     await new Promise(function(r){ setTimeout(r, 100); });
@@ -2504,6 +2512,14 @@ function activationSuccess(data){
   }
   document.getElementById('login-screen').style.display='flex';
   selectRole('owner');
+  // Apply whatever feature state we already have cached (from the LAST
+  // successful sync) immediately — otherwise the role buttons (Kitchen,
+  // Order Manager) sat at their raw HTML default until the live Firestore
+  // listener happened to fire, which on a returning/cached session could
+  // take a moment (or never run at all if this exact code path — a normal
+  // day-to-day app open, not a fresh activation — never separately called
+  // it). This is what made a stale/incorrect button state linger.
+  applyFeatureGating();
   if(!data.offline) toast(`✅ ${data.clientName?data.clientName+' — ':''}License Active!`,'#00A878');
   // ☁️ Start Firebase cloud sync
   if(data.key) authenticateClient(data.key);
@@ -2660,11 +2676,14 @@ function loadFeaturesFromLicense(d) {
 }
 
 function applyFeatureGating() {
-  // Order Manager is an OPTIONAL role — the login button only shows for
-  // clients whose plan has this feature enabled. Runs every time features
-  // are (re)loaded, including live admin toggles, so it updates instantly.
+  // Order Manager and Kitchen are OPTIONAL roles — their login buttons only
+  // show for clients whose plan has the matching feature enabled. Runs every
+  // time features are (re)loaded, including live admin toggles, so it
+  // updates instantly without needing a page reload.
   var omBtn = document.getElementById('role-order_manager');
   if (omBtn) omBtn.style.display = hasFeature('order_manager_role') ? '' : 'none';
+  var kBtn = document.getElementById('role-kitchen');
+  if (kBtn) kBtn.style.display = hasFeature('kitchen_display') ? '' : 'none';
 
   // Map feature id → nav element ids
   var navMap = {
@@ -3387,6 +3406,10 @@ function renderSettingsPage(){
   if(omAuthCard) omAuthCard.style.display = omEnabled ? '' : 'none';
   var omChk = document.getElementById('om-can-clear');
   if(omChk) omChk.checked = !!(db.settings && db.settings.orderManagerCanClearTable);
+  // Same treatment for Kitchen PIN — only shown when the client's plan
+  // includes the Kitchen Display feature.
+  var kitchenPinGroup = document.getElementById('set-kitchen-pin-group');
+  if(kitchenPinGroup) kitchenPinGroup.style.display = hasFeature('kitchen_display') ? '' : 'none';
   var pmSel = document.getElementById('printer-mode-sel');
   if(pmSel) pmSel.value = db.settings?.printerMode || 'both';
   var op = document.getElementById('set-owner-phone');
