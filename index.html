@@ -6767,6 +6767,53 @@ function renderTables() {
 }
 
 
+// ── QUICK GENERATE BILL — direct from the Table/Room action popup ──
+// Reuses the EXISTING loadTableToBilling/loadRoomToBilling + completeBill()
+// exactly as they already work on the Billing page — this just skips the
+// step of manually opening "Add Items" first when nothing more needs to be
+// added, and shows a small payment-method prompt instead. Nothing about
+// completeBill() itself, or the normal Billing page flow, is changed.
+function quickGenerateBillForTable(tableId, tableName) {
+  loadTableToBilling(tableId, tableName);
+  setTimeout(showQuickBillPaymentModal, 60);
+}
+
+function quickGenerateBillForRoom(roomId, roomName) {
+  loadRoomToBilling(roomId, roomName);
+  setTimeout(showQuickBillPaymentModal, 60);
+}
+
+function showQuickBillPaymentModal() {
+  if (!order.items.length) {
+    toast('Is table/room mein koi item nahi hai — pehle Add Items se order lein.', '#FF6B35');
+    return;
+  }
+  var sub = order.items.reduce(function(s,i){ return s + i.price*i.qty; }, 0);
+  var taxInp = document.getElementById('bill-tax-pct');
+  var discInp = document.getElementById('bill-discount');
+  var taxPct = taxInp ? (parseFloat(taxInp.value) || 0) : 0;
+  var disc = discInp ? (parseFloat(discInp.value) || 0) : 0;
+  var tax = sub * taxPct / 100;
+  var total = Math.max(0, sub + tax - disc);
+
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🧾 Bill Generate Karein</div>'
+    + '<div style="background:#F7F9FF;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center">'
+    + '<div style="font-size:0.78rem;color:#6B7A99">' + esc(order.tableName||'') + ' · Total</div>'
+    + '<div style="font-size:1.7rem;font-weight:800;color:#1A2B3C">' + fmt(total) + '</div>'
+    + (taxPct ? '<div style="font-size:0.7rem;color:#9CA3AF;margin-top:2px">Subtotal ' + fmt(sub) + ' + Tax ' + taxPct + '%</div>' : '')
+    + '</div>'
+    + '<div style="font-size:0.8rem;font-weight:700;color:#6B7A99;margin-bottom:8px">Payment Method Chunein</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    + '<button style="padding:14px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();completeBill(\'cash\')">💵 Cash</button>'
+    + '<button style="padding:14px;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();completeBill(\'card\')">💳 Card</button>'
+    + '</div>'
+    + '<button style="width:100%;padding:12px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.9rem;cursor:pointer;margin-bottom:8px" onclick="closeModal();completeBill(\'other\')">📱 UPI / QR</button>'
+    + '<button class="btn btn-outline btn-full" onclick="closeModal()">← Wapas — Menu Dekhna Hai</button>';
+  openModal();
+}
+
 function loadTableToBilling(tableId, tableName) {
   setPage('billing');
   setTimeout(function(){
@@ -6822,6 +6869,7 @@ function tableAction(tableId) {
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:8px">'+
       '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();loadTableToBilling(this.dataset.tid,this.dataset.tname)">➕ Add Items</button>'+
+      (t.status==='occupied'?'<button class="btn btn-green btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="quickGenerateBillForTable(this.dataset.tid,this.dataset.tname)">🧾 Generate Bill</button>':'')+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
       (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();completeTablePayment(\''+t.id+'\')">✅ Payment Done</button>':'')+
@@ -6966,6 +7014,7 @@ function roomAction(roomId) {
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:8px">'+
       '<button class="btn btn-primary btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="closeModal();loadRoomToBilling(this.dataset.rid,this.dataset.rname)">➕ Add Items</button>'+
+      (r.status==='occupied'?'<button class="btn btn-green btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="quickGenerateBillForRoom(this.dataset.rid,this.dataset.rname)">🧾 Generate Bill</button>':'')+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
       (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();completeRoomPayment(\''+r.id+'\')">✅ Payment Done</button>':'')+
