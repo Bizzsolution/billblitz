@@ -986,12 +986,10 @@ tr:nth-child(even) td{background:#FFFFFF;}
           <input type="number" id="bill-discount" value="0" min="0" style="width:55px;padding:2px 4px;border-radius:5px;border:1px solid #A5B4FC;font-size:0.82rem;text-align:center" onchange="recalcBill()">
         </div>
         <div class="bill-total"><span>TOTAL</span><span id="bill-total-amt">₹0.00</span></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-          <button style="padding:14px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(22,163,74,0.3)" onclick="completeBill('cash')">💵 Cash</button>
-          <button style="padding:14px;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(37,99,235,0.3)" onclick="completeBill('card')">💳 Card</button>
-        </div>
-        <div style="margin-top:8px">
-          <button style="padding:12px;width:100%;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.9rem;cursor:pointer;font-family:inherit" onclick="completeBill('other')">📱 UPI / QR</button>
+        <!-- Payment mode is chosen LATER, by Cashier, at "Payment Done" time —
+             not here. Generating a bill no longer commits to a payment method. -->
+        <div style="margin-top:10px">
+          <button style="padding:14px;width:100%;background:linear-gradient(135deg,#FF6B35,#F5A623);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(255,107,53,0.3)" onclick="completeBill('pending')">🧾 Generate Bill</button>
         </div>
       </div>
     </div>
@@ -6819,6 +6817,10 @@ function showQuickBillPaymentModal() {
   var tax = sub * taxPct / 100;
   var total = Math.max(0, sub + tax - disc);
 
+  // Payment mode is NOT chosen here — bill generation is now separate from
+  // payment collection. Cashier chooses Cash/Card/UPI later, when marking
+  // "Payment Done" on the table/room. This is the ONLY action Order Manager
+  // needs (and the only one they're allowed), so it's a single confirm step.
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">🧾 Bill Generate Karein</div>'
@@ -6827,12 +6829,8 @@ function showQuickBillPaymentModal() {
     + '<div style="font-size:1.7rem;font-weight:800;color:#1A2B3C">' + fmt(total) + '</div>'
     + (taxPct ? '<div style="font-size:0.7rem;color:#9CA3AF;margin-top:2px">Subtotal ' + fmt(sub) + ' + Tax ' + taxPct + '%</div>' : '')
     + '</div>'
-    + '<div style="font-size:0.8rem;font-weight:700;color:#6B7A99;margin-bottom:8px">Payment Method Chunein</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-    + '<button style="padding:14px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();completeBill(\'cash\')">💵 Cash</button>'
-    + '<button style="padding:14px;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();completeBill(\'card\')">💳 Card</button>'
-    + '</div>'
-    + '<button style="width:100%;padding:12px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.9rem;cursor:pointer;margin-bottom:8px" onclick="closeModal();completeBill(\'other\')">📱 UPI / QR</button>'
+    + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Payment counter pe collect hoga — mode wahan select hoga.</div>'
+    + '<button style="width:100%;padding:14px;background:linear-gradient(135deg,#FF6B35,#F5A623);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.95rem;cursor:pointer;margin-bottom:8px" onclick="closeModal();completeBill(\'pending\')">🧾 Generate Bill</button>'
     + '<button class="btn btn-outline btn-full" onclick="closeModal()">← Wapas — Menu Dekhna Hai</button>';
   openModal();
 }
@@ -6895,7 +6893,7 @@ function tableAction(tableId) {
       (t.status==='occupied'?'<button class="btn btn-green btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="quickGenerateBillForTable(this.dataset.tid,this.dataset.tname)">🧾 Generate Bill</button>':'')+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
-      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();completeTablePayment(\''+t.id+'\')">✅ Payment Done</button>':'')+
+      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+t.id+'\',\'table\')">✅ Payment Done</button>':'')+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearTable(\''+t.id+'\')">🗑️ Clear Table</button>':'')+
       '</div>';
     openModal();
@@ -6916,6 +6914,46 @@ function startManualTableBilling(tableId, tableName) {
     renderOrderItems();
     toast('🪑 '+t.name+' selected!','#00A878');
   }, 200);
+}
+
+// ── PAYMENT MODE — chosen HERE, at Payment Done time, not at Generate
+// Bill time. This is the "right" that belongs only to whoever can reach
+// this step (Cashier/Owner, and Order Manager only if explicitly
+// authorised via canClearTableOrRoom()) — Order Manager's "Generate Bill"
+// action never shows a payment-mode choice at all.
+function showPaymentModeModal(id, kind) {
+  var collection = kind === 'room' ? db.rooms : db.tables;
+  var t = collection.find(function(x){ return x.id === id; });
+  if (!t) return;
+  var o = t.orderId ? db.orders.find(function(x){ return x.id === t.orderId; }) : null;
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">✅ Payment Received</div>'
+    + (o ? '<div style="background:#F7F9FF;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center"><div style="font-size:0.78rem;color:#6B7A99">' + esc(t.name) + ' · Total</div><div style="font-size:1.6rem;font-weight:800;color:#1A2B3C">' + fmt(o.total) + '</div></div>' : '')
+    + '<div style="font-size:0.8rem;font-weight:700;color:#6B7A99;margin-bottom:8px">Payment Method Chunein</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    + '<button style="padding:14px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();confirmPaymentReceived(\'' + id + '\',\'' + kind + '\',\'cash\')">💵 Cash</button>'
+    + '<button style="padding:14px;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();confirmPaymentReceived(\'' + id + '\',\'' + kind + '\',\'card\')">💳 Card</button>'
+    + '</div>'
+    + '<button style="width:100%;padding:12px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.9rem;cursor:pointer;margin-bottom:8px" onclick="closeModal();confirmPaymentReceived(\'' + id + '\',\'' + kind + '\',\'other\')">📱 UPI / QR</button>'
+    + '<button class="btn btn-outline btn-full" onclick="closeModal()">Cancel</button>';
+  openModal();
+}
+
+function confirmPaymentReceived(id, kind, payment) {
+  var collection = kind === 'room' ? db.rooms : db.tables;
+  var t = collection.find(function(x){ return x.id === id; });
+  if (!t) return;
+  // Record the mode the customer actually paid with, on the bill that was
+  // already generated earlier — completeBill() no longer sets this.
+  if (t.orderId) {
+    var o = db.orders.find(function(x){ return x.id === t.orderId; });
+    if (o) { o.payment = payment; save(); cloudSave('orders', o.id, o); }
+  }
+  // Reuse the EXISTING, already-tested clear-table/clear-room + sync logic
+  // completely unchanged — this just runs it after the mode is recorded.
+  if (kind === 'room') completeRoomPayment(id);
+  else completeTablePayment(id);
 }
 
 function completeTablePayment(tableId) {
@@ -7040,7 +7078,7 @@ function roomAction(roomId) {
       (r.status==='occupied'?'<button class="btn btn-green btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="quickGenerateBillForRoom(this.dataset.rid,this.dataset.rname)">🧾 Generate Bill</button>':'')+
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
-      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();completeRoomPayment(\''+r.id+'\')">✅ Payment Done</button>':'')+
+      (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+r.id+'\',\'room\')">✅ Payment Done</button>':'')+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearRoom(\''+r.id+'\')">🗑️ Clear Room</button>':'')+
       '</div>';
     openModal();
