@@ -1180,9 +1180,17 @@ tr:nth-child(even) td{background:#FFFFFF;}
       <button class="rep-tab" id="rep-month" onclick="setRepTab('month')">This Month</button>
       <button class="rep-tab" id="rep-all" onclick="setRepTab('all')">All Time</button>
       <button class="rep-tab" id="rep-custom" onclick="setRepTab('custom')">📅 Specific Month</button>
+      <button class="rep-tab" id="rep-range" onclick="setRepTab('range')">📆 Date Range</button>
     </div>
     <div id="rep-month-picker" style="display:none;margin-bottom:10px">
       <input class="form-inp" id="rep-month-input" type="month" onchange="onRepMonthPick()"/>
+    </div>
+    <div id="rep-range-picker" style="display:none;margin-bottom:10px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="flex:1"><label class="form-label" style="font-size:0.68rem">From</label><input class="form-inp" id="rep-range-from" type="date" onchange="onRepRangePick()"/></div>
+        <div style="flex:1"><label class="form-label" style="font-size:0.68rem">To</label><input class="form-inp" id="rep-range-to" type="date" onchange="onRepRangePick()"/></div>
+      </div>
+      <div style="font-size:0.68rem;color:#9CA3AF;margin-top:4px">Ek hi specific date dekhni ho toh From aur To mein wahi date daal dein</div>
     </div>
 
     <!-- Report type selector -->
@@ -5703,16 +5711,19 @@ function deletePurchase(id){
 // ╚══════════════════════════════════════════════════════╝
 // ── PERIOD SELECTION (Item 9: month-wise historical view) ──────
 let repCustomMonth = null; // {year, month} when repTab === 'custom'
+let repDateRange = null; // {from, to} YYYY-MM-DD strings when repTab === 'range'
 let reportType = 'sales';  // 'sales' | 'expense' | 'purchase' | 'gst' | 'profit'
 
 function setRepTab(t){
   repTab=t;
-  ['today','week','month','all','custom'].forEach(function(x){
+  ['today','week','month','all','custom','range'].forEach(function(x){
     var el = document.getElementById('rep-'+x);
     if(el) el.classList.toggle('active', x===t);
   });
   var picker = document.getElementById('rep-month-picker');
   if(picker) picker.style.display = (t === 'custom') ? '' : 'none';
+  var rangePicker = document.getElementById('rep-range-picker');
+  if(rangePicker) rangePicker.style.display = (t === 'range') ? '' : 'none';
   if(t === 'custom') {
     if(!repCustomMonth) {
       var now = new Date();
@@ -5720,6 +5731,16 @@ function setRepTab(t){
     }
     var inp = document.getElementById('rep-month-input');
     if(inp) inp.value = repCustomMonth.year + '-' + String(repCustomMonth.month+1).padStart(2,'0');
+  }
+  if(t === 'range') {
+    if(!repDateRange) {
+      var todayStr = todayLocalDateStr();
+      repDateRange = { from: todayStr, to: todayStr };
+    }
+    var fromInp = document.getElementById('rep-range-from');
+    var toInp = document.getElementById('rep-range-to');
+    if(fromInp) fromInp.value = repDateRange.from;
+    if(toInp) toInp.value = repDateRange.to;
   }
   renderReports();
 }
@@ -5729,6 +5750,17 @@ function onRepMonthPick(){
   if(!inp || !inp.value) return;
   var parts = inp.value.split('-');
   repCustomMonth = { year: parseInt(parts[0]), month: parseInt(parts[1])-1 };
+  renderReports();
+}
+
+function onRepRangePick(){
+  var fromInp = document.getElementById('rep-range-from');
+  var toInp = document.getElementById('rep-range-to');
+  if(!fromInp || !toInp || !fromInp.value || !toInp.value) return;
+  // Keep From <= To automatically so a mis-ordered pick still works sensibly.
+  var from = fromInp.value, to = toInp.value;
+  if (from > to) { var tmp = from; from = to; to = tmp; }
+  repDateRange = { from: from, to: to };
   renderReports();
 }
 
@@ -5751,6 +5783,13 @@ function periodMatchDate(d){
     var dd = new Date(d);
     return dd.getFullYear()===repCustomMonth.year && dd.getMonth()===repCustomMonth.month;
   }
+  if(repTab==='range' && repDateRange){
+    // Compare using local YYYY-MM-DD strings (not UTC-based Date math) to
+    // avoid the exact timezone off-by-one issue fixed earlier for expenses.
+    var dd2 = new Date(d);
+    var dStr = dd2.getFullYear()+'-'+String(dd2.getMonth()+1).padStart(2,'0')+'-'+String(dd2.getDate()).padStart(2,'0');
+    return dStr >= repDateRange.from && dStr <= repDateRange.to;
+  }
   return true; // 'all'
 }
 
@@ -5759,6 +5798,10 @@ function getPeriodLabel(){
   if(repTab==='week') return 'This Week';
   if(repTab==='month') return 'This Month';
   if(repTab==='custom' && repCustomMonth) return FULL_MONTHS[repCustomMonth.month]+' '+repCustomMonth.year;
+  if(repTab==='range' && repDateRange){
+    if(repDateRange.from === repDateRange.to) return fmtDate(repDateRange.from);
+    return fmtDate(repDateRange.from) + ' – ' + fmtDate(repDateRange.to);
+  }
   return 'All Time';
 }
 
@@ -6878,7 +6921,9 @@ function tableAction(tableId) {
     // switchToTable call) — read the live items directly in that case.
     var liveItems = (order.tableId === t.id) ? order.items : ((tableOrders[t.id] && tableOrders[t.id].items) || []);
     var displayTotal = o ? o.total : liveItems.reduce(function(s,i){return s+i.price*i.qty;},0);
-    var qrBtn2 = hasFeature('qr_menu')
+    // Only useful while the order is still open — once a bill is generated
+    // (status 'bill'), the customer can't add more items via QR anyway.
+    var qrBtn2 = (hasFeature('qr_menu') && t.status==='occupied')
       ? '<button class="btn btn-outline btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();showTableQRCode(this.dataset.tid,this.dataset.tname)">📱 Show QR (More Orders)</button>'
       : '';
     document.getElementById('modal-body').innerHTML =
@@ -6930,6 +6975,7 @@ function showPaymentModeModal(id, kind) {
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">✅ Payment Received</div>'
     + (o ? '<div style="background:#F7F9FF;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center"><div style="font-size:0.78rem;color:#6B7A99">' + esc(t.name) + ' · Total</div><div style="font-size:1.6rem;font-weight:800;color:#1A2B3C">' + fmt(o.total) + '</div></div>' : '')
+    + (o ? '<button class="btn btn-outline btn-full" style="margin-bottom:12px" data-oid="' + o.id + '" onclick="showBillReceipt(db.orders.find(function(x){return x.id===this.dataset.oid;}))">👁️ View Bill (Verify Before Payment)</button>' : '')
     + '<div style="font-size:0.8rem;font-weight:700;color:#6B7A99;margin-bottom:8px">Payment Method Chunein</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
     + '<button style="padding:14px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" onclick="closeModal();confirmPaymentReceived(\'' + id + '\',\'' + kind + '\',\'cash\')">💵 Cash</button>'
@@ -7063,7 +7109,9 @@ function roomAction(roomId) {
     // running total from tableOrders[] instead of showing nothing.
     var liveItemsR = (order.tableId === r.id) ? order.items : ((tableOrders[r.id] && tableOrders[r.id].items) || []);
     var displayTotalR = o ? o.total : liveItemsR.reduce(function(s,i){return s+i.price*i.qty;},0);
-    var qrBtn2 = hasFeature('qr_menu')
+    // Only useful while the order is still open — once a bill is generated
+    // (status 'bill'), the customer can't add more items via QR anyway.
+    var qrBtn2 = (hasFeature('qr_menu') && r.status==='occupied')
       ? '<button class="btn btn-outline btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="closeModal();showTableQRCode(this.dataset.rid,this.dataset.rname,\'room\')">📱 Show QR (More Orders)</button>'
       : '';
     document.getElementById('modal-body').innerHTML =
