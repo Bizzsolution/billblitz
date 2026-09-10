@@ -19,6 +19,25 @@ body{font-family:'Poppins',sans-serif;background:#F5F7FB;color:#1A2B3C;padding-b
 .hdr-status{margin-top:10px;font-size:.7rem;color:rgba(255,255,255,.4);display:flex;align-items:center;gap:5px;}
 .sdot{width:6px;height:6px;border-radius:50%;background:#00C896;}
 
+/* MENU SEARCH */
+.menu-search-wrap{padding:12px 16px 0;background:#fff;}
+.menu-search{width:100%;padding:11px 14px 11px 38px;border-radius:12px;border:1.5px solid #E2E8F5;font-size:.85rem;font-family:inherit;background:#F5F7FB url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="%239CA3AF" stroke-width="2"><circle cx="6.5" cy="6.5" r="5.5"/><line x1="10.5" y1="10.5" x2="15" y2="15"/></svg>') no-repeat 12px center;color:#1A2B3C;}
+.menu-search:focus{outline:none;border-color:#00A878;background-color:#fff;}
+.menu-search::placeholder{color:#9CA3AF;}
+
+/* PERSISTENT ORDER STATUS BAR — visible while browsing, not just right
+   after placing an order */
+.order-status-bar{background:#fff;border-bottom:1px solid #EEF1F6;padding:0 16px;}
+.osb-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px dashed #EEF1F6;font-size:.78rem;}
+.osb-row:first-child{border-top:none;}
+.osb-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.osb-dot.waiting{background:#F5A623;animation:osbpulse 1.4s infinite;}
+.osb-dot.accepted{background:#00C896;}
+.osb-dot.declined{background:#EF476F;}
+@keyframes osbpulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+.osb-text{flex:1;color:#475569;font-weight:600;}
+.osb-text b{color:#1A2B3C;}
+
 /* CATEGORY TABS */
 .cat-tabs{display:flex;gap:8px;overflow-x:auto;padding:12px 16px;background:#fff;border-bottom:1px solid #EEF1F6;position:sticky;top:82px;z-index:40;scrollbar-width:none;}
 .cat-tabs::-webkit-scrollbar{display:none;}
@@ -110,6 +129,10 @@ body{font-family:'Poppins',sans-serif;background:#F5F7FB;color:#1A2B3C;padding-b
   <div class="hdr-status"><div class="sdot"></div>Menu is live — order directly from here</div>
 </div>
 
+<div class="order-status-bar" id="order-status-bar" style="display:none"></div>
+<div class="menu-search-wrap" id="menu-search-wrap" style="display:none">
+  <input class="menu-search" id="menu-search" placeholder="Menu mein dhoondein..." oninput="renderMenu()"/>
+</div>
 <div class="cat-tabs" id="cat-tabs" style="display:none"></div>
 <div class="menu-wrap" id="menu-wrap"></div>
 
@@ -232,6 +255,7 @@ async function loadRestaurantData() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('hdr').style.display = 'block';
     document.getElementById('cat-tabs').style.display = 'flex';
+    document.getElementById('menu-search-wrap').style.display = 'block';
 
     if(!menu.length) {
       document.getElementById('menu-wrap').innerHTML =
@@ -265,9 +289,26 @@ function setCat(c) {
 }
 
 function renderMenu() {
-  var items = activeCat==='All' ? menu : menu.filter(function(m){ return m.category===activeCat; });
+  var searchQ = (document.getElementById('menu-search')||{}).value || '';
+  var q = searchQ.trim().toLowerCase();
+  // While searching, ignore the category filter entirely — search across
+  // the WHOLE menu, otherwise a match sitting in another category looks
+  // like it's missing.
+  var items = q ? menu : (activeCat==='All' ? menu : menu.filter(function(m){ return m.category===activeCat; }));
+  if (q) {
+    items = items.filter(function(m){
+      return (m.name||'').toLowerCase().indexOf(q) !== -1
+          || (m.desc||'').toLowerCase().indexOf(q) !== -1
+          || (m.category||'').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+  var catTabsEl = document.getElementById('cat-tabs');
+  if (catTabsEl) catTabsEl.style.display = q ? 'none' : 'flex'; // hide category tabs while searching — they'd be misleading (nothing is filtered by them right now)
   var el = document.getElementById('menu-wrap');
-  if(!items.length) { el.innerHTML = '<div class="empty-menu">No items in this category.</div>'; return; }
+  if(!items.length) {
+    el.innerHTML = '<div class="empty-menu">' + (q ? '"'+esc(searchQ)+'" ke liye koi item nahi mila.' : 'No items in this category.') + '</div>';
+    return;
+  }
 
   el.innerHTML = items.map(function(m){
     var qty = cart[m.id] || 0;
@@ -387,38 +428,63 @@ async function placeOrder() {
   }
 }
 
-var statusUnsub = null;
+// Tracks EVERY order placed this visit — not just the latest one — so
+// status stays visible even after going back to browse/order more.
+// Previously only ONE order's status was ever tracked (via a single
+// statusUnsub), and going back to the menu meant losing all visibility
+// into orders already placed.
+var myOrders = []; // {id, status, unsub}
+
+function trackOrderStatus(orderId) {
+  var entry = { id: orderId, status: 'pending', unsub: null };
+  myOrders.push(entry);
+  entry.unsub = firestoreDb.collection('restaurants').doc(restaurantId)
+    .collection('qrOrders').doc(orderId)
+    .onSnapshot(function(doc){
+      if(!doc.exists) return;
+      var data = doc.data();
+      entry.status = data.status || 'pending';
+      renderOrderStatusBar();
+      // Keep the full-screen confirmation view in sync too, if it's
+      // currently showing for this exact order.
+      if (currentOrderId === orderId && document.getElementById('confirm-screen').classList.contains('show')) {
+        var statusEl = document.getElementById('confirm-status');
+        if(entry.status === 'accepted') {
+          statusEl.innerHTML = '<span style="color:#00C896">✅</span><span>Order accepted! Ban raha hai...</span>';
+        } else if(entry.status === 'declined') {
+          statusEl.innerHTML = '<span style="color:#EF476F">✕</span><span>Order decline ho gaya. Staff se baat karein.</span>';
+        } else {
+          statusEl.innerHTML = '<div class="pulse-dot"></div><span>Waiting for confirmation...</span>';
+        }
+      }
+    });
+}
+
+// Persistent status bar — visible on the menu-browsing screen too, not
+// just right after placing an order.
+function renderOrderStatusBar() {
+  var bar = document.getElementById('order-status-bar');
+  if (!bar) return;
+  if (!myOrders.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'block';
+  bar.innerHTML = myOrders.map(function(o, i){
+    var dotClass = o.status==='accepted' ? 'accepted' : (o.status==='declined' ? 'declined' : 'waiting');
+    var label = o.status==='accepted' ? 'Accepted — ban raha hai'
+              : o.status==='declined' ? 'Declined — staff se baat karein'
+              : 'Waiting for confirmation...';
+    return '<div class="osb-row"><div class="osb-dot '+dotClass+'"></div><div class="osb-text">Order #'+(i+1)+' — <b>'+label+'</b></div></div>';
+  }).join('');
+}
 
 function showConfirmation(orderId) {
   document.getElementById('confirm-screen').classList.add('show');
   document.getElementById('confirm-sub').textContent =
     (tableId ? (locationType==='room' ? tableName + ' room service ke liye ' : tableName + ' ke liye ') : '') + 'Aapka order restaurant ko bhej diya gaya hai. Staff jald hi confirm karega.';
-
-  // Detach any listener from a previous order — without this every new order
-  // stacked another live listener on the page.
-  if (statusUnsub) { try { statusUnsub(); } catch(e){} statusUnsub = null; }
-
-  // Listen for status changes
-  statusUnsub = firestoreDb.collection('restaurants').doc(restaurantId)
-    .collection('qrOrders').doc(orderId)
-    .onSnapshot(function(doc){
-      if(!doc.exists) return;
-      var data = doc.data();
-      var statusEl = document.getElementById('confirm-status');
-      if(data.status === 'accepted') {
-        statusEl.innerHTML = '<span style="color:#00C896">✅</span><span>Order accepted! Ban raha hai...</span>';
-      } else if(data.status === 'declined') {
-        statusEl.innerHTML = '<span style="color:#EF476F">✕</span><span>Order decline ho gaya. Staff se baat karein.</span>';
-      } else {
-        statusEl.innerHTML = '<div class="pulse-dot"></div><span>Waiting for confirmation...</span>';
-      }
-    });
+  trackOrderStatus(orderId);
 }
 
 function startNewOrder() {
   document.getElementById('confirm-screen').classList.remove('show');
-  // Stop listening to the completed order's status.
-  if (statusUnsub) { try { statusUnsub(); } catch(e){} statusUnsub = null; }
   currentOrderId = null;
   cart = {};
   updateCartBar();
@@ -427,6 +493,8 @@ function startNewOrder() {
   var btn = document.getElementById('place-btn');
   if (btn) { btn.disabled = false; btn.textContent = 'Place Order'; }
   renderMenu();
+  // Previously placed orders' status stays visible while browsing/ordering more.
+  renderOrderStatusBar();
 }
 
 // ══════════════════════════════════════════════════════════
