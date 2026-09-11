@@ -6296,12 +6296,24 @@ function closeModal(){
   document.getElementById('overlay').classList.remove('open');
   window._activeModalCloseHandler = null;
   // Consume the history entry we pushed when opening — unless this close
-  // was itself triggered BY the back button, in which case the browser is
-  // already consuming it on its own and calling history.back() again here
-  // would skip an extra step back past the app.
+  // was itself triggered BY the back button (browser is already consuming
+  // it on its own there).
   if (_modalHistoryPushed && !_modalClosingViaBack) {
     _modalHistoryPushed = false;
-    history.back();
+    // history.back() is ASYNCHRONOUS — its popstate doesn't fire until
+    // after the current script finishes. Many places in this app do
+    // closeModal() immediately followed by opening a DIFFERENT modal in
+    // the very same click (e.g. "Collect Payment": close the table modal,
+    // open the payment-mode modal). openModal() re-sets _modalHistoryPushed
+    // to true synchronously — but by the time history.back()'s popstate
+    // actually arrived, that NEW modal was already open, and the popstate
+    // handler (seeing a modal open) closed it right back — making the
+    // freshly-opened modal appear to do nothing. Deferring this check
+    // lets any same-tick re-open happen FIRST; only navigate back if
+    // nothing re-opened a modal in the meantime.
+    setTimeout(function(){
+      if (!_modalHistoryPushed) history.back();
+    }, 0);
   }
   _modalHistoryPushed = false;
 }
