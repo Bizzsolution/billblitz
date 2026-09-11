@@ -4737,6 +4737,7 @@ function showBillReceipt(o){
     <div style="text-align:center;margin-bottom:14px">
       <div style="font-size:2.5rem;margin-bottom:4px">🧾</div>
       <div style="font-weight:700;font-size:0.82rem;color:#6B7A99">Order #${o.id.slice(-4).toUpperCase()} · ${fmtDate(o.date)} ${fmtTime(o.date)}</div>
+      ${o.tableName?`<div style="font-weight:800;font-size:0.95rem;color:#1A2B3C;margin-top:4px">📍 ${esc(o.tableName)}</div>`:''}
     </div>
     <div class="card" style="margin-bottom:10px">
       <div class="card-body">
@@ -4746,7 +4747,6 @@ function showBillReceipt(o){
         ${o.tax?`<div class="bill-row"><span>Tax</span><span>${fmt(o.tax)}</span></div>`:''}
         ${o.discount?`<div class="bill-row"><span>Discount</span><span>-${fmt(o.discount)}</span></div>`:''}
         <div class="bill-total"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
-        <div class="bill-row"><span>Payment</span><span>${o.payment.toUpperCase()}</span></div>
       </div>
     </div>
     ${(c&&hasFeature('loyalty'))?`<div class="stamp-card-mini">
@@ -6129,9 +6129,13 @@ function exportOrdersPDF(){
 
 function viewOrder(id){
   const o=db.orders.find(x=>x.id===id); if(!o) return;
+  const isPaid = o.payment !== 'pending';
+  const statusBadge = isPaid
+    ? '<span class="badge badge-green">✅ PAID — '+o.payment.toUpperCase()+'</span>'
+    : '<span class="badge badge-yellow">⏳ PAYMENT PENDING</span>';
   document.getElementById('modal-body').innerHTML=`
     <div class="modal-title">Order #${o.id.slice(-4).toUpperCase()}</div>
-    <div style="font-size:0.8rem;color:#6B7A99;margin-bottom:12px">${fmtDate(o.date)} at ${fmtTime(o.date)} · ${o.payment}</div>
+    <div style="font-size:0.8rem;color:#6B7A99;margin-bottom:12px">${fmtDate(o.date)} at ${fmtTime(o.date)} · ${statusBadge}</div>
     <div class="card"><div class="card-body">
       ${o.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} ×${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
       <div class="divider"></div>
@@ -7038,7 +7042,12 @@ function showPaymentModeModal(id, kind) {
 
   var billHtml = '';
   if (o) {
-    billHtml = '<div class="card" style="margin-bottom:12px"><div class="card-body">'
+    var isPaidO = o.payment !== 'pending';
+    var statusBadgeO = isPaidO
+      ? '<span class="badge badge-green">✅ PAID — '+o.payment.toUpperCase()+'</span>'
+      : '<span class="badge badge-yellow">⏳ PAYMENT PENDING</span>';
+    billHtml = '<div style="margin-bottom:8px">'+statusBadgeO+'</div>'
+      + '<div class="card" style="margin-bottom:12px"><div class="card-body">'
       + o.items.map(function(i){ return '<div class="bill-row"><span>'+esc(i.name)+' ×'+i.qty+'</span><span>'+fmt(i.price*i.qty)+'</span></div>'; }).join('')
       + '<div class="divider"></div>'
       + '<div class="bill-row"><span>Subtotal</span><span>'+fmt(o.subtotal)+'</span></div>'
@@ -7046,7 +7055,7 @@ function showPaymentModeModal(id, kind) {
       + (o.discount ? '<div class="bill-row"><span>Discount</span><span>-'+fmt(o.discount)+'</span></div>' : '')
       + '<div class="bill-total"><span>TOTAL</span><span>'+fmt(o.total)+'</span></div>'
       + '</div></div>'
-      + '<button class="btn btn-outline btn-full" style="margin-bottom:12px" onclick="printBill(\''+o.id+'\')">🖨️ Print Bill</button>';
+      + getBillPrintButtonFullHtml(o.id);
   } else {
     billHtml = '<div style="background:#FEE2E2;color:#DC2626;border-radius:10px;padding:10px;margin-bottom:12px;font-size:0.82rem">⚠️ Bill data nahi mila — table/room dobara kholke try karein.</div>';
   }
