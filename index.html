@@ -1273,6 +1273,22 @@ tr:nth-child(even) td{background:#FFFFFF;}
       </div>
     </div>
 
+    <!-- Bill Serial Number -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">🔢 Bill Numbering</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Bill pe dikhne wala serial number apne hisaab se set karein — jo bhi series set karein, agla bill usi se aage continue karega. Har device pe turant reflect hoga.</div>
+        <div style="display:flex;gap:8px">
+          <div class="form-group" style="flex:1"><label class="form-label">Prefix (optional)</label>
+            <input class="form-inp" id="set-bill-prefix" placeholder="e.g. INV-"/></div>
+          <div class="form-group" style="flex:1"><label class="form-label">Next Bill Number</label>
+            <input class="form-inp" id="set-bill-next" type="number" min="1" placeholder="1001"/></div>
+        </div>
+        <div style="font-size:0.68rem;color:#9CA3AF;margin-bottom:10px" id="bill-series-preview"></div>
+        <button class="btn btn-primary btn-full" onclick="saveBillSeries()">Save Bill Numbering</button>
+      </div>
+    </div>
+
     <!-- Order Manager authorization (feature-gated, appears only if enabled) -->
     <div class="card" style="margin-bottom:10px;display:none" id="om-auth-card">
       <div class="card-header"><div class="card-title">📝 Order Manager Permissions</div></div>
@@ -2965,7 +2981,7 @@ function printBill(orderId){
     + (rf?'<div class="pc">FSSAI: '+rf+'</div>':'')
     + '<hr><div style="text-align:center;font-weight:700">TAX INVOICE</div>'
 
-    + '<div class="pc">Order #'+o.id.slice(-4).toUpperCase()+'</div>'
+    + '<div class="pc">Order '+displayBillNo(o)+'</div>'
     + '<div class="pc">'+fmtDate(o.date)+' '+fmtTime(o.date)+'</div>'
     + (cn?'<div class="pc">Customer: '+cn+'</div>':'')
     + '<hr>'
@@ -2978,7 +2994,6 @@ function printBill(orderId){
     + (o.tax?'<tr><td>Tax</td><td style="text-align:right">Rs.'+o.tax.toFixed(2)+'</td></tr>':'')
     + (o.discount?'<tr><td>Discount</td><td style="text-align:right">-Rs.'+o.discount.toFixed(2)+'</td></tr>':'')
     + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.'+o.total.toFixed(2)+'</td></tr>'
-    + '<tr><td>Payment</td><td style="text-align:right">'+o.payment.toUpperCase()+'</td></tr>'
     + '</table>'
     + '<hr>'
     + '<div class="pc">'+rm+'</div>'
@@ -3072,7 +3087,7 @@ function generateBillPDFBlob(o) {
   y += 2;
   doc.setLineWidth(0.2); doc.line(4, y, 76, y); y += 4;
   doc.setFontSize(8);
-  doc.text('Order #' + o.id.slice(-6).toUpperCase(), 4, y);
+  doc.text('Order ' + displayBillNo(o), 4, y);
   doc.text(fmtDate(o.date), 76, y, { align: 'right' }); y += 4;
   doc.text(fmtTime(o.date), 76, y, { align: 'right' }); y += 4;
   doc.line(4, y, 76, y); y += 5;
@@ -3096,7 +3111,6 @@ function generateBillPDFBlob(o) {
   doc.setFontSize(10); doc.setFont(undefined, 'bold');
   doc.text('TOTAL', 4, y); doc.text(fmtPDF(o.total), 76, y, { align: 'right' }); y += 6;
   doc.setFontSize(7); doc.setFont(undefined, 'normal');
-  doc.text('Payment: ' + o.payment.toUpperCase(), 4, y); y += 6;
 
   doc.setFontSize(7);
   doc.text(info.msg || 'Thank you for dining with us!', 40, y, { align: 'center' }); y += 4;
@@ -3208,7 +3222,7 @@ function sendBillPdfToNumber(orderId) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'Bill-' + o.id.slice(-6).toUpperCase() + '.pdf';
+      a.download = 'Bill-' + (o.billNo || o.id.slice(-6).toUpperCase()) + '.pdf';
       a.click();
       URL.revokeObjectURL(url);
       closeModal();
@@ -3233,14 +3247,14 @@ function buildBillWhatsAppText(o, custName) {
   var msg = '';
   if (custName) msg += 'Hi ' + custName + ' 👋\n\n';
   msg += '🍽️ *' + name + '*\n';
-  msg += '📋 *Receipt — Order #' + o.id.slice(-4).toUpperCase() + '*\n';
+  msg += '📋 *Receipt — Order ' + displayBillNo(o) + '*\n';
   msg += '📅 ' + fmtDate(o.date) + ' ' + fmtTime(o.date) + '\n\n';
   msg += '*Items:*\n';
   o.items.forEach(function(i){ msg += '• ' + i.qty + '× ' + i.name + ' — ₹' + (i.price*i.qty).toFixed(2) + '\n'; });
   msg += '\n';
   if (o.tax) msg += 'Tax: ₹' + o.tax.toFixed(2) + '\n';
   if (o.discount) msg += 'Discount: -₹' + o.discount.toFixed(2) + '\n';
-  msg += '*TOTAL: ₹' + o.total.toFixed(2) + '* (' + o.payment + ')\n\n';
+  msg += '*TOTAL: ₹' + o.total.toFixed(2) + '*\n\n';
   msg += info.msg || 'Thank you for dining with us! 🙏';
   return msg;
 }
@@ -3251,13 +3265,13 @@ async function whatsappBillPDF(orderId) {
   ensureJsPDFLib(async function() {
     try {
       var blob = generateBillPDFBlob(o);
-      var file = new File([blob], 'Bill-' + o.id.slice(-6).toUpperCase() + '.pdf', { type: 'application/pdf' });
+      var file = new File([blob], 'Bill-' + (o.billNo || o.id.slice(-6).toUpperCase()) + '.pdf', { type: 'application/pdf' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'Bill Receipt',
-          text: 'Aapka bill — Order #' + o.id.slice(-6).toUpperCase()
+          text: 'Aapka bill — Order ' + displayBillNo(o)
         });
       } else {
         // Fallback for browsers without file-sharing support — download PDF
@@ -3416,6 +3430,12 @@ function renderSettingsPage(){
   // includes the Kitchen Display feature.
   var kitchenPinGroup = document.getElementById('set-kitchen-pin-group');
   if(kitchenPinGroup) kitchenPinGroup.style.display = hasFeature('kitchen_display') ? '' : 'none';
+  var bsPrefixInp = document.getElementById('set-bill-prefix');
+  var bsNextInp = document.getElementById('set-bill-next');
+  var bsCurrent = (db.settings && db.settings.billSeries) || { prefix: '', nextNumber: 1 };
+  if(bsPrefixInp) bsPrefixInp.value = bsCurrent.prefix || '';
+  if(bsNextInp) bsNextInp.value = bsCurrent.nextNumber || 1;
+  renderBillSeriesPreview();
   var pmSel = document.getElementById('printer-mode-sel');
   if(pmSel) pmSel.value = db.settings?.printerMode || 'both';
   var op = document.getElementById('set-owner-phone');
@@ -3485,6 +3505,38 @@ function savePINs(){
   if(document.getElementById('set-kitchen-pin')) document.getElementById('set-kitchen-pin').value = '';
   if(document.getElementById('set-order_manager-pin')) document.getElementById('set-order_manager-pin').value = '';
   toast('PINs updated! 🔐');
+}
+
+function saveBillSeries() {
+  var prefix = (document.getElementById('set-bill-prefix').value || '').trim();
+  var nextNum = parseInt(document.getElementById('set-bill-next').value);
+  if (!nextNum || nextNum < 1) { toast('Sahi number daalein (1 ya usse zyada)!', '#FF6B35'); return; }
+  if (!db.settings) db.settings = {};
+  db.settings.billSeries = { prefix: prefix, nextNumber: nextNum };
+  save();
+  renderBillSeriesPreview();
+  // The LOCAL settings value above is only for display/offline-fallback —
+  // the actual number handed out to the NEXT generated bill (on ANY
+  // device) is controlled by this dedicated Firestore document, read
+  // inside a transaction by getNextBillNumber(). Writing it directly here
+  // is what makes a new series take effect immediately everywhere, not
+  // just on this device.
+  if (isFirebaseReady && firestoreDb && restaurantId) {
+    firestoreDb.collection('restaurants').doc(restaurantId)
+      .collection('meta').doc('billCounter')
+      .set({ counter: nextNum, prefix: prefix, _updatedAt: new Date().toISOString() }, { merge: true })
+      .then(function(){ toast('✅ Bill numbering set! Agla bill ' + prefix + nextNum + ' se shuru hoga — sab devices pe turant.', '#00A878'); })
+      .catch(function(){ toast('⚠️ Save ho gaya, lekin cloud sync mein dikkat aayi. Internet check karein.', '#FF6B35'); });
+  } else {
+    toast('✅ Bill numbering set! (offline — internet aane par sync hoga)', '#FFD700');
+  }
+}
+
+function renderBillSeriesPreview() {
+  var el = document.getElementById('bill-series-preview');
+  if (!el) return;
+  var bs = (db.settings && db.settings.billSeries) || { prefix: '', nextNumber: 1 };
+  el.textContent = 'Agla bill number hoga: ' + (bs.prefix || '') + bs.nextNumber;
 }
 
 function saveOrderManagerAuth() {
@@ -3661,7 +3713,7 @@ function renderDashboardOrders() {
     var hasReturn = o.returns && o.returns.length;
     return '<div class="list-row" data-oid="' + o.id + '" onclick="viewOrder(this.dataset.oid)">'
       + '<div class="list-icon" style="background:' + (hasReturn?'#FEE2E2':'#DCFCE7') + ';color:' + (hasReturn?'#DC2626':'#00A878') + '">' + (hasReturn?'↩️':'🧾') + '</div>'
-      + '<div class="list-main"><div class="list-title">Order #' + o.id.slice(-4).toUpperCase() + (hasReturn?' <span style="font-size:0.62rem;background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;font-weight:700">RETURNED</span>':'') + '</div>'
+      + '<div class="list-main"><div class="list-title">Order ' + displayBillNo(o) + (hasReturn?' <span style="font-size:0.62rem;background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;font-weight:700">RETURNED</span>':'') + '</div>'
       + '<div class="list-sub">' + o.items.length + ' items · ' + fmtDate(o.date) + ' ' + fmtTime(o.date) + ' · ' + o.payment + '</div></div>'
       + '<div class="list-right"><div style="font-weight:800;color:#FF6B35">' + fmt(o.total) + '</div></div>'
       + '</div>';
@@ -4471,7 +4523,7 @@ function showReturnItemModal(orderId) {
 
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
-    + '<div class="modal-title">↩️ Return Item — Order #' + o.id.slice(-4).toUpperCase() + '</div>'
+    + '<div class="modal-title">↩️ Return Item — Order ' + displayBillNo(o) + '</div>'
     + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Jitni quantity return ho rahi hai, utni daaliye. Bill automatically adjust ho jaayega.</div>'
     + '<div id="return-items-list">' + (rows || '<div class="empty">Sab items already return ho chuke hain.</div>') + '</div>'
     + '<div style="background:#F7F9FF;border-radius:10px;padding:12px;margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:0.85rem"><span>Return Amount</span><span id="ret-preview-amt" style="font-weight:800;color:#DC2626">Rs.0</span></div>'
@@ -4692,7 +4744,56 @@ function recalcBill(){
   document.getElementById('tax-pct-lbl').textContent=taxPct;
 }
 
-function completeBill(payment){
+// ── BILL SERIAL NUMBER ──────────────────────────────────────
+// Owner-configurable prefix + sequential number (e.g. "INV-1042"), shown
+// on receipts INSTEAD of the random internal order id. Uses a Firestore
+// TRANSACTION (not a locally-cached counter) so two devices generating
+// bills at the same moment can never be handed the same number — each
+// transaction atomically reads-then-increments, and Firestore itself
+// retries on conflict, guaranteeing every device gets a unique, correctly
+// sequential number the instant it asks for one.
+async function getNextBillNumber() {
+  var localSeries = (db.settings && db.settings.billSeries) || { prefix: '', nextNumber: 1 };
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) {
+    // Offline fallback — best effort using the last-known local counter.
+    var n = localSeries.nextNumber || 1;
+    if (!db.settings) db.settings = {};
+    db.settings.billSeries = { prefix: localSeries.prefix || '', nextNumber: n + 1 };
+    save();
+    return (localSeries.prefix || '') + n;
+  }
+  var counterRef = firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('billCounter');
+  try {
+    var result = await firestoreDb.runTransaction(async function(tx) {
+      var doc = await tx.get(counterRef);
+      var current = doc.exists ? (doc.data().counter || 1) : (localSeries.nextNumber || 1);
+      var prefix = doc.exists ? (doc.data().prefix || '') : (localSeries.prefix || '');
+      tx.set(counterRef, { counter: current + 1, prefix: prefix, _updatedAt: new Date().toISOString() }, { merge: true });
+      return { number: current, prefix: prefix };
+    });
+    if (!db.settings) db.settings = {};
+    db.settings.billSeries = { prefix: result.prefix, nextNumber: result.number + 1 };
+    save();
+    return result.prefix + result.number;
+  } catch (e) {
+    // Transaction failed (offline mid-call, etc.) — fall back to local so a
+    // bill can still always be generated.
+    var n2 = localSeries.nextNumber || 1;
+    if (!db.settings) db.settings = {};
+    db.settings.billSeries = { prefix: localSeries.prefix || '', nextNumber: n2 + 1 };
+    save();
+    return (localSeries.prefix || '') + n2;
+  }
+}
+
+// Every "Order #XXXX" display prefers the sequential billNo when present,
+// falling back to the old random-id-derived label for any order created
+// before this feature existed (so old bills/reports still show something).
+function displayBillNo(o) {
+  return o.billNo ? o.billNo : ('#' + o.id.slice(-4).toUpperCase());
+}
+
+async function completeBill(payment){
   if(!order.items.length){ toast('Add items to the order first!','#FF6B35'); return; }
   const sub=order.items.reduce((s,i)=>s+i.price*i.qty,0);
   const taxPct=parseFloat(document.getElementById('bill-tax-pct').value)||0;
@@ -4700,7 +4801,8 @@ function completeBill(payment){
   const tax=sub*taxPct/100;
   const total=Math.max(0,sub+tax-disc);
   const orderId=uid();
-  const o={id:orderId,date:new Date().toISOString(),items:[...order.items],subtotal:sub,tax,discount:disc,total,payment,customerId:order.customerId,tableId:order.tableId,tableName:order.tableName};
+  const billNo = await getNextBillNumber();
+  const o={id:orderId,billNo:billNo,date:new Date().toISOString(),items:[...order.items],subtotal:sub,tax,discount:disc,total,payment,customerId:order.customerId,tableId:order.tableId,tableName:order.tableName};
   db.orders.unshift(o);
   // ☁️ Cloud sync
   cloudSave('orders', orderId, o);
@@ -4736,7 +4838,7 @@ function showBillReceipt(o){
     <div class="modal-title">✅ Bill Complete</div>
     <div style="text-align:center;margin-bottom:14px">
       <div style="font-size:2.5rem;margin-bottom:4px">🧾</div>
-      <div style="font-weight:700;font-size:0.82rem;color:#6B7A99">Order #${o.id.slice(-4).toUpperCase()} · ${fmtDate(o.date)} ${fmtTime(o.date)}</div>
+      <div style="font-weight:700;font-size:0.82rem;color:#6B7A99">Order ${displayBillNo(o)} · ${fmtDate(o.date)} ${fmtTime(o.date)}</div>
       ${o.tableName?`<div style="font-weight:800;font-size:0.95rem;color:#1A2B3C;margin-top:4px">📍 ${esc(o.tableName)}</div>`:''}
     </div>
     <div class="card" style="margin-bottom:10px">
@@ -5858,7 +5960,7 @@ function exportSalesExcel(){
   var orders = getPeriodOrders();
   var headers = ['Order#','Date','Time','Items','Subtotal','Tax','Discount','Total','Payment'];
   var rows = orders.map(function(o){
-    return [o.id.slice(-6).toUpperCase(), fmtDate(o.date), fmtTime(o.date), o.items.length, o.subtotal, o.tax, o.discount, o.total, o.payment];
+    return [displayBillNo(o), fmtDate(o.date), fmtTime(o.date), o.items.length, o.subtotal, o.tax, o.discount, o.total, o.payment];
   });
   exportToExcel('Sales_Report_'+getPeriodLabel().replace(/\s/g,'_'), 'Sales', headers, rows);
 }
@@ -5868,7 +5970,7 @@ function exportSalesPDF(){
   var total=orders.reduce(function(s,o){return s+o.total;},0);
   var tax=orders.reduce(function(s,o){return s+o.tax;},0);
   var rows = orders.map(function(o){
-    return '<tr><td>#'+o.id.slice(-6).toUpperCase()+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td>'+o.payment+'</td><td>'+fmt(o.total)+'</td></tr>';
+    return '<tr><td>'+displayBillNo(o)+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td>'+o.payment+'</td><td>'+fmt(o.total)+'</td></tr>';
   }).join('');
   var html = '<div class="sr"><div class="sc"><div class="sv" style="color:#16A34A">'+fmt(total)+'</div><div class="sl">Revenue</div></div><div class="sc"><div class="sv" style="color:#2563EB">'+orders.length+'</div><div class="sl">Orders</div></div><div class="sc"><div class="sv" style="color:#7C3AED">'+fmt(tax)+'</div><div class="sl">Tax</div></div></div>'
     +'<div class="ps"><div class="pst">Order Details</div><table><tr><th>Order#</th><th>Date/Time</th><th>Items</th><th>Payment</th><th>Total</th></tr>'+rows+'</table></div>';
@@ -6003,7 +6105,7 @@ function exportGSTExcel(){
   var headers = ['Order#','Date','Taxable Amount','GST Rate %','GST Amount','Total'];
   var rows = orders.map(function(o){
     var rate = o.subtotal>0 ? Math.round((o.tax/o.subtotal)*100) : 0;
-    return [o.id.slice(-6).toUpperCase(), fmtDate(o.date), o.subtotal, rate, o.tax, o.total];
+    return [displayBillNo(o), fmtDate(o.date), o.subtotal, rate, o.tax, o.total];
   });
   exportToExcel('GST_Report_'+getPeriodLabel().replace(/\s/g,'_'), 'GST', headers, rows);
 }
@@ -6014,7 +6116,7 @@ function exportGSTPDF(){
   var totalGST = orders.reduce(function(s,o){return s+o.tax;},0);
   var rows = orders.map(function(o){
     var rate = o.subtotal>0 ? Math.round((o.tax/o.subtotal)*100) : 0;
-    return '<tr><td>#'+o.id.slice(-6).toUpperCase()+'</td><td>'+fmtDate(o.date)+'</td><td>'+fmt(o.subtotal)+'</td><td>'+rate+'%</td><td>'+fmt(o.tax)+'</td></tr>';
+    return '<tr><td>'+displayBillNo(o)+'</td><td>'+fmtDate(o.date)+'</td><td>'+fmt(o.subtotal)+'</td><td>'+rate+'%</td><td>'+fmt(o.tax)+'</td></tr>';
   }).join('');
   var html = '<div class="sr"><div class="sc"><div class="sv" style="color:#7C3AED">'+fmt(totalGST)+'</div><div class="sl">Total GST</div></div><div class="sc"><div class="sv" style="color:#2563EB">'+fmt(taxable)+'</div><div class="sl">Taxable Amt</div></div></div>'
     +'<div class="ps"><div class="pst">GST Breakdown by Order</div><table><tr><th>Order#</th><th>Date</th><th>Taxable</th><th>Rate</th><th>GST</th></tr>'+rows+'</table></div>';
@@ -6111,7 +6213,7 @@ function exportOrdersExcel(){
   var orders = getPeriodOrders();
   var headers = ['Order#','Date','Time','Items','Subtotal','Tax','Discount','Total','Payment','Table/Room'];
   var rows = orders.map(function(o){
-    return [o.id.slice(-6).toUpperCase(), fmtDate(o.date), fmtTime(o.date), o.items.length, o.subtotal, o.tax, o.discount, o.total, o.payment, o.tableName||'Takeaway'];
+    return [displayBillNo(o), fmtDate(o.date), fmtTime(o.date), o.items.length, o.subtotal, o.tax, o.discount, o.total, o.payment, o.tableName||'Takeaway'];
   });
   exportToExcel('Order_History_'+getPeriodLabel().replace(/\s/g,'_'), 'Orders', headers, rows);
 }
@@ -6120,7 +6222,7 @@ function exportOrdersPDF(){
   if(!checkFeatureAccess('pdf_reports')) return;
   var orders = getPeriodOrders();
   var rows = orders.map(function(o){
-    return '<tr><td>#'+o.id.slice(-6).toUpperCase()+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td>'+o.payment+'</td><td>'+fmt(o.total)+'</td></tr>';
+    return '<tr><td>'+displayBillNo(o)+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td>'+o.payment+'</td><td>'+fmt(o.total)+'</td></tr>';
   }).join('');
   var html = '<div class="ps"><div class="pst">Order History — '+orders.length+' orders</div><table><tr><th>Order#</th><th>Date/Time</th><th>Items</th><th>Payment</th><th>Total</th></tr>'+rows+'</table></div>';
   openPDF('Order History - '+getPeriodLabel(), html);
@@ -6134,7 +6236,7 @@ function viewOrder(id){
     ? '<span class="badge badge-green">✅ PAID — '+o.payment.toUpperCase()+'</span>'
     : '<span class="badge badge-yellow">⏳ PAYMENT PENDING</span>';
   document.getElementById('modal-body').innerHTML=`
-    <div class="modal-title">Order #${o.id.slice(-4).toUpperCase()}</div>
+    <div class="modal-title">Order ${displayBillNo(o)}</div>
     <div style="font-size:0.8rem;color:#6B7A99;margin-bottom:12px">${fmtDate(o.date)} at ${fmtTime(o.date)} · ${statusBadge}</div>
     <div class="card"><div class="card-body">
       ${o.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} ×${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
@@ -9331,7 +9433,7 @@ function pdfSalesReport() {
     +'</table></div>'
     +'<div class="ps"><div class="pst">🧾 Recent Orders</div>'
     +'<table><tr><th>Order#</th><th>Date</th><th>Items</th><th>Payment</th><th>Total</th></tr>'
-    +orders.slice(0,30).map(o=>'<tr><td>#'+o.id.slice(-4).toUpperCase()+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td><span class="'+(o.payment==='cash'?'bg':o.payment==='card'?'by':'bg')+'">'+o.payment+'</span></td><td style="font-weight:700">'+fmt(o.total)+'</td></tr>').join('')
+    +orders.slice(0,30).map(o=>'<tr><td>'+displayBillNo(o)+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td><span class="'+(o.payment==='cash'?'bg':o.payment==='card'?'by':'bg')+'">'+o.payment+'</span></td><td style="font-weight:700">'+fmt(o.total)+'</td></tr>').join('')
     +'</table></div>';
   openPDF('Sales Report — '+(tab.charAt(0).toUpperCase()+tab.slice(1)), html);
 }
@@ -9798,7 +9900,7 @@ async function btPrintBill(orderId) {
   if(info.gst)   sections.push({center:true, text:'GST: '+info.gst});
   if(info.fssai) sections.push({center:true, text:'FSSAI: '+info.fssai});
   sections.push({left:true, line:true});
-  sections.push({left:true, text:btPadRow('RECEIPT','#'+o.id.slice(-4).toUpperCase()), bold:true});
+  sections.push({left:true, text:btPadRow('RECEIPT',displayBillNo(o)), bold:true});
   sections.push({left:true, text:btPadRow(fmtDate(o.date), fmtTime(o.date))});
   if(cust) sections.push({left:true, text:'Customer: '+cust.name});
   sections.push({left:true, line:true});
@@ -9812,7 +9914,6 @@ async function btPrintBill(orderId) {
   if(o.discount) sections.push({left:true, text:btPadRow('Discount','-Rs.'+o.discount.toFixed(2))});
   sections.push({left:true, dblLine:true});
   sections.push({left:true, text:btPadRow('TOTAL','Rs.'+o.total.toFixed(2)), bold:true, dbl:true});
-  sections.push({left:true, text:btPadRow('Payment',o.payment.toUpperCase())});
   sections.push({left:true, line:true});
   sections.push({center:true, text:info.msg||'Thank you! Visit again :)'});
   sections.push({center:true, text:'Powered by BillBlitz'});
@@ -9831,7 +9932,7 @@ async function btPrintKOT(orderId) {
     {center:true, bold:true, dbl:true, text:'KOT'},
     {center:true, text:'KITCHEN ORDER TICKET'},
     {left:true, line:true},
-    {left:true, bold:true, dbl:true, text:'Order: #'+o.id.slice(-4).toUpperCase()},
+    {left:true, bold:true, dbl:true, text:'Order: '+displayBillNo(o)},
     {left:true, text:'Time: '+fmtTime(o.date)},
     {left:true, text:'Items: '+items.length},
     {left:true, line:true},
