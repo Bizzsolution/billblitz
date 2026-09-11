@@ -18,8 +18,8 @@
 <!-- Firebase loads after app starts -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html{font-size:16px;}
-body{font-family:'Segoe UI',sans-serif;background:linear-gradient(160deg,#EEF2FF 0%,#F0F7FF 50%,#E8F0FE 100%);color:#1A2B3C;min-height:100vh;overflow-x:hidden;}
+html{font-size:16px;overscroll-behavior-y:none;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(160deg,#EEF2FF 0%,#F0F7FF 50%,#E8F0FE 100%);color:#1A2B3C;min-height:100vh;overflow-x:hidden;overscroll-behavior-y:none;}
 
 /* ── HEADER ── */
 .header{background:linear-gradient(135deg,#0F1923 0%,#1A2B3C 60%,#1E3A5F 100%);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:200;box-shadow:0 4px 24px rgba(15,25,35,0.6),0 1px 0 rgba(255,215,0,0.15);}
@@ -6269,9 +6269,57 @@ function saveLoyaltyMember(id){
 // ╔══════════════════════════════════════════════════════╗
 // ║                   MODAL UTILS                        ║
 // ╚══════════════════════════════════════════════════════╝
-function openModal(){ document.getElementById('overlay').classList.add('open'); }
-function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+// ── MODAL vs PHONE BACK BUTTON ──────────────────────────────────
+// Without this, the app had NO history state of its own — so pressing the
+// phone's back button/gesture while ANY modal was open (staff check-in PIN,
+// face camera, table actions, etc.) fell through to the browser's native
+// back navigation, which — since there was nothing else in history — exited
+// the whole PWA instead of just closing the modal. This makes the back
+// button close the current modal first, exactly like tapping Cancel/outside.
+var _modalHistoryPushed = false;
+var _modalClosingViaBack = false;
+// A currently-open modal can register itself here if it needs to do more
+// than a plain visual close when dismissed via the back button — e.g. the
+// face camera modal must stop its video stream, and PIN verification must
+// resolve its pending Promise as "cancelled". Falls back to plain closeModal()
+// when nothing is registered.
+window._activeModalCloseHandler = null;
+
+function openModal(){
+  document.getElementById('overlay').classList.add('open');
+  if (!_modalHistoryPushed) {
+    history.pushState({ bbModal: true }, '', location.href);
+    _modalHistoryPushed = true;
+  }
+}
+function closeModal(){
+  document.getElementById('overlay').classList.remove('open');
+  window._activeModalCloseHandler = null;
+  // Consume the history entry we pushed when opening — unless this close
+  // was itself triggered BY the back button, in which case the browser is
+  // already consuming it on its own and calling history.back() again here
+  // would skip an extra step back past the app.
+  if (_modalHistoryPushed && !_modalClosingViaBack) {
+    _modalHistoryPushed = false;
+    history.back();
+  }
+  _modalHistoryPushed = false;
+}
 function closeModalOnBg(e){ if(e.target===document.getElementById('overlay')) closeModal(); }
+
+window.addEventListener('popstate', function(){
+  var overlay = document.getElementById('overlay');
+  if (overlay && overlay.classList.contains('open')) {
+    _modalClosingViaBack = true;
+    if (typeof window._activeModalCloseHandler === 'function') {
+      window._activeModalCloseHandler();
+    } else {
+      closeModal();
+    }
+    _modalClosingViaBack = false;
+    _modalHistoryPushed = false;
+  }
+});
 
 // ╔══════════════════════════════════════════════════════╗
 // ║              SMART ORDER INPUT + VOICE               ║
@@ -7557,11 +7605,15 @@ function verifyStaffPin(staffId) {
       }
     }
 
-    document.getElementById('pin-verify-confirm').onclick = doVerify;
-    document.getElementById('pin-verify-cancel').onclick = function() {
+    function cancelVerify() {
       closeModal();
       resolve(false);
-    };
+    }
+    document.getElementById('pin-verify-confirm').onclick = doVerify;
+    document.getElementById('pin-verify-cancel').onclick = cancelVerify;
+    // So the phone's back button cancels this step properly (resolves the
+    // pending Promise as "cancelled") instead of exiting the whole app.
+    window._activeModalCloseHandler = cancelVerify;
   });
 }
 
@@ -7686,8 +7738,16 @@ function onFaceConsentConfirm(staffId) {
 }
 
 // ── CAMERA MODAL (shared for register + verify) ────────────────
+// 'user' = front/selfie camera, 'environment' = back camera. Resets to
+// front by default each time a fresh camera session opens; the switch
+// button lets the person flip to the back camera for that session
+// (useful on devices where the front camera is poor, or a second person
+// is holding the phone facing the staff member).
+var faceCurrentFacingMode = 'user';
+
 function openFaceCameraModal(staffId, mode, onDone) {
   var s = db.staff.find(function(x){return x.id===staffId;}); if(!s) return;
+  faceCurrentFacingMode = 'user';
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">' + (mode==='register' ? '😀 Face Register Karein' : '👁️ Face Verify Karein') + ' — ' + esc(s.name) + '</div>'
@@ -7695,6 +7755,7 @@ function openFaceCameraModal(staffId, mode, onDone) {
     + '<div style="position:relative;width:100%;max-width:280px;margin:0 auto;border-radius:16px;overflow:hidden;background:#000">'
     + '<video id="face-video" autoplay playsinline muted style="width:100%;display:block;transform:scaleX(-1)"></video>'
     + '<div id="face-oval-guide" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:65%;height:75%;border:3px dashed rgba(255,255,255,0.5);border-radius:50%;pointer-events:none"></div>'
+    + '<button id="face-switch-btn" onclick="switchFaceCamera(\'' + staffId + '\')" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:1.1rem;cursor:pointer;display:none" title="Switch Camera">🔄</button>'
     + '</div>'
     + '<div id="face-cam-actions" style="display:flex;gap:8px;margin-top:14px">'
     + '<button class="btn btn-outline" style="flex:1" onclick="closeFaceCameraModal()">Cancel</button>'
@@ -7702,29 +7763,59 @@ function openFaceCameraModal(staffId, mode, onDone) {
     + '</div>';
   openModal();
   window._faceModalOnDone = onDone || null;
+  // So the phone's back button properly stops the camera stream (instead
+  // of leaving it running in the background) and cancels cleanly, exactly
+  // like tapping the in-modal Cancel button.
+  window._activeModalCloseHandler = closeFaceCameraModal;
 
   loadFaceModels(function() {
-    var statusEl = document.getElementById('face-cam-status');
-    if (statusEl) statusEl.textContent = 'Camera khul rahi hai...';
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      if (statusEl) statusEl.textContent = 'Yeh device camera support nahi karta.';
-      return;
-    }
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }).then(function(stream) {
-      faceCameraStream = stream;
-      var video = document.getElementById('face-video');
-      if (!video) { stream.getTracks().forEach(function(t){t.stop();}); return; }
-      video.srcObject = stream;
-      if (statusEl) statusEl.textContent = 'Apna chehra oval ke andar rakhein';
-      var capBtn = document.getElementById('face-capture-btn');
-      if (capBtn) capBtn.disabled = false;
-    }).catch(function(err) {
-      if (statusEl) statusEl.textContent = 'Camera access nahi mila. Permission allow karein.';
-    });
+    startFaceCameraStream();
   }, function() {
     var statusEl = document.getElementById('face-cam-status');
     if (statusEl) statusEl.textContent = '❌ AI model load nahi hua. Internet check karein.';
   });
+}
+
+// Starts (or restarts, after a camera switch) the getUserMedia stream using
+// whatever faceCurrentFacingMode currently is. Shared by both the initial
+// open and switchFaceCamera() so there's one tested code path for it.
+function startFaceCameraStream() {
+  var statusEl = document.getElementById('face-cam-status');
+  if (statusEl) statusEl.textContent = 'Camera khul rahi hai...';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (statusEl) statusEl.textContent = 'Yeh device camera support nahi karta.';
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: faceCurrentFacingMode }, audio: false }).then(function(stream) {
+    faceCameraStream = stream;
+    var video = document.getElementById('face-video');
+    if (!video) { stream.getTracks().forEach(function(t){t.stop();}); return; }
+    video.srcObject = stream;
+    // Mirroring only makes sense for the front/selfie camera — mirroring
+    // the back camera would show text and surroundings reversed.
+    video.style.transform = (faceCurrentFacingMode === 'user') ? 'scaleX(-1)' : 'none';
+    if (statusEl) statusEl.textContent = 'Apna chehra oval ke andar rakhein';
+    var capBtn = document.getElementById('face-capture-btn');
+    if (capBtn) capBtn.disabled = false;
+    // Only show the switch button once we know the camera actually opened —
+    // and only if the device plausibly has more than one camera to switch
+    // to (most phones do; this is a light-touch check, not a hard guarantee).
+    var switchBtn = document.getElementById('face-switch-btn');
+    if (switchBtn) switchBtn.style.display = '';
+  }).catch(function(err) {
+    if (statusEl) statusEl.textContent = 'Camera access nahi mila. Permission allow karein.';
+  });
+}
+
+function switchFaceCamera(staffId) {
+  var switchBtn = document.getElementById('face-switch-btn');
+  if (switchBtn) switchBtn.disabled = true;
+  stopFaceCamera();
+  faceCurrentFacingMode = (faceCurrentFacingMode === 'user') ? 'environment' : 'user';
+  var capBtn = document.getElementById('face-capture-btn');
+  if (capBtn) capBtn.disabled = true;
+  startFaceCameraStream();
+  if (switchBtn) switchBtn.disabled = false;
 }
 
 function closeFaceCameraModal() {
