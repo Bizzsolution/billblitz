@@ -925,8 +925,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="pos-layout">
     <div class="pos-left">
     <!-- Smart Order Input -->
-    <div class="smart-input-wrap">
-      <div class="smart-label"><span>🤖</span> Smart Order — Type or Speak Items</div>
+    <div class="smart-input-wrap" id="smart-order-card">
+      <div class="smart-label" id="smart-order-label"><span>🤖</span> Smart Order — Type or Speak Items</div>
       <div class="smart-inp-row">
         <input class="smart-inp" id="smart-inp" placeholder='e.g. "2 butter chicken, 1 naan, 3 lassi"' onkeydown="if(event.key==='Enter') processSmartOrder()"/>
         <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="Speak order">🎤</button>
@@ -2770,6 +2770,7 @@ function applyFeatureGating() {
     'qr_menu':      ['feat-btn-qr_menu'],
     'pdf_reports':  ['feat-btn-pdf_reports-1'],
     'loyalty':      ['pos-customer-card'],
+    'smart_order':  ['smart-order-card'],
   };
   Object.keys(elementMap).forEach(function(featId) {
     var show = hasFeature(featId);
@@ -2780,6 +2781,7 @@ function applyFeatureGating() {
       }
     });
   });
+
 
   // If current page is now restricted, go to billing
   var currentPage = document.querySelector('.page.active');
@@ -6797,6 +6799,9 @@ function addItemsFromVoiceChunk(chunk) {
 }
 
 function processSmartOrder() {
+  // Same whole-feature gate as toggleVoice() — covers the typed path too, so
+  // Smart Order can't be used at all when the plan has it disabled.
+  if (!hasFeature('smart_order')) return;
   const inp = document.getElementById('smart-inp');
   const text = inp.value.trim();
   if (!text) { toast('Type an order first!', '#FF6B35'); return; }
@@ -6844,6 +6849,10 @@ function processSmartOrder() {
 
 // ── Voice Recognition ───────────────────────────────────
 function toggleVoice() {
+  // Feature gate at the function level too, not just by hiding the UI —
+  // so this can never run for a client whose plan has Smart Order disabled,
+  // no matter how it gets triggered.
+  if (!hasFeature('smart_order')) return;
   // Check browser support
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
     showVoiceNotSupported(); return;
