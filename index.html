@@ -982,8 +982,9 @@ tr:nth-child(even) td{background:#FFFFFF;}
           <span id="bill-tax-amt">₹0.00</span>
         </div>
         <div class="bill-row">
-          <span>Discount (₹)</span>
-          <input type="number" id="bill-discount" value="0" min="0" style="width:55px;padding:2px 4px;border-radius:5px;border:1px solid #A5B4FC;font-size:0.82rem;text-align:center" onchange="recalcBill()">
+          <span>Discount (%)</span>
+          <input type="number" id="bill-discount" value="0" min="0" max="100" style="width:55px;padding:2px 4px;border-radius:5px;border:1px solid #A5B4FC;font-size:0.82rem;text-align:center" onchange="recalcBill()">
+          <span id="bill-discount-amt" style="font-size:0.75rem;color:#6B7A99">-₹0.00</span>
         </div>
         <div class="bill-total"><span>TOTAL</span><span id="bill-total-amt">₹0.00</span></div>
         <!-- Payment mode is chosen LATER, by Cashier, at "Payment Done" time —
@@ -1270,6 +1271,36 @@ tr:nth-child(even) td{background:#FFFFFF;}
           <input class="form-inp" id="set-order_manager-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
         </div>
         <button class="btn btn-primary btn-full" onclick="savePINs()">Save PINs</button>
+      </div>
+    </div>
+
+    <!-- GST Configuration -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">📋 GST Configuration</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Default: kanoon ke hisaab se GST automatic decide hota hai (5% standalone, 18% agar koi room ka tariff ₹7500+ ho). Chahen toh apna khud ka fixed % bhi set kar sakte hain.</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <label style="flex:1;display:flex;align-items:center;gap:6px;background:#F7F9FF;border-radius:10px;padding:10px;cursor:pointer">
+            <input type="radio" name="gst-mode" id="gst-mode-auto" value="auto" onchange="onGstModeChange()" style="accent-color:#16A34A"/>
+            <span style="font-size:0.82rem;font-weight:600">Auto (kanoon ke hisaab se)</span>
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:6px;background:#F7F9FF;border-radius:10px;padding:10px;cursor:pointer">
+            <input type="radio" name="gst-mode" id="gst-mode-manual" value="manual" onchange="onGstModeChange()" style="accent-color:#16A34A"/>
+            <span style="font-size:0.82rem;font-weight:600">Manual (khud set karein)</span>
+          </label>
+        </div>
+        <div class="form-group" id="gst-manual-pct-group" style="display:none">
+          <label class="form-label">Apna GST %</label>
+          <input class="form-inp" id="set-gst-manual-pct" type="number" min="0" max="30" placeholder="e.g. 5"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bill Pe Kaise Split Ho</label>
+          <select class="form-inp" id="set-gst-type">
+            <option value="cgst_sgst">CGST + SGST (same state — normal restaurant)</option>
+            <option value="igst">IGST (dusre state ka customer)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="saveGSTConfig()">Save GST Settings</button>
       </div>
     </div>
 
@@ -2983,6 +3014,7 @@ function printBill(orderId){
 
     + '<div class="pc">Order '+displayBillNo(o)+'</div>'
     + '<div class="pc">'+fmtDate(o.date)+' '+fmtTime(o.date)+'</div>'
+    + (o.tableName?'<div class="pc" style="font-weight:700">'+esc(o.tableName)+'</div>':'')
     + (cn?'<div class="pc">Customer: '+cn+'</div>':'')
     + '<hr>'
     + '<table><tr><td style="font-weight:700">Item</td><td style="text-align:right;font-weight:700">Amt</td></tr></table>'
@@ -2991,7 +3023,7 @@ function printBill(orderId){
     + '<hr class="s">'
     + '<table>'
     + '<tr><td>Subtotal</td><td style="text-align:right">Rs.'+o.subtotal.toFixed(2)+'</td></tr>'
-    + (o.tax?'<tr><td>Tax</td><td style="text-align:right">Rs.'+o.tax.toFixed(2)+'</td></tr>':'')
+    + (o.tax?getGSTBreakdown(o).map(function(g){return '<tr><td>'+g.name+' ('+g.pct.toFixed(1).replace(/\.0$/,'')+'%)</td><td style="text-align:right">Rs.'+g.amt.toFixed(2)+'</td></tr>';}).join(''):'')
     + (o.discount?'<tr><td>Discount</td><td style="text-align:right">-Rs.'+o.discount.toFixed(2)+'</td></tr>':'')
     + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.'+o.total.toFixed(2)+'</td></tr>'
     + '</table>'
@@ -3064,8 +3096,9 @@ function generateBillPDFBlob(o) {
   // otherwise the footer can spill past the bottom of the page.
   var nameLineCount = measureDoc.splitTextToSize(info.name || 'My Restaurant', 70).length;
   var addrLineCount = info.addr ? measureDoc.splitTextToSize(info.addr, 70).length : 0;
-  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + 15;
-  var summaryHeight = 9 + (o.tax ? 4 : 0) + (o.discount ? 4 : 0) + 11;
+  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + (o.tableName ? 4 : 0) + 15;
+  var gstLineCount = o.tax ? (o.gstType === 'igst' ? 1 : 2) : 0;
+  var summaryHeight = 9 + (gstLineCount * 4) + (o.discount ? 4 : 0) + 11;
   var footerHeight = 16;
   var totalHeight = headerHeight + itemsHeight + summaryHeight + footerHeight;
 
@@ -3090,6 +3123,7 @@ function generateBillPDFBlob(o) {
   doc.text('Order ' + displayBillNo(o), 4, y);
   doc.text(fmtDate(o.date), 76, y, { align: 'right' }); y += 4;
   doc.text(fmtTime(o.date), 76, y, { align: 'right' }); y += 4;
+  if (o.tableName) { doc.setFont(undefined, 'bold'); doc.text(o.tableName, 4, y); doc.setFont(undefined, 'normal'); y += 4; }
   doc.line(4, y, 76, y); y += 5;
 
   doc.setFont(undefined, 'bold');
@@ -3104,7 +3138,7 @@ function generateBillPDFBlob(o) {
   y += 1; doc.line(4, y, 76, y); y += 4;
 
   doc.text('Subtotal', 4, y); doc.text(fmtPDF(o.subtotal), 76, y, { align: 'right' }); y += 4;
-  if (o.tax) { doc.text('Tax', 4, y); doc.text(fmtPDF(o.tax), 76, y, { align: 'right' }); y += 4; }
+  if (o.tax) { getGSTBreakdown(o).forEach(function(g){ doc.text(g.name+' ('+g.pct.toFixed(1).replace(/\.0$/,'')+'%)', 4, y); doc.text(fmtPDF(g.amt), 76, y, { align: 'right' }); y += 4; }); }
   if (o.discount) { doc.text('Discount', 4, y); doc.text('-' + fmtPDF(o.discount), 76, y, { align: 'right' }); y += 4; }
   y += 1; doc.setLineWidth(0.4); doc.line(4, y, 76, y); y += 5;
 
@@ -3252,7 +3286,7 @@ function buildBillWhatsAppText(o, custName) {
   msg += '*Items:*\n';
   o.items.forEach(function(i){ msg += '• ' + i.qty + '× ' + i.name + ' — ₹' + (i.price*i.qty).toFixed(2) + '\n'; });
   msg += '\n';
-  if (o.tax) msg += 'Tax: ₹' + o.tax.toFixed(2) + '\n';
+  if (o.tax) getGSTBreakdown(o).forEach(function(g){ msg += g.name + ' (' + g.pct.toFixed(1).replace(/\.0$/,'') + '%): ₹' + g.amt.toFixed(2) + '\n'; });
   if (o.discount) msg += 'Discount: -₹' + o.discount.toFixed(2) + '\n';
   msg += '*TOTAL: ₹' + o.total.toFixed(2) + '*\n\n';
   msg += info.msg || 'Thank you for dining with us! 🙏';
@@ -3436,6 +3470,17 @@ function renderSettingsPage(){
   if(bsPrefixInp) bsPrefixInp.value = bsCurrent.prefix || '';
   if(bsNextInp) bsNextInp.value = bsCurrent.nextNumber || 1;
   renderBillSeriesPreview();
+  var gstCfg = getGSTConfig();
+  var gstModeAuto = document.getElementById('gst-mode-auto');
+  var gstModeManual = document.getElementById('gst-mode-manual');
+  if(gstModeAuto) gstModeAuto.checked = (gstCfg.mode === 'auto');
+  if(gstModeManual) gstModeManual.checked = (gstCfg.mode === 'manual');
+  var gstManualPctInp = document.getElementById('set-gst-manual-pct');
+  if(gstManualPctInp) gstManualPctInp.value = gstCfg.manualPct;
+  var gstTypeSel = document.getElementById('set-gst-type');
+  if(gstTypeSel) gstTypeSel.value = gstCfg.type;
+  var gstManualGroup = document.getElementById('gst-manual-pct-group');
+  if(gstManualGroup) gstManualGroup.style.display = (gstCfg.mode === 'manual') ? '' : 'none';
   var pmSel = document.getElementById('printer-mode-sel');
   if(pmSel) pmSel.value = db.settings?.printerMode || 'both';
   var op = document.getElementById('set-owner-phone');
@@ -3505,6 +3550,25 @@ function savePINs(){
   if(document.getElementById('set-kitchen-pin')) document.getElementById('set-kitchen-pin').value = '';
   if(document.getElementById('set-order_manager-pin')) document.getElementById('set-order_manager-pin').value = '';
   toast('PINs updated! 🔐');
+}
+
+function onGstModeChange() {
+  var isManual = document.getElementById('gst-mode-manual').checked;
+  var grp = document.getElementById('gst-manual-pct-group');
+  if (grp) grp.style.display = isManual ? '' : 'none';
+}
+
+function saveGSTConfig() {
+  var mode = document.getElementById('gst-mode-manual').checked ? 'manual' : 'auto';
+  var manualPct = parseFloat(document.getElementById('set-gst-manual-pct').value);
+  var type = document.getElementById('set-gst-type').value;
+  if (mode === 'manual' && (isNaN(manualPct) || manualPct < 0)) {
+    toast('Sahi GST % daalein!', '#FF6B35'); return;
+  }
+  if (!db.settings) db.settings = {};
+  db.settings.gstConfig = { mode: mode, manualPct: isNaN(manualPct) ? 5 : manualPct, type: type };
+  save();
+  toast('✅ GST settings save ho gayi! Agla bill isi ke hisaab se banega.', '#00A878');
 }
 
 function saveBillSeries() {
@@ -3821,10 +3885,52 @@ let posCat = 'All';
 // Standalone restaurant: 5% (no ITC)
 // Restaurant/room-service inside hotel with room tariff < ₹7,500: 5% (no ITC)
 // Restaurant/room-service inside hotel with room tariff ≥ ₹7,500 (specified premises): 18% (with ITC)
+// GST config: owner can leave this on AUTO (existing India restaurant-GST
+// rule: 5% standalone, 18% if any room's tariff crosses ₹7500) OR switch to
+// a MANUAL fixed % of their own choosing. Also decides how the tax is
+// LABELLED/split on the bill — CGST+SGST (same state) or IGST (different
+// state) — pure display/law-compliance split, doesn't change the amount
+// actually charged.
+function getGSTConfig() {
+  var cfg = (db.settings && db.settings.gstConfig) || {};
+  return {
+    mode: cfg.mode === 'manual' ? 'manual' : 'auto',
+    manualPct: cfg.manualPct !== undefined ? cfg.manualPct : 5,
+    type: cfg.type === 'igst' ? 'igst' : 'cgst_sgst'
+  };
+}
+
 function computeApplicableGST() {
+  var cfg = getGSTConfig();
+  if (cfg.mode === 'manual') return cfg.manualPct;
   if (!hasFeature('room_service')) return 5;
   var hasHighTariffRoom = (db.rooms||[]).some(function(r){ return (parseFloat(r.tariff)||0) >= 7500; });
   return hasHighTariffRoom ? 18 : 5;
+}
+
+// Returns an array of {name, pct, amt} rows — either a single IGST row, or
+// CGST+SGST each carrying exactly half the rate and half the amount. Used
+// by every bill output (screen, print, PDF, BT, WhatsApp, reports) so the
+// split is calculated in exactly one place.
+function getGSTBreakdown(o) {
+  var totalTax = o.tax || 0;
+  if (totalTax <= 0) return [];
+  var pct = o.taxPct !== undefined ? o.taxPct : 0;
+  var type = o.gstType || 'cgst_sgst';
+  if (type === 'igst') {
+    return [{ name: 'IGST', pct: pct, amt: totalTax }];
+  }
+  return [
+    { name: 'CGST', pct: pct/2, amt: totalTax/2 },
+    { name: 'SGST', pct: pct/2, amt: totalTax/2 }
+  ];
+}
+
+// HTML rows (bill-row style) for the on-screen bill views.
+function getGSTBreakdownHtml(o) {
+  return getGSTBreakdown(o).map(function(g){
+    return '<div class="bill-row"><span>'+g.name+' ('+g.pct.toFixed(1).replace(/\.0$/,'')+'%)</span><span>'+fmt(g.amt)+'</span></div>';
+  }).join('');
 }
 
 function applyAutoGST() {
@@ -3833,7 +3939,10 @@ function applyAutoGST() {
   if (!taxInp) return;
   var rate = computeApplicableGST();
   taxInp.value = rate;
-  if (badge) badge.style.display = '';
+  if (badge) {
+    badge.style.display = '';
+    badge.textContent = getGSTConfig().mode === 'manual' ? 'SET GST' : 'AUTO GST';
+  }
   recalcBill();
 }
 
@@ -4735,11 +4844,14 @@ function processReturn(orderId, snapshot, reason) {
 function recalcBill(){
   const sub=order.items.reduce((s,i)=>s+i.price*i.qty,0);
   const taxPct=parseFloat(document.getElementById('bill-tax-pct').value)||0;
-  const disc=parseFloat(document.getElementById('bill-discount').value)||0;
+  const discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  const disc=sub*discPct/100;
   const tax=sub*taxPct/100;
   const total=Math.max(0,sub+tax-disc);
   document.getElementById('bill-subtotal').textContent=fmt(sub);
   document.getElementById('bill-tax-amt').textContent=fmt(tax);
+  var discAmtEl=document.getElementById('bill-discount-amt');
+  if(discAmtEl) discAmtEl.textContent='-'+fmt(disc);
   document.getElementById('bill-total-amt').textContent=fmt(total);
   document.getElementById('tax-pct-lbl').textContent=taxPct;
 }
@@ -4797,12 +4909,14 @@ async function completeBill(payment){
   if(!order.items.length){ toast('Add items to the order first!','#FF6B35'); return; }
   const sub=order.items.reduce((s,i)=>s+i.price*i.qty,0);
   const taxPct=parseFloat(document.getElementById('bill-tax-pct').value)||0;
-  const disc=parseFloat(document.getElementById('bill-discount').value)||0;
+  const discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  const disc=sub*discPct/100;
   const tax=sub*taxPct/100;
   const total=Math.max(0,sub+tax-disc);
   const orderId=uid();
   const billNo = await getNextBillNumber();
-  const o={id:orderId,billNo:billNo,date:new Date().toISOString(),items:[...order.items],subtotal:sub,tax,discount:disc,total,payment,customerId:order.customerId,tableId:order.tableId,tableName:order.tableName};
+  const gstCfg = getGSTConfig();
+  const o={id:orderId,billNo:billNo,date:new Date().toISOString(),items:[...order.items],subtotal:sub,tax,taxPct,discount:disc,discountPct:discPct,gstType:gstCfg.type,total,payment,customerId:order.customerId,tableId:order.tableId,tableName:order.tableName};
   db.orders.unshift(o);
   // ☁️ Cloud sync
   cloudSave('orders', orderId, o);
@@ -4846,7 +4960,7 @@ function showBillReceipt(o){
         ${o.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} ×${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
         <div class="divider"></div>
         <div class="bill-row"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
-        ${o.tax?`<div class="bill-row"><span>Tax</span><span>${fmt(o.tax)}</span></div>`:''}
+        ${o.tax?getGSTBreakdownHtml(o):''}
         ${o.discount?`<div class="bill-row"><span>Discount</span><span>-${fmt(o.discount)}</span></div>`:''}
         <div class="bill-total"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
       </div>
@@ -6083,12 +6197,29 @@ function renderGSTReportView(){
   var gst5Total = gst5.reduce(function(s,o){return s+o.tax;},0);
   var gst18Total = gst18.reduce(function(s,o){return s+o.tax;},0);
 
+  // CGST/SGST/IGST split, aggregated across every order in the period —
+  // this is what makes the report directly usable for GSTR filing.
+  var totalCGST = 0, totalSGST = 0, totalIGST = 0;
+  orders.forEach(function(o){
+    getGSTBreakdown(o).forEach(function(g){
+      if (g.name === 'CGST') totalCGST += g.amt;
+      else if (g.name === 'SGST') totalSGST += g.amt;
+      else if (g.name === 'IGST') totalIGST += g.amt;
+    });
+  });
+
   document.getElementById('report-content').innerHTML =
     '<div style="font-size:0.75rem;color:#6B7A99;margin-bottom:8px">📅 '+getPeriodLabel()+'</div>'
     +'<div class="stats-grid">'
     +'<div class="stat-card"><div class="stat-icon">📋</div><div class="stat-val" style="color:#7C3AED">'+fmt(totalGST)+'</div><div class="stat-lbl">Total GST Collected</div></div>'
     +'<div class="stat-card"><div class="stat-icon">💰</div><div class="stat-val" style="color:#2563EB">'+fmt(taxable)+'</div><div class="stat-lbl">Taxable Amount</div></div>'
     +'</div>'
+    +'<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">📑 CGST / SGST / IGST Split</div></div><div class="card-body">'
+    +(totalCGST>0?'<div class="bill-row"><span>CGST</span><span>'+fmt(totalCGST)+'</span></div>':'')
+    +(totalSGST>0?'<div class="bill-row"><span>SGST</span><span>'+fmt(totalSGST)+'</span></div>':'')
+    +(totalIGST>0?'<div class="bill-row"><span>IGST</span><span>'+fmt(totalIGST)+'</span></div>':'')
+    +(totalCGST===0&&totalSGST===0&&totalIGST===0?'<div class="empty" style="padding:1rem">Is period mein koi GST nahi laga.</div>':'')
+    +'</div></div>'
     +'<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">📊 GST Rate-wise Breakdown</div></div><div class="card-body">'
     +'<div class="bill-row"><span>5% GST Orders</span><span><strong>'+gst5.length+'</strong> orders — '+fmt(gst5Total)+'</span></div>'
     +'<div class="bill-row"><span>18% GST Orders</span><span><strong>'+gst18.length+'</strong> orders — '+fmt(gst18Total)+'</span></div>'
@@ -6242,7 +6373,7 @@ function viewOrder(id){
       ${o.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} ×${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
       <div class="divider"></div>
       <div class="bill-row"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
-      ${o.tax?`<div class="bill-row"><span>Tax</span><span>${fmt(o.tax)}</span></div>`:''}
+      ${o.tax?getGSTBreakdownHtml(o):''}
       ${o.discount?`<div class="bill-row"><span>Discount</span><span>-${fmt(o.discount)}</span></div>`:''}
       <div class="bill-total"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
     </div></div>
@@ -7153,7 +7284,7 @@ function showPaymentModeModal(id, kind) {
       + o.items.map(function(i){ return '<div class="bill-row"><span>'+esc(i.name)+' ×'+i.qty+'</span><span>'+fmt(i.price*i.qty)+'</span></div>'; }).join('')
       + '<div class="divider"></div>'
       + '<div class="bill-row"><span>Subtotal</span><span>'+fmt(o.subtotal)+'</span></div>'
-      + (o.tax ? '<div class="bill-row"><span>Tax</span><span>'+fmt(o.tax)+'</span></div>' : '')
+      + (o.tax ? getGSTBreakdownHtml(o) : '')
       + (o.discount ? '<div class="bill-row"><span>Discount</span><span>-'+fmt(o.discount)+'</span></div>' : '')
       + '<div class="bill-total"><span>TOTAL</span><span>'+fmt(o.total)+'</span></div>'
       + '</div></div>'
@@ -9902,6 +10033,7 @@ async function btPrintBill(orderId) {
   sections.push({left:true, line:true});
   sections.push({left:true, text:btPadRow('RECEIPT',displayBillNo(o)), bold:true});
   sections.push({left:true, text:btPadRow(fmtDate(o.date), fmtTime(o.date))});
+  if(o.tableName) sections.push({left:true, text:o.tableName, bold:true});
   if(cust) sections.push({left:true, text:'Customer: '+cust.name});
   sections.push({left:true, line:true});
   sections.push({left:true, text:btPadRow('ITEM','AMT'), bold:true});
@@ -9910,7 +10042,7 @@ async function btPrintBill(orderId) {
   });
   sections.push({left:true, line:true});
   sections.push({left:true, text:btPadRow('Subtotal','Rs.'+o.subtotal.toFixed(2))});
-  if(o.tax)      sections.push({left:true, text:btPadRow('Tax','Rs.'+o.tax.toFixed(2))});
+  if(o.tax) getGSTBreakdown(o).forEach(function(g){ sections.push({left:true, text:btPadRow(g.name+' ('+g.pct.toFixed(1).replace(/\.0$/,'')+'%)','Rs.'+g.amt.toFixed(2))}); });
   if(o.discount) sections.push({left:true, text:btPadRow('Discount','-Rs.'+o.discount.toFixed(2))});
   sections.push({left:true, dblLine:true});
   sections.push({left:true, text:btPadRow('TOTAL','Rs.'+o.total.toFixed(2)), bold:true, dbl:true});
