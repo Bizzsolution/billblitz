@@ -2885,6 +2885,10 @@ function checkPin(){
     // A kitchen device must land straight on the Kitchen queue, never the
     // dashboard (which it isn't allowed to see).
     renderAlertsBadge();
+    // Silently restore the Bluetooth printer link (if this device already
+    // has permission for it) so staff don't have to re-pair after every
+    // app restart. Deliberately not awaited — never block the UI on it.
+    btAutoReconnectOnStartup();
     if(currentRole==='kitchen'){ setPage('kitchen'); }
     else { renderDashboard(); }
   } else {
@@ -3098,7 +3102,7 @@ function generateBillPDFBlob(o) {
   // otherwise the footer can spill past the bottom of the page.
   var nameLineCount = measureDoc.splitTextToSize(info.name || 'My Restaurant', 70).length;
   var addrLineCount = info.addr ? measureDoc.splitTextToSize(info.addr, 70).length : 0;
-  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + (o.tableName ? 4 : 0) + 15;
+  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + (info.gst ? 4 : 0) + (info.fssai ? 4 : 0) + (o.tableName ? 4 : 0) + 15;
   var gstLineCount = o.tax ? (o.gstType === 'igst' ? 1 : 2) : 0;
   var summaryHeight = 9 + (gstLineCount * 4) + (o.discount ? 4 : 0) + 11;
   var footerHeight = 16;
@@ -3119,6 +3123,8 @@ function generateBillPDFBlob(o) {
     doc.text(addrLines, 40, y, { align: 'center' }); y += addrLines.length * 4;
   }
   if (info.phone) { doc.text('Ph: ' + info.phone, 40, y, { align: 'center' }); y += 4; }
+  if (info.gst)   { doc.text('GST: ' + info.gst, 40, y, { align: 'center' }); y += 4; }
+  if (info.fssai) { doc.text('FSSAI: ' + info.fssai, 40, y, { align: 'center' }); y += 4; }
   y += 2;
   doc.setLineWidth(0.2); doc.line(4, y, 76, y); y += 4;
   doc.setFontSize(8);
@@ -3283,8 +3289,12 @@ function buildBillWhatsAppText(o, custName) {
   var msg = '';
   if (custName) msg += 'Hi ' + custName + ' 👋\n\n';
   msg += '🍽️ *' + name + '*\n';
+  if (info.gst)   msg += 'GST: ' + info.gst + '\n';
+  if (info.fssai) msg += 'FSSAI: ' + info.fssai + '\n';
   msg += '📋 *Receipt — Order ' + displayBillNo(o) + '*\n';
-  msg += '📅 ' + fmtDate(o.date) + ' ' + fmtTime(o.date) + '\n\n';
+  msg += '📅 ' + fmtDate(o.date) + ' ' + fmtTime(o.date) + '\n';
+  if (o.tableName) msg += '📍 ' + o.tableName + '\n';
+  msg += '\n';
   msg += '*Items:*\n';
   o.items.forEach(function(i){ msg += '• ' + i.qty + '× ' + i.name + ' — ₹' + (i.price*i.qty).toFixed(2) + '\n'; });
   msg += '\n';
@@ -9910,7 +9920,13 @@ async function btConnect() {
     btConnected = true;
     btSetUI('connected', btDevice.name||'Printer Connected','✅ Ready to print!');
     toast('✅ Printer connected!','#00A878');
-    try{localStorage.setItem('bb-bt-printer',btDevice.name||'Printer');}catch(e){}
+    try{
+      localStorage.setItem('bb-bt-printer',btDevice.name||'Printer');
+      // The device ID is what lets us silently reconnect on the next app
+      // launch via navigator.bluetooth.getDevices() — without it, the user
+      // would have to re-pick the printer from the scan dialog every time.
+      if(btDevice.id) localStorage.setItem('bb-bt-printer-id', btDevice.id);
+    }catch(e){}
   } catch(err) {
     btConnected = false; btChar = null;
     if(err.name==='NotFoundError') btSetUI('','No printer selected','Tap Connect to scan');
@@ -9921,13 +9937,96 @@ async function btConnect() {
 
 function btDisconnected() {
   btConnected=false; btChar=null;
-  btSetUI('error','Disconnected','Tap Connect to reconnect');
-  toast('Printer disconnected','#FF6B35');
+  // Thermal printers routinely drop the link when they sleep or go briefly
+  // out of range. Rather than making staff re-pair mid-service, try to
+  // silently restore the SAME device a few times before giving up.
+  btSetUI('connecting','Reconnecting...','Printer se dobara jud rahe hain...');
+  btAttemptReconnect(3);
+}
+
+// Silently re-establishes the GATT link + characteristic for an already
+// PERMITTED device (no scan dialog). Used both on unexpected disconnects and
+// at app startup.
+async function btReattachDevice(device) {
+  btDevice = device;
+  btDevice.removeEventListener('gattserverdisconnected', btDisconnected);
+  btDevice.addEventListener('gattserverdisconnected', btDisconnected);
+  var server = await device.gatt.connect();
+  var found = false;
+  for(var si=0; si<BT_SERVICES.length && !found; si++) {
+    try {
+      var svc = await server.getPrimaryService(BT_SERVICES[si]);
+      for(var ci=0; ci<BT_CHARS.length && !found; ci++) {
+        try {
+          var ch = await svc.getCharacteristic(BT_CHARS[ci]);
+          if(ch.properties.write || ch.properties.writeWithoutResponse) { btChar = ch; found = true; }
+        } catch(e){}
+      }
+    } catch(e){}
+  }
+  if(!found) {
+    try {
+      var svcs = await server.getPrimaryServices();
+      for(var i=0; i<svcs.length && !found; i++) {
+        var chs = await svcs[i].getCharacteristics();
+        for(var j=0; j<chs.length; j++) {
+          if(chs[j].properties.write || chs[j].properties.writeWithoutResponse) { btChar = chs[j]; found = true; break; }
+        }
+      }
+    } catch(e){}
+  }
+  if(!found) throw new Error('Writable characteristic nahi mili');
+  btConnected = true;
+  btSetUI('connected', device.name||'Printer Connected','✅ Ready to print!');
+  return true;
+}
+
+async function btAttemptReconnect(triesLeft) {
+  if(!btDevice || btConnected) return;
+  try {
+    await btReattachDevice(btDevice);
+    toast('🖨️ Printer dobara connect ho gaya','#00A878');
+  } catch(e) {
+    if(triesLeft > 1) {
+      setTimeout(function(){ btAttemptReconnect(triesLeft-1); }, 2500);
+    } else {
+      btSetUI('error','Disconnected','Tap Connect to reconnect');
+      toast('Printer disconnected','#FF6B35');
+    }
+  }
+}
+
+// Runs at app startup: if this device already has permission for the
+// previously-used printer, reconnect to it WITHOUT showing any dialog — so
+// staff don't have to re-pair every single time they reopen the app.
+async function btAutoReconnectOnStartup() {
+  if(!('bluetooth' in navigator) || !navigator.bluetooth.getDevices) return;
+  var savedId = null;
+  try { savedId = localStorage.getItem('bb-bt-printer-id'); } catch(e){}
+  if(!savedId) return;
+  try {
+    var devices = await navigator.bluetooth.getDevices();
+    var match = devices.filter(function(d){ return d.id === savedId; })[0];
+    if(!match) return;
+    btSetUI('connecting', match.name||'Printer','Auto-reconnecting...');
+    await btReattachDevice(match);
+    toast('🖨️ Printer auto-connect ho gaya','#00A878');
+  } catch(e) {
+    // Printer off / out of range at launch — stay silent, the user can
+    // still connect manually.
+    btSetUI('','Not connected','Tap Connect to pair');
+  }
 }
 
 async function btDisconnect() {
+  // Detach the auto-reconnect handler FIRST — otherwise deliberately
+  // disconnecting would immediately trigger the reconnect logic.
+  if(btDevice) { try{ btDevice.removeEventListener('gattserverdisconnected', btDisconnected); }catch(e){} }
   if(btDevice&&btDevice.gatt.connected) btDevice.gatt.disconnect();
   btConnected=false; btChar=null;
+  // Forget the saved printer so the app doesn't silently reconnect to it on
+  // the next launch — the user explicitly chose to disconnect.
+  try{ localStorage.removeItem('bb-bt-printer-id'); }catch(e){}
   btSetUI('','Not connected','Tap Connect to pair');
   toast('Printer disconnected');
 }
