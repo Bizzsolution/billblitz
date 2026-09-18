@@ -1126,6 +1126,11 @@ tr:nth-child(even) td{background:#FFFFFF;}
       <button class="btn btn-primary btn-sm" onclick="showNewBanquetModal()">+ New Booking</button>
     </div>
     <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Per-plate event billing — har booking ki apni customer details, plates aur bill.</div>
+    <div class="rep-tabs" style="margin-bottom:10px">
+      <button class="rep-tab active" id="bq-filter-active" onclick="setBanquetFilter('active')">Active</button>
+      <button class="rep-tab" id="bq-filter-closed" onclick="setBanquetFilter('closed')">Closed</button>
+      <button class="rep-tab" id="bq-filter-all" onclick="setBanquetFilter('all')">All</button>
+    </div>
     <div id="banquet-list"></div>
   </div>
 
@@ -5340,22 +5345,55 @@ function saveBanquetBooking() {
   toast('✅ Banquet booking save ho gayi!', '#00A878');
 }
 
+// A booking's lifecycle: 'draft' (not billed yet) → 'billed' (awaiting
+// full payment — advance + any recorded payments so far) → 'closed'
+// (settled, marked explicitly — not auto-forced, since an owner may want
+// to close a booking even with a written-off remainder).
+var banquetFilter = 'active'; // 'active' | 'closed' | 'all'
+
+function getBanquetTotalPaid(b) {
+  var fromPayments = (b.payments || []).reduce(function(s, p) { return s + (p.amount || 0); }, 0);
+  return (b.advance || 0) + fromPayments;
+}
+function getBanquetRemainingBalance(b) {
+  if (b.status !== 'billed' && b.status !== 'closed') return 0;
+  return Math.max(0, (b.total || 0) - getBanquetTotalPaid(b));
+}
+
+function setBanquetFilter(f) {
+  banquetFilter = f;
+  ['active','closed','all'].forEach(function(x){
+    var el = document.getElementById('bq-filter-'+x);
+    if (el) el.classList.toggle('active', x===f);
+  });
+  renderBanquetPage();
+}
+
 function renderBanquetPage() {
   var el = document.getElementById('banquet-list');
   if (!el) return;
-  var bookings = (db.banquetBookings || []).slice().sort(function(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+  var all = (db.banquetBookings || []).slice().sort(function(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+  var bookings = all.filter(function(b) {
+    if (banquetFilter === 'all') return true;
+    if (banquetFilter === 'closed') return b.status === 'closed';
+    return b.status !== 'closed'; // 'active' = draft or billed-but-not-closed
+  });
   if (!bookings.length) {
-    el.innerHTML = '<div class="empty" style="padding:2rem">Koi banquet booking nahi hai. "+ New Booking" se shuru karein.</div>';
+    el.innerHTML = '<div class="empty" style="padding:2rem">' + (banquetFilter==='closed' ? 'Koi closed booking nahi hai.' : banquetFilter==='all' ? 'Koi banquet booking nahi hai.' : 'Koi active booking nahi hai.') + '</div>';
     return;
   }
   el.innerHTML = bookings.map(function(b) {
-    var total = b.status === 'billed' ? b.total : ((b.plates * b.ratePerPlate) + (b.additionalCharges || 0));
-    var statusBadge = b.status === 'billed' ? '<span class="badge badge-green">Billed</span>' : '<span class="badge badge-yellow">Draft</span>';
+    var total = b.status === 'draft' ? ((b.plates * b.ratePerPlate) + (b.additionalCharges || 0)) : b.total;
+    var statusBadge = b.status === 'closed' ? '<span class="badge badge-green">Closed</span>'
+                     : b.status === 'billed' ? '<span class="badge badge-yellow">Billed</span>'
+                     : '<span class="badge badge-yellow">Draft</span>';
+    var balanceLine = (b.status === 'billed' && getBanquetRemainingBalance(b) > 0)
+      ? '<div style="font-size:0.68rem;color:#DC2626;font-weight:700">Balance: ' + fmt(getBanquetRemainingBalance(b)) + '</div>' : '';
     return '<div class="list-row" style="cursor:pointer" data-bid="' + b.id + '" onclick="viewBanquetBooking(this.dataset.bid)">'
       + '<div class="list-icon" style="background:#FDF4FF;color:#A855F7;font-size:1.2rem">🎪</div>'
       + '<div class="list-main"><div class="list-title">' + esc(b.customerName) + '</div>'
       + '<div class="list-sub">' + fmtDate(b.eventDate) + ' · ' + b.plates + ' plates</div></div>'
-      + '<div class="list-right"><div style="font-weight:800;color:#1A2B3C">' + fmt(total) + '</div>' + statusBadge + '</div>'
+      + '<div class="list-right"><div style="font-weight:800;color:#1A2B3C">' + fmt(total) + '</div>' + statusBadge + balanceLine + '</div>'
       + '</div>';
   }).join('');
 }
@@ -5429,6 +5467,24 @@ function showBanquetBillReceipt(id) {
   var bqCfg = (db.settings && db.settings.banquetConfig) || {};
   var hallName = bqCfg.hallName || info.name || 'Banquet Hall';
   var hallAddr = bqCfg.hallAddress || info.addr || '';
+  var totalPaid = getBanquetTotalPaid(b);
+  var remaining = getBanquetRemainingBalance(b);
+
+  var paymentRows = '';
+  if (b.advance) paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Advance (Booking Time)</span><span>-' + fmt(b.advance) + '</span></div>';
+  (b.payments || []).forEach(function(p) {
+    paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Payment — ' + esc((p.mode||'').toUpperCase()) + ' (' + fmtDate(p.date) + ')</span><span>-' + fmt(p.amount) + '</span></div>';
+  });
+
+  var actionButtons = '';
+  if (b.status === 'closed') {
+    actionButtons = '<div style="background:#DCFCE7;color:#00A878;border-radius:10px;padding:10px;text-align:center;font-weight:700;margin-bottom:10px">✅ Booking Closed — Fully Settled</div>';
+  } else if (b.status === 'billed') {
+    if (remaining > 0) {
+      actionButtons += '<button class="btn btn-primary btn-full" style="margin-bottom:8px" data-bid="' + id + '" onclick="showRecordBanquetPaymentModal(this.dataset.bid)">💰 Record Payment</button>';
+    }
+    actionButtons += '<button class="btn btn-outline btn-full" style="margin-bottom:8px' + (remaining>0?';color:#DC2626;border-color:#FCA5A5':'') + '" data-bid="' + id + '" onclick="closeBanquetBooking(this.dataset.bid)">' + (remaining>0?'⚠️ Force Close (Balance Bacha Hai)':'✅ Mark as Closed') + '</button>';
+  }
 
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
@@ -5452,15 +5508,70 @@ function showBanquetBillReceipt(id) {
     + '<div class="bill-row"><span>Subtotal</span><span>' + fmt(b.subtotal) + '</span></div>'
     + (b.tax ? getGSTBreakdownHtml(b) : '')
     + '<div class="bill-total"><span>TOTAL</span><span>' + fmt(b.total) + '</span></div>'
-    + (b.advance ? '<div class="bill-row" style="color:#16A34A"><span>Advance Received</span><span>-' + fmt(b.advance) + '</span></div>' : '')
-    + (b.advance ? '<div class="bill-total" style="color:#DC2626"><span>Balance Due</span><span>' + fmt(b.balanceDue) + '</span></div>' : '')
+    + paymentRows
+    + (totalPaid ? '<div class="bill-total" style="color:' + (remaining>0?'#DC2626':'#00A878') + '"><span>' + (remaining>0?'Balance Due':'Fully Paid') + '</span><span>' + (remaining>0?fmt(remaining):'✅') + '</span></div>' : '')
     + '</div></div>'
-    + '<div class="btn-row" style="margin-top:12px">'
+    + '<div style="margin-top:12px">' + actionButtons + '</div>'
+    + '<div class="btn-row">'
     + '<button class="btn btn-outline" data-bid="' + id + '" onclick="printBanquetBill(this.dataset.bid)">🖨️ Quick Print</button>'
     + '<button class="btn btn-primary" data-bid="' + id + '" onclick="printBanquetBillProfessional(this.dataset.bid)">📄 Professional Invoice</button>'
     + '<button class="btn btn-outline" onclick="closeModal()">Close</button>'
     + '</div>';
   openModal();
+}
+
+function showRecordBanquetPaymentModal(id) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
+  if (!b) return;
+  var remaining = getBanquetRemainingBalance(b);
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">💰 Payment Record Karein</div>'
+    + '<div style="background:#F7F9FF;border-radius:12px;padding:14px;margin-bottom:14px;text-align:center">'
+    + '<div style="font-size:0.78rem;color:#6B7A99">Baaki Balance</div>'
+    + '<div style="font-size:1.6rem;font-weight:800;color:#DC2626">' + fmt(remaining) + '</div>'
+    + '</div>'
+    + '<div class="form-group"><label class="form-label">Amount Received (₹)</label>'
+    + '<input class="form-inp" id="bq-pay-amount" type="number" min="0" max="' + remaining + '" value="' + remaining + '" placeholder="Poora ya partial amount"/></div>'
+    + '<div style="font-size:0.72rem;color:#9CA3AF;margin-bottom:10px">Poora balance ek mode se na aaye toh yahan jitna is mode se mila utna daalein, phir doosre mode ke liye dobara "Record Payment" kar sakte hain.</div>'
+    + '<div style="font-size:0.8rem;font-weight:700;color:#6B7A99;margin-bottom:8px">Payment Method</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    + '<button style="padding:14px;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" data-bid="' + id + '" onclick="saveBanquetPayment(this.dataset.bid,\'cash\')">💵 Cash</button>'
+    + '<button style="padding:14px;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.92rem;cursor:pointer" data-bid="' + id + '" onclick="saveBanquetPayment(this.dataset.bid,\'card\')">💳 Card</button>'
+    + '</div>'
+    + '<button style="width:100%;padding:12px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:0.9rem;cursor:pointer;margin-bottom:8px" data-bid="' + id + '" onclick="saveBanquetPayment(this.dataset.bid,\'other\')">📱 UPI / QR</button>'
+    + '<button class="btn btn-outline btn-full" data-bid="' + id + '" onclick="showBanquetBillReceipt(this.dataset.bid)">← Wapas</button>';
+  openModal();
+}
+
+function saveBanquetPayment(id, mode) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
+  if (!b) return;
+  var amtInp = document.getElementById('bq-pay-amount');
+  var amt = parseFloat(amtInp ? amtInp.value : 0);
+  var remaining = getBanquetRemainingBalance(b);
+  if (!amt || amt <= 0) { toast('Sahi amount daalein!', '#FF6B35'); return; }
+  if (amt > remaining + 0.01) { toast('Amount balance (' + fmt(remaining) + ') se zyada nahi ho sakta!', '#FF6B35'); return; }
+  if (!b.payments) b.payments = [];
+  b.payments.push({ amount: amt, mode: mode, date: new Date().toISOString() });
+  save();
+  var nowRemaining = getBanquetRemainingBalance(b);
+  toast(nowRemaining <= 0 ? '✅ Poora payment mil gaya!' : '✅ Payment record ho gaya. Baaki: ' + fmt(nowRemaining), '#00A878');
+  renderBanquetPage();
+  showBanquetBillReceipt(id);
+}
+
+function closeBanquetBooking(id) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
+  if (!b) return;
+  var remaining = getBanquetRemainingBalance(b);
+  if (remaining > 0 && !confirm('Abhi ' + fmt(remaining) + ' baaki hai. Phir bhi CLOSE karna hai?')) return;
+  b.status = 'closed';
+  b.closedAt = new Date().toISOString();
+  save();
+  closeModal();
+  renderBanquetPage();
+  toast('✅ Booking closed ho gayi.', '#00A878');
 }
 
 // Full-page, formal invoice format — an ADDITIONAL option alongside the
@@ -5514,7 +5625,8 @@ function printBanquetBillProfessional(orderId) {
     + gstRowsHtml
     + '<div class="row grand"><span>Total</span><span>Rs.' + b.total.toFixed(2) + '</span></div>'
     + (b.advance ? '<div class="row"><span>Advance Received</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
-    + (b.advance ? '<div class="row due"><span>Balance Due</span><span>Rs.' + b.balanceDue.toFixed(2) + '</span></div>' : '')
+    + (b.payments || []).map(function(p){ return '<div class="row"><span>Payment — ' + p.mode.toUpperCase() + '</span><span>-Rs.' + p.amount.toFixed(2) + '</span></div>'; }).join('')
+    + (getBanquetRemainingBalance(b) > 0 ? '<div class="row due"><span>Balance Due</span><span>Rs.' + getBanquetRemainingBalance(b).toFixed(2) + '</span></div>' : '')
     + '</div>'
 
     + '<div class="pro-footer">'
@@ -5562,7 +5674,8 @@ function printBanquetBill(orderId) {
     + gstRows
     + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.' + b.total.toFixed(2) + '</td></tr>'
     + (b.advance ? '<tr><td>Advance Received</td><td style="text-align:right">-Rs.' + b.advance.toFixed(2) + '</td></tr>' : '')
-    + (b.advance ? '<tr style="font-weight:700"><td>Balance Due</td><td style="text-align:right">Rs.' + b.balanceDue.toFixed(2) + '</td></tr>' : '')
+    + (b.payments || []).map(function(p){ return '<tr><td>Payment — ' + p.mode.toUpperCase() + '</td><td style="text-align:right">-Rs.' + p.amount.toFixed(2) + '</td></tr>'; }).join('')
+    + (getBanquetRemainingBalance(b) > 0 ? '<tr style="font-weight:700"><td>Balance Due</td><td style="text-align:right">Rs.' + getBanquetRemainingBalance(b).toFixed(2) + '</td></tr>' : '')
     + '</table>'
     + '<hr><div class="pc">Thank you!</div>'
     + '</div>';
@@ -6611,6 +6724,86 @@ function deletePurchase(id){
 // ╚══════════════════════════════════════════════════════╝
 // ── PERIOD SELECTION (Item 9: month-wise historical view) ──────
 let repCustomMonth = null; // {year, month} when repTab === 'custom'
+
+// ── FIX: Reports were silently capped at the last 100 orders ───────────
+// db.orders (used for the live Dashboard) is intentionally kept small via
+// .limit(100) — fine for "recent activity", but WRONG for Reports, which
+// need the COMPLETE picture for whatever period is selected. Any
+// restaurant doing more than ~100 orders total was seeing incomplete/
+// missing older data in "This Month"/"All Time"/custom-range reports.
+// Reports now query Firestore directly for the exact selected period
+// instead of relying on that capped local array.
+let reportOrdersCache = null;       // complete, server-fetched restaurant orders for the CURRENT period+source
+let reportOrdersCacheKey = null;    // which period+source that cache is for
+let reportOrdersFetchToken = 0;     // guards a slow fetch from overwriting a newer one
+
+function getReportCacheKey() {
+  return reportSource + '|' + repTab + '|' + JSON.stringify(repCustomMonth) + '|' + JSON.stringify(repDateRange);
+}
+
+function getReportPeriodBounds() {
+  var now = new Date();
+  if (repTab === 'today') {
+    var start = new Date(now); start.setHours(0,0,0,0);
+    var end = new Date(now); end.setHours(23,59,59,999);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+  if (repTab === 'week') {
+    return { start: new Date(now.getTime() - 7*86400000).toISOString(), end: now.toISOString() };
+  }
+  if (repTab === 'month') {
+    var start = new Date(now.getFullYear(), now.getMonth(), 1, 0,0,0,0);
+    var end = new Date(now.getFullYear(), now.getMonth()+1, 0, 23,59,59,999);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+  if (repTab === 'custom' && repCustomMonth) {
+    var start = new Date(repCustomMonth.year, repCustomMonth.month, 1, 0,0,0,0);
+    var end = new Date(repCustomMonth.year, repCustomMonth.month+1, 0, 23,59,59,999);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+  if (repTab === 'range' && repDateRange) {
+    return { start: new Date(repDateRange.from + 'T00:00:00').toISOString(), end: new Date(repDateRange.to + 'T23:59:59.999').toISOString() };
+  }
+  return null; // 'all' — no bounds, fetch everything (capped at 5000 as a sane ceiling)
+}
+
+async function fetchReportOrders() {
+  var myToken = ++reportOrdersFetchToken;
+  toast('📊 Poora data load ho raha hai...', '#2563EB');
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) {
+    // Offline — getPeriodOrders() falls back to the local (capped) copy;
+    // better than showing nothing, and it self-corrects next time online.
+    reportOrdersCache = null;
+    if (myToken === reportOrdersFetchToken) renderReports();
+    return;
+  }
+  try {
+    var restaurantOrders = [];
+    if (reportSource !== 'banquet') {
+      var bounds = getReportPeriodBounds();
+      var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
+      var q = restRef.collection('orders');
+      if (bounds) q = q.where('date', '>=', bounds.start).where('date', '<=', bounds.end);
+      var snap = await q.orderBy('date','desc').limit(5000).get();
+      restaurantOrders = snap.docs.map(function(d){ return d.data(); });
+    }
+    if (myToken !== reportOrdersFetchToken) return; // superseded by a newer fetch — discard this one
+    reportOrdersCache = restaurantOrders;
+  } catch (e) {
+    reportOrdersCache = null; // query failed (e.g. offline mid-fetch) — fall back to local
+  }
+  if (myToken === reportOrdersFetchToken) renderReports();
+}
+
+// Kicks off a fresh fetch only when the period or source actually changed
+// since the last one — switching between Sales/GST/Profit views of the
+// SAME period reuses what's already fetched instead of re-querying.
+function ensureReportOrdersFresh() {
+  var key = getReportCacheKey();
+  if (key === reportOrdersCacheKey) return;
+  reportOrdersCacheKey = key;
+  fetchReportOrders(); // fire-and-forget — it calls renderReports() itself when ready
+}
 let repDateRange = null; // {from, to} YYYY-MM-DD strings when repTab === 'range'
 let reportType = 'sales';  // 'sales' | 'expense' | 'purchase' | 'gst' | 'profit'
 
@@ -6729,7 +6922,13 @@ function normalizeBanquetForReports(bookings) {
 }
 
 function getPeriodOrders(){
-  var restaurantOrders = (reportSource === 'banquet') ? [] : (db.orders || []);
+  // Prefer the complete, server-fetched set for the current period once
+  // it's ready (reportOrdersCache); fall back to the local, 100-capped
+  // db.orders only before that fetch completes or if it failed/offline —
+  // still better than nothing, just possibly incomplete for an older
+  // period until connectivity/the fetch resolves.
+  var restaurantOrders = (reportSource === 'banquet') ? []
+    : (reportOrdersCache !== null ? reportOrdersCache : (db.orders || []));
   var banquetOrders = (reportSource === 'restaurant') ? [] : normalizeBanquetForReports(db.banquetBookings);
   return restaurantOrders.concat(banquetOrders).filter(function(o){ return periodMatchDate(o.date); });
 }
@@ -6756,6 +6955,12 @@ function renderReports(){
   var sourceTabs = document.getElementById('rep-source-tabs');
   var showSourceTabs = hasFeature('banquet') && (reportType==='sales' || reportType==='gst' || reportType==='profit' || !reportType);
   if (sourceTabs) sourceTabs.style.display = showSourceTabs ? 'flex' : 'none';
+
+  // Only Sales/GST/Profitability actually consume getPeriodOrders() — no
+  // need to trigger a Firestore fetch for Expense/Purchase report views.
+  if (reportType==='sales' || reportType==='gst' || reportType==='profit' || !reportType) {
+    ensureReportOrdersFresh();
+  }
 
   if(reportType==='expense') renderExpenseReportView();
   else if(reportType==='purchase') renderPurchaseReportView();
