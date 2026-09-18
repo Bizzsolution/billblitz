@@ -707,6 +707,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <div class="sb-section">Operations</div>
   <div class="sb-nav">
     <button class="sb-item" id="sb-manage" onclick="setPage('manage')"><span class="sb-icon">🗂️</span> Manage <span class="sb-badge" id="sb-lowstock-badge" style="display:none">!</span></button>
+    <button class="sb-item" id="sb-banquet" onclick="setPage('banquet')"><span class="sb-icon">🎪</span> Banquet</button>
     <button class="sb-item" id="sb-loyalty" onclick="setPage('loyalty')"><span class="sb-icon">⭐</span> Loyalty</button>
   </div>
   <div class="sb-footer">
@@ -732,6 +733,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div id="dh-sync" style="font-size:0.72rem;color:rgba(255,255,255,0.4)"></div>
     <span id="dh-role-badge" class="dh-role role-owner">👑 Owner</span>
     <button class="dh-btn" id="dh-alerts-btn" style="background:rgba(255,255,255,0.12);position:relative;display:none" onclick="showOwnerAlertsModal()" title="Notifications">🔔<span id="dh-alerts-count" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
+    <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="forceRefreshFromCloud()" title="Refresh / Sync Now">🔄</button>
     <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
     <button class="dh-btn" id="dh-settings-btn" style="background:rgba(255,255,255,0.12)" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="dh-btn" onclick="quickBill()">+ New Bill</button>
@@ -872,6 +874,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="hdr-time" id="live-time"></div>
     <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
     <button class="hdr-btn" id="hdr-alerts-btn" style="background:rgba(255,255,255,0.12);color:#fff;position:relative;display:none" onclick="showOwnerAlertsModal()" title="Notifications">🔔<span id="hdr-alerts-count" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
+    <button class="hdr-btn" id="hdr-refresh-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="forceRefreshFromCloud()" title="Refresh / Sync Now">🔄</button>
     <button class="hdr-btn" id="hdr-printer-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
     <button class="hdr-btn" id="hdr-settings-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="logoutConfirm()">🔒</button>
@@ -1073,6 +1076,16 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="page-title">🍳 Kitchen Orders</div>
     <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Jaise hi koi KOT bheja jaata hai, yahan turant dikhega — Table/Room ke naam ke saath.</div>
     <div id="kitchen-tickets"></div>
+  </div>
+
+  <!-- BANQUET PAGE -->
+  <div class="page" id="page-banquet">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="page-title" style="margin:0">🎪 Banquet</div>
+      <button class="btn btn-primary btn-sm" onclick="showNewBanquetModal()">+ New Booking</button>
+    </div>
+    <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Per-plate event billing — har booking ki apni customer details, plates aur bill.</div>
+    <div id="banquet-list"></div>
   </div>
 
   <!-- MANAGE HUB PAGE (grouped: Staff, Expenses, Menu, Inventory, Purchases, Reports) -->
@@ -1332,6 +1345,19 @@ tr:nth-child(even) td{background:#FFFFFF;}
       </div>
     </div>
 
+    <!-- Banquet Configuration (feature-gated) -->
+    <div class="card" style="margin-bottom:10px;display:none" id="banquet-config-card">
+      <div class="card-header"><div class="card-title">🎪 Banquet Bill Settings</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Agar banquet hall ka naam/address restaurant se ALAG hai, yahan set kar dein — banquet bill pe yehi dikhega (khaali chhodne par restaurant ki hi details use hongi).</div>
+        <div class="form-group"><label class="form-label">Banquet Hall Name (optional)</label>
+          <input class="form-inp" id="set-banquet-hall-name" placeholder="e.g. XYZ Banquet Hall"/></div>
+        <div class="form-group"><label class="form-label">Banquet Hall Address (optional)</label>
+          <input class="form-inp" id="set-banquet-hall-addr" placeholder="Address"/></div>
+        <button class="btn btn-primary btn-full" onclick="saveBanquetConfig()">Save Banquet Settings</button>
+      </div>
+    </div>
+
     <!-- Weekly Off Settings -->
     <div class="card" style="margin-bottom:10px">
       <div class="card-header"><div class="card-title">📅 Weekly Off Days</div></div>
@@ -1490,6 +1516,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <button class="bnav" id="nav-rooms" onclick="setPage('rooms')"><span>🛏️</span>Rooms</button>
   <button class="bnav" id="nav-kitchen" onclick="setPage('kitchen')" style="position:relative"><span>🍳</span>Kitchen<span id="nav-kitchen-badge" style="display:none;position:absolute;top:2px;right:8px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
   <button class="bnav" id="nav-manage" onclick="setPage('manage')" style="position:relative"><span>🗂️</span>Manage<span id="nav-manage-badge" style="display:none;position:absolute;top:2px;right:8px;background:#FF6B35;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px">!</span></button>
+  <button class="bnav" id="nav-banquet" onclick="setPage('banquet')"><span>🎪</span>Banquet</button>
   <button class="bnav" id="nav-loyalty" onclick="setPage('loyalty')"><span>⭐</span>Loyalty</button>
 </div>
 
@@ -1734,14 +1761,42 @@ function isFirestoreGlitch(e) {
   return /INTERNAL ASSERTION|Unexpected state|internal error/i.test(msg);
 }
 
+// The data path for a restaurant. Historically this was derived directly
+// from the license key — which meant anyone who saw the (public) source
+// could compute ANY restaurant's data path just by knowing/guessing a key.
+// New licenses now carry an unguessable random `restaurantId` in their
+// license document; we use that when present, and fall back to the old
+// derived value for licenses issued before this change, so existing
+// customers keep pointing at exactly the same data (zero migration).
+function legacyRestaurantIdFromKey(licKey) {
+  return (licKey || '').replace(/[^A-Z0-9]/g, '').toLowerCase();
+}
+
+async function resolveRestaurantId(licKey) {
+  var fallback = legacyRestaurantIdFromKey(licKey);
+  try {
+    var doc = await firestoreDb.collection('licenses').doc(licKey).get();
+    if (doc.exists) {
+      var d = doc.data();
+      if (d && d.restaurantId) return d.restaurantId;
+    }
+  } catch (e) { /* offline or rules issue — fall back below */ }
+  return fallback;
+}
+
 async function authenticateClient(licKey, retryCount) {
   if (!isFirebaseReady) return;
   retryCount = retryCount || 0;
-  restaurantId = licKey.replace(/[^A-Z0-9]/g, '').toLowerCase();
+  // Provisional value so anything reading it before the lookup finishes
+  // still behaves exactly as before.
+  restaurantId = legacyRestaurantIdFromKey(licKey);
   hasHydratedFromCloud = false;
   try {
     // Anonymous auth — each device gets unique uid
     await fbAuth.signInAnonymously();
+    // Resolve the real data path AFTER auth (reading the license doc needs
+    // an authenticated session) and BEFORE any data work starts.
+    restaurantId = await resolveRestaurantId(licKey);
     // Small pause lets the SDK's internal auth/connection state fully settle
     // before we start firing Firestore operations — reduces the chance of
     // triggering the Firestore SDK's known "INTERNAL ASSERTION FAILED" bug,
@@ -2043,7 +2098,8 @@ async function pushSharedDataToCloud() {
     var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
     var collections = {
       tables: db.tables||[], rooms: db.rooms||[], expenses: db.expenses||[],
-      purchases: db.purchases||[], inventory: db.inventory||[], staff: db.staff||[]
+      purchases: db.purchases||[], inventory: db.inventory||[], staff: db.staff||[],
+      banquetBookings: db.banquetBookings||[]
     };
     var pushPromises = [];
     Object.keys(collections).forEach(function(key) {
@@ -2150,6 +2206,15 @@ function listenToStaffSync() {
   });
 }
 
+function listenToBanquetSync() {
+  listenToSharedMeta('banquetBookings', function(items) {
+    if (JSON.stringify(items) === JSON.stringify(db.banquetBookings)) return;
+    db.banquetBookings = items;
+    persistLocalOnly();
+    refreshIfActive('banquet', renderBanquetPage);
+  });
+}
+
 // Settings syncs as a single object (not an array), so it uses its own
 // listener rather than the generic listenToSharedMeta helper.
 function listenToSettingsSync() {
@@ -2228,7 +2293,7 @@ function listenToCustomersSync() {
 async function hydrateAllFromCloud() {
   if (!isFirebaseReady || !firestoreDb || !restaurantId) { hasHydratedFromCloud = true; return; }
   var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
-  var metaKeys = ['tables','rooms','expenses','purchases','inventory','staff','menu'];
+  var metaKeys = ['tables','rooms','expenses','purchases','inventory','staff','menu','banquetBookings'];
   var maxAttempts = 3;
 
   for (var attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -2250,6 +2315,7 @@ async function hydrateAllFromCloud() {
             else if (key === 'inventory') db.inventory = data.items;
             else if (key === 'staff') db.staff = data.items;
             else if (key === 'menu') db.menu = data.items;
+            else if (key === 'banquetBookings') db.banquetBookings = data.items;
             if (key !== 'menu') _lastPushedSnapshot[key] = JSON.stringify(data.items);
           }
         }
@@ -2273,7 +2339,15 @@ async function hydrateAllFromCloud() {
       var liveOrdersDoc = await restRef.collection('meta').doc('tableOrders').get();
       if (liveOrdersDoc.exists && liveOrdersDoc.data() && liveOrdersDoc.data().data) {
         var incomingLive = liveOrdersDoc.data().data;
-        Object.keys(incomingLive).forEach(function(tid){ tableOrders[tid] = incomingLive[tid]; });
+        Object.keys(incomingLive).forEach(function(tid){
+          // NEVER overwrite the table/room currently open in the billing
+          // screen on THIS device — its authoritative state is the live
+          // `order` object, which may hold items not yet mirrored out.
+          // (listenToLiveOrdersSync() already skips it; hydrate must too,
+          // otherwise a manual refresh mid-order could drop those items.)
+          if (order && order.tableId === tid) return;
+          tableOrders[tid] = incomingLive[tid];
+        });
         _lastPushedSnapshot.tableOrders = JSON.stringify(incomingLive);
       }
       await new Promise(function(r){ setTimeout(r, 60); });
@@ -2326,6 +2400,7 @@ function startAllRealtimeSync() {
   listenToKitchenOrdersSync();
   listenToOwnerAlertsSync();
   listenToLiveOrdersSync();
+  listenToBanquetSync();
 }
 
 async function pushAllDataToCloud() {
@@ -2728,6 +2803,47 @@ function loadFeaturesFromLicense(d) {
   }
 }
 
+// Offline Mode is a paid add-on, not a UI element — "hiding" it must
+// actually remove the browser's ability to open the app without internet,
+// not just hide a button. Registers the service worker when the plan
+// includes it; when it doesn't (or gets downgraded later), unregisters any
+// existing one AND clears its caches, so a downgraded client genuinely
+// loses offline capability rather than quietly keeping it from an old
+// cached copy forever.
+// Deliberately NOT using hasFeature() here. hasFeature()'s rule is
+// "missing key = allowed", which exists to stop already-existing features
+// from vanishing on stale caches — correct for features clients already
+// had. Offline Mode is the opposite case: brand new, nobody has ever had
+// it, so a missing/unconfigured key must mean NOT granted — otherwise
+// every existing client would get this paid add-on for free the moment
+// it's introduced, until an admin happens to open and re-save their
+// Features tab.
+function hasOfflineModeFeature() {
+  if (licenseState.status === 'trial') return false;
+  return !!(clientFeatures && clientFeatures['offline_mode'] === true);
+}
+
+async function applyOfflineModeFeature() {
+  if (!('serviceWorker' in navigator)) return;
+  var enabled = hasOfflineModeFeature();
+  try {
+    var regs = await navigator.serviceWorker.getRegistrations();
+    if (enabled) {
+      if (regs.length === 0) {
+        await navigator.serviceWorker.register('./service-worker.js');
+      }
+    } else if (regs.length > 0) {
+      for (var i = 0; i < regs.length; i++) { await regs[i].unregister(); }
+      if ('caches' in window) {
+        var keys = await caches.keys();
+        for (var j = 0; j < keys.length; j++) {
+          if (keys[j].indexOf('billblitz-') === 0) await caches.delete(keys[j]);
+        }
+      }
+    }
+  } catch (e) { /* best effort — never block the app on this */ }
+}
+
 function applyFeatureGating() {
   // Order Manager and Kitchen are OPTIONAL roles — their login buttons only
   // show for clients whose plan has the matching feature enabled. Runs every
@@ -2735,6 +2851,7 @@ function applyFeatureGating() {
   // updates instantly without needing a page reload.
   var omBtn = document.getElementById('role-order_manager');
   if (omBtn) omBtn.style.display = hasFeature('order_manager_role') ? '' : 'none';
+  applyOfflineModeFeature();
   var kBtn = document.getElementById('role-kitchen');
   if (kBtn) kBtn.style.display = hasFeature('kitchen_display') ? '' : 'none';
 
@@ -2771,6 +2888,7 @@ function applyFeatureGating() {
     'pdf_reports':  ['feat-btn-pdf_reports-1'],
     'loyalty':      ['pos-customer-card'],
     'smart_order':  ['smart-order-card'],
+    'banquet':      ['nav-banquet', 'sb-banquet'],
   };
   Object.keys(elementMap).forEach(function(featId) {
     var show = hasFeature(featId);
@@ -2787,7 +2905,7 @@ function applyFeatureGating() {
   var currentPage = document.querySelector('.page.active');
   if(currentPage) {
     var pageId = currentPage.id.replace('page-','');
-    var pageMap = {tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display'};
+    var pageMap = {tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display',banquet:'banquet'};
     if(pageMap[pageId] && !hasFeature(pageMap[pageId])) {
       setPage('dashboard');
       toast('Yeh feature ab available nahi. Admin se contact karein.','#FF6B35');
@@ -3476,6 +3594,13 @@ function renderSettingsPage(){
   // includes the Kitchen Display feature.
   var kitchenPinGroup = document.getElementById('set-kitchen-pin-group');
   if(kitchenPinGroup) kitchenPinGroup.style.display = hasFeature('kitchen_display') ? '' : 'none';
+  var banquetCard = document.getElementById('banquet-config-card');
+  if(banquetCard) banquetCard.style.display = hasFeature('banquet') ? '' : 'none';
+  var bqCfg = (db.settings && db.settings.banquetConfig) || {};
+  var bqHallNameInp = document.getElementById('set-banquet-hall-name');
+  var bqHallAddrInp = document.getElementById('set-banquet-hall-addr');
+  if(bqHallNameInp) bqHallNameInp.value = bqCfg.hallName || '';
+  if(bqHallAddrInp) bqHallAddrInp.value = bqCfg.hallAddress || '';
   var bsPrefixInp = document.getElementById('set-bill-prefix');
   var bsNextInp = document.getElementById('set-bill-next');
   var bsCurrent = (db.settings && db.settings.billSeries) || { prefix: '', nextNumber: 1 };
@@ -3615,6 +3740,15 @@ function renderBillSeriesPreview() {
   el.textContent = 'Agla bill number hoga: ' + (bs.prefix || '') + bs.nextNumber;
 }
 
+function saveBanquetConfig() {
+  var hallName = (document.getElementById('set-banquet-hall-name').value || '').trim();
+  var hallAddr = (document.getElementById('set-banquet-hall-addr').value || '').trim();
+  if (!db.settings) db.settings = {};
+  db.settings.banquetConfig = { hallName: hallName, hallAddress: hallAddr };
+  save();
+  toast('✅ Banquet settings save ho gayi!', '#00A878');
+}
+
 function saveOrderManagerAuth() {
   var chk = document.getElementById('om-can-clear');
   if (!chk) return;
@@ -3667,7 +3801,7 @@ function setPage(p){
   // Kitchen-device lockdown: this role can ONLY ever be on the Kitchen page,
   // no matter how navigation is triggered (nav tap, redirect, deep link).
   if(currentRole==='kitchen' && p!=='kitchen'){ p='kitchen'; }
-  var pgFeat={tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display'};
+  var pgFeat={tables:'tables',staff:'staff',expenses:'expenses',inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty',rooms:'room_service',kitchen:'kitchen_display',banquet:'banquet'};
   if(pgFeat[p]&&!hasFeature(pgFeat[p])){ toast('Yeh feature aapke plan mein nahi hai!','#FF6B35'); return; }
   if(currentRole==='cashier'){
     const access=getCashierAccess();
@@ -3706,10 +3840,55 @@ function setPage(p){
   });
 }
 
+// ── MANUAL REFRESH / SYNC NOW ───────────────────────────────
+// Pushes anything still pending from THIS device, then re-pulls everything
+// fresh from the cloud and re-renders. Real-time listeners already handle
+// this automatically, but on a flaky connection a listener can miss an
+// update — this gives staff a deliberate "make it correct right now"
+// action instead of restarting the app.
+var _isRefreshing = false;
+async function forceRefreshFromCloud() {
+  if (_isRefreshing) return;
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) {
+    toast('Cloud connected nahi hai — internet check karein.', '#FF6B35');
+    return;
+  }
+  _isRefreshing = true;
+  var btns = ['hdr-refresh-btn'].map(function(id){ return document.getElementById(id); }).filter(Boolean);
+  btns.forEach(function(b){ b.style.opacity = '0.5'; b.disabled = true; });
+  setSyncStatus('syncing', 'Refreshing...');
+  toast('🔄 Sync ho raha hai...', '#2563EB');
+  try {
+    // 1) Flush anything this device hasn't pushed yet, so a refresh never
+    //    silently discards local work.
+    //    The live cart is normally mirrored into tableOrders on a 1.2s
+    //    debounce — tapping Refresh sooner than that would otherwise push a
+    //    stale copy, so mirror it synchronously first.
+    syncCurrentOrderIntoTableOrders();
+    await pushSharedDataToCloud();
+    await pushLiveOrdersToCloud();
+    // 2) Re-pull everything authoritative from the cloud.
+    await hydrateAllFromCloud();
+    // 3) Re-apply feature flags and repaint whatever page is open.
+    applyFeatureGating();
+    renderPage(currentPage);
+    renderAlertsBadge();
+    renderKitchenBadge();
+    setSyncStatus('', 'Synced ✓');
+    toast('✅ Sab kuch sync ho gaya!', '#00A878');
+  } catch (e) {
+    setSyncStatus('error', 'Sync failed');
+    toast('Sync fail hua: ' + (e.message || 'internet check karein'), '#FF6B35');
+  }
+  btns.forEach(function(b){ b.style.opacity = ''; b.disabled = false; });
+  _isRefreshing = false;
+}
+
 function renderPage(p){
   if(p==='dashboard') renderDashboard();
   else if(p==='billing') renderBilling();
   else if(p==='tables') renderTables();
+  else if(p==='banquet') renderBanquetPage();
   else if(p==='rooms') renderRooms();
   else if(p==='kitchen') renderKitchenPage();
   else if(p==='staff') renderStaff();
@@ -4915,6 +5094,239 @@ async function getNextBillNumber() {
 // before this feature existed (so old bills/reports still show something).
 function displayBillNo(o) {
   return o.billNo ? o.billNo : ('#' + o.id.slice(-4).toUpperCase());
+}
+
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║   BANQUET MODULE — per-plate event billing, own customer   ║
+// ║   details per booking (Bill To), reuses the SAME GST/      ║
+// ║   discount/bill-numbering logic already built and tested   ║
+// ╚══════════════════════════════════════════════════════════╝
+function showNewBanquetModal() {
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🎪 Naya Banquet Booking</div>'
+    + '<div class="form-group"><label class="form-label">Customer Name *</label><input class="form-inp" id="bq-cust-name" placeholder="e.g. Sharma Family / ABC Pvt Ltd"/></div>'
+    + '<div class="form-group"><label class="form-label">Customer Address</label><input class="form-inp" id="bq-cust-addr" placeholder="Address"/></div>'
+    + '<div class="form-group"><label class="form-label">Customer GST Number (optional)</label><input class="form-inp" id="bq-cust-gst" placeholder="GSTIN"/></div>'
+    + '<div class="form-group"><label class="form-label">Event Date</label><input class="form-inp" id="bq-event-date" type="date" value="'+todayLocalDateStr()+'"/></div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<div class="form-group" style="flex:1"><label class="form-label">Plates *</label><input class="form-inp" id="bq-plates" type="number" min="1" placeholder="e.g. 200"/></div>'
+    + '<div class="form-group" style="flex:1"><label class="form-label">Rate/Plate (₹) *</label><input class="form-inp" id="bq-rate" type="number" min="0" placeholder="e.g. 500"/></div>'
+    + '</div>'
+    + '<div class="form-group"><label class="form-label">Menu / Notes (optional)</label><textarea class="form-inp" id="bq-menu-notes" rows="2" placeholder="e.g. Veg Thali, Starters, Dessert"></textarea></div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<div class="form-group" style="flex:1"><label class="form-label">Extra Charges (₹)</label><input class="form-inp" id="bq-extra" type="number" min="0" value="0"/></div>'
+    + '<div class="form-group" style="flex:1"><label class="form-label">Advance Received (₹)</label><input class="form-inp" id="bq-advance" type="number" min="0" value="0"/></div>'
+    + '</div>'
+    + '<button class="btn btn-primary btn-full" onclick="saveBanquetBooking()">✅ Booking Save Karein</button>';
+  openModal();
+}
+
+function saveBanquetBooking() {
+  var name = (document.getElementById('bq-cust-name').value || '').trim();
+  var plates = parseInt(document.getElementById('bq-plates').value);
+  var rate = parseFloat(document.getElementById('bq-rate').value);
+  if (!name) { toast('Customer naam daalein!', '#FF6B35'); return; }
+  if (!plates || plates <= 0) { toast('Sahi plates count daalein!', '#FF6B35'); return; }
+  if (!rate || rate <= 0) { toast('Sahi rate daalein!', '#FF6B35'); return; }
+
+  var booking = {
+    id: uid(),
+    customerName: name,
+    customerAddress: (document.getElementById('bq-cust-addr').value || '').trim(),
+    customerGST: (document.getElementById('bq-cust-gst').value || '').trim(),
+    eventDate: document.getElementById('bq-event-date').value || todayLocalDateStr(),
+    plates: plates,
+    ratePerPlate: rate,
+    menuNotes: (document.getElementById('bq-menu-notes').value || '').trim(),
+    additionalCharges: parseFloat(document.getElementById('bq-extra').value) || 0,
+    advance: parseFloat(document.getElementById('bq-advance').value) || 0,
+    status: 'draft',
+    createdAt: new Date().toISOString()
+  };
+  if (!db.banquetBookings) db.banquetBookings = [];
+  db.banquetBookings.unshift(booking);
+  save();
+  closeModal();
+  renderBanquetPage();
+  toast('✅ Banquet booking save ho gayi!', '#00A878');
+}
+
+function renderBanquetPage() {
+  var el = document.getElementById('banquet-list');
+  if (!el) return;
+  var bookings = (db.banquetBookings || []).slice().sort(function(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+  if (!bookings.length) {
+    el.innerHTML = '<div class="empty" style="padding:2rem">Koi banquet booking nahi hai. "+ New Booking" se shuru karein.</div>';
+    return;
+  }
+  el.innerHTML = bookings.map(function(b) {
+    var total = b.status === 'billed' ? b.total : ((b.plates * b.ratePerPlate) + (b.additionalCharges || 0));
+    var statusBadge = b.status === 'billed' ? '<span class="badge badge-green">Billed</span>' : '<span class="badge badge-yellow">Draft</span>';
+    return '<div class="list-row" style="cursor:pointer" data-bid="' + b.id + '" onclick="viewBanquetBooking(this.dataset.bid)">'
+      + '<div class="list-icon" style="background:#FDF4FF;color:#A855F7;font-size:1.2rem">🎪</div>'
+      + '<div class="list-main"><div class="list-title">' + esc(b.customerName) + '</div>'
+      + '<div class="list-sub">' + fmtDate(b.eventDate) + ' · ' + b.plates + ' plates</div></div>'
+      + '<div class="list-right"><div style="font-weight:800;color:#1A2B3C">' + fmt(total) + '</div>' + statusBadge + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function viewBanquetBooking(id) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
+  if (!b) return;
+  if (b.status === 'billed') { showBanquetBillReceipt(id); return; }
+
+  var subtotal = b.plates * b.ratePerPlate;
+  var extra = b.additionalCharges || 0;
+  var preTax = subtotal + extra;
+
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🎪 ' + esc(b.customerName) + '</div>'
+    + '<div class="card"><div class="card-body">'
+    + '<div class="bill-row"><span>Event Date</span><span>' + fmtDate(b.eventDate) + '</span></div>'
+    + '<div class="bill-row"><span>Plates</span><span>' + b.plates + ' × ' + fmt(b.ratePerPlate) + '</span></div>'
+    + (extra ? '<div class="bill-row"><span>Extra Charges</span><span>' + fmt(extra) + '</span></div>' : '')
+    + (b.menuNotes ? '<div style="font-size:0.78rem;color:#6B7A99;margin-top:6px">' + esc(b.menuNotes) + '</div>' : '')
+    + '<div class="bill-total"><span>Subtotal (Tax Se Pehle)</span><span>' + fmt(preTax) + '</span></div>'
+    + '</div></div>'
+    + (b.advance ? '<div style="font-size:0.8rem;color:#16A34A;margin:10px 0">Advance Received: ' + fmt(b.advance) + '</div>' : '')
+    + '<button class="btn btn-primary btn-full" style="margin-top:10px;margin-bottom:8px" data-bid="' + id + '" onclick="generateBanquetBill(this.dataset.bid)">🧾 Generate Bill</button>'
+    + '<button class="btn btn-red btn-full" data-bid="' + id + '" onclick="deleteBanquetBooking(this.dataset.bid)">🗑️ Delete Booking</button>';
+  openModal();
+}
+
+async function generateBanquetBill(id) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
+  if (!b) return;
+  var subtotal = (b.plates * b.ratePerPlate) + (b.additionalCharges || 0);
+  var taxPct = computeApplicableGST();       // SAME auto/manual GST logic as restaurant bills
+  var gstCfg = getGSTConfig();
+  var tax = subtotal * taxPct / 100;
+  var total = subtotal + tax;
+  var balanceDue = Math.max(0, total - (b.advance || 0));
+  var billNo = await getNextBillNumber();     // SAME atomic, shared sequence as restaurant bills
+
+  b.subtotal = subtotal;
+  b.taxPct = taxPct;
+  b.tax = tax;
+  b.gstType = gstCfg.type;
+  b.total = total;
+  b.balanceDue = balanceDue;
+  b.billNo = billNo;
+  b.status = 'billed';
+  b.billedAt = new Date().toISOString();
+
+  save();
+  closeModal();
+  renderBanquetPage();
+  showBanquetBillReceipt(id);
+  toast('✅ Banquet bill generate ho gaya!', '#00A878');
+}
+
+function deleteBanquetBooking(id) {
+  if (!confirm('Yeh booking delete karni hai?')) return;
+  db.banquetBookings = (db.banquetBookings || []).filter(function(x) { return x.id !== id; });
+  save();
+  closeModal();
+  renderBanquetPage();
+  toast('Booking delete ho gayi.', '#FF6B35');
+}
+
+function showBanquetBillReceipt(id) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
+  if (!b) return;
+  var info = (db.settings && db.settings.restInfo) || {};
+  var bqCfg = (db.settings && db.settings.banquetConfig) || {};
+  var hallName = bqCfg.hallName || info.name || 'Banquet Hall';
+  var hallAddr = bqCfg.hallAddress || info.addr || '';
+
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div style="text-align:center;margin-bottom:14px">'
+    + '<div style="font-size:2.5rem;margin-bottom:4px">🎪</div>'
+    + '<div style="font-weight:800;font-size:1rem">' + esc(hallName) + '</div>'
+    + (hallAddr ? '<div style="font-size:0.72rem;color:#6B7A99">' + esc(hallAddr) + '</div>' : '')
+    + '<div style="font-weight:700;font-size:0.82rem;color:#6B7A99;margin-top:4px">Banquet Bill ' + displayBillNo(b) + ' · ' + fmtDate(b.eventDate) + '</div>'
+    + '</div>'
+    + '<div class="card" style="margin-bottom:10px"><div class="card-body">'
+    + '<div style="font-size:0.68rem;font-weight:700;color:#9CA3AF;margin-bottom:4px">BILL TO</div>'
+    + '<div style="font-weight:700">' + esc(b.customerName) + '</div>'
+    + (b.customerAddress ? '<div style="font-size:0.8rem;color:#6B7A99">' + esc(b.customerAddress) + '</div>' : '')
+    + (b.customerGST ? '<div style="font-size:0.8rem;color:#6B7A99">GSTIN: ' + esc(b.customerGST) + '</div>' : '')
+    + '</div></div>'
+    + '<div class="card"><div class="card-body">'
+    + '<div class="bill-row"><span>' + b.plates + ' Plates × ' + fmt(b.ratePerPlate) + '</span><span>' + fmt(b.plates * b.ratePerPlate) + '</span></div>'
+    + (b.additionalCharges ? '<div class="bill-row"><span>Extra Charges</span><span>' + fmt(b.additionalCharges) + '</span></div>' : '')
+    + (b.menuNotes ? '<div style="font-size:0.76rem;color:#6B7A99;margin:6px 0">' + esc(b.menuNotes) + '</div>' : '')
+    + '<div class="divider"></div>'
+    + '<div class="bill-row"><span>Subtotal</span><span>' + fmt(b.subtotal) + '</span></div>'
+    + (b.tax ? getGSTBreakdownHtml(b) : '')
+    + '<div class="bill-total"><span>TOTAL</span><span>' + fmt(b.total) + '</span></div>'
+    + (b.advance ? '<div class="bill-row" style="color:#16A34A"><span>Advance Received</span><span>-' + fmt(b.advance) + '</span></div>' : '')
+    + (b.advance ? '<div class="bill-total" style="color:#DC2626"><span>Balance Due</span><span>' + fmt(b.balanceDue) + '</span></div>' : '')
+    + '</div></div>'
+    + '<div class="btn-row" style="margin-top:12px">'
+    + '<button class="btn btn-outline" data-bid="' + id + '" onclick="printBanquetBill(this.dataset.bid)">🖨️ Print</button>'
+    + '<button class="btn btn-outline" onclick="closeModal()">Close</button>'
+    + '</div>';
+  openModal();
+}
+
+function printBanquetBill(orderId) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === orderId; });
+  if (!b) { toast('Booking nahi mila!', '#FF6B35'); return; }
+  var info = (db.settings && db.settings.restInfo) || {};
+  var bqCfg = (db.settings && db.settings.banquetConfig) || {};
+  var hallName = bqCfg.hallName || info.name || 'Banquet Hall';
+  var hallAddr = bqCfg.hallAddress || info.addr || '';
+  var hallPhone = info.phone || '';
+  var hallGST = info.gst || '';
+
+  var rows = '<tr><td style="padding:2px 0">' + b.plates + ' Plates × Rs.' + b.ratePerPlate.toFixed(2) + '</td><td style="text-align:right;padding:2px 0">Rs.' + (b.plates * b.ratePerPlate).toFixed(2) + '</td></tr>';
+  if (b.additionalCharges) rows += '<tr><td style="padding:2px 0">Extra Charges</td><td style="text-align:right;padding:2px 0">Rs.' + b.additionalCharges.toFixed(2) + '</td></tr>';
+
+  var gstRows = b.tax ? getGSTBreakdown(b).map(function(g) {
+    return '<tr><td>' + g.name + ' (' + g.pct.toFixed(1).replace(/\.0$/, '') + '%)</td><td style="text-align:right">Rs.' + g.amt.toFixed(2) + '</td></tr>';
+  }).join('') : '';
+
+  var html = '<div class="print-bill-wrap">'
+    + '<h2>' + esc(hallName) + '</h2>'
+    + (hallAddr ? '<div class="pc">' + esc(hallAddr) + '</div>' : '')
+    + (hallPhone ? '<div class="pc">Ph: ' + esc(hallPhone) + '</div>' : '')
+    + (hallGST ? '<div class="pc">GST: ' + esc(hallGST) + '</div>' : '')
+    + '<hr><div style="text-align:center;font-weight:700">BANQUET BILL</div>'
+    + '<div class="pc">Bill ' + displayBillNo(b) + '</div>'
+    + '<div class="pc">' + fmtDate(b.eventDate) + '</div>'
+    + '<hr>'
+    + '<div class="pc" style="text-align:left;font-weight:700">Bill To: ' + esc(b.customerName) + '</div>'
+    + (b.customerAddress ? '<div class="pc" style="text-align:left">' + esc(b.customerAddress) + '</div>' : '')
+    + (b.customerGST ? '<div class="pc" style="text-align:left">GSTIN: ' + esc(b.customerGST) + '</div>' : '')
+    + '<hr>'
+    + '<table>' + rows
+    + '<tr><td>Subtotal</td><td style="text-align:right">Rs.' + b.subtotal.toFixed(2) + '</td></tr>'
+    + gstRows
+    + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.' + b.total.toFixed(2) + '</td></tr>'
+    + (b.advance ? '<tr><td>Advance Received</td><td style="text-align:right">-Rs.' + b.advance.toFixed(2) + '</td></tr>' : '')
+    + (b.advance ? '<tr style="font-weight:700"><td>Balance Due</td><td style="text-align:right">Rs.' + b.balanceDue.toFixed(2) + '</td></tr>' : '')
+    + '</table>'
+    + '<hr><div class="pc">Thank you!</div>'
+    + '</div>';
+
+  printPreviewOverlay(html);
+}
+
+// Small, focused print-overlay used by printBanquetBill — mirrors the exact
+// mechanism printBill() already uses (an overlay + window.print()), so it's
+// guaranteed to work the same way on the same devices, without touching
+// printBill() itself (which is order-specific and stays untouched).
+function printPreviewOverlay(html) {
+  var overlay = document.getElementById('print-overlay');
+  if (!overlay) return;
+  overlay.innerHTML = html;
+  setTimeout(function() { window.print(); }, 100);
 }
 
 async function completeBill(payment){
@@ -9996,26 +10408,62 @@ async function btAttemptReconnect(triesLeft) {
   }
 }
 
-// Runs at app startup: if this device already has permission for the
-// previously-used printer, reconnect to it WITHOUT showing any dialog — so
-// staff don't have to re-pair every single time they reopen the app.
+// Runs at app startup. Silent reconnect depends on navigator.bluetooth
+// .getDevices(), which Chrome still keeps behind two flags
+// (#enable-experimental-web-platform-features and
+// #enable-web-bluetooth-new-permissions-backend). Where those are enabled
+// this reconnects with NO dialog at all. Where they aren't, the browser
+// simply has no way to hand a site a previously-permitted device without a
+// fresh user gesture — so we fall back to showing a one-tap reconnect
+// prompt instead of silently failing and looking broken.
 async function btAutoReconnectOnStartup() {
-  if(!('bluetooth' in navigator) || !navigator.bluetooth.getDevices) return;
-  var savedId = null;
-  try { savedId = localStorage.getItem('bb-bt-printer-id'); } catch(e){}
-  if(!savedId) return;
+  if(!('bluetooth' in navigator)) return;
+  var savedId = null, savedName = null;
   try {
-    var devices = await navigator.bluetooth.getDevices();
-    var match = devices.filter(function(d){ return d.id === savedId; })[0];
-    if(!match) return;
-    btSetUI('connecting', match.name||'Printer','Auto-reconnecting...');
-    await btReattachDevice(match);
-    toast('🖨️ Printer auto-connect ho gaya','#00A878');
-  } catch(e) {
-    // Printer off / out of range at launch — stay silent, the user can
-    // still connect manually.
-    btSetUI('','Not connected','Tap Connect to pair');
+    savedId = localStorage.getItem('bb-bt-printer-id');
+    savedName = localStorage.getItem('bb-bt-printer');
+  } catch(e){}
+  if(!savedId && !savedName) return; // never paired on this device — nothing to restore
+
+  if (navigator.bluetooth.getDevices) {
+    try {
+      var devices = await navigator.bluetooth.getDevices();
+      var match = devices.filter(function(d){ return d.id === savedId; })[0];
+      if (match) {
+        btSetUI('connecting', match.name||'Printer','Auto-reconnecting...');
+        await btReattachDevice(match);
+        toast('🖨️ Printer auto-connect ho gaya','#00A878');
+        return;
+      }
+    } catch(e) { /* flag off, or printer unreachable — fall through */ }
   }
+
+  // Fallback: can't reconnect without a user gesture, so surface a single
+  // obvious tap rather than making them hunt through Settings.
+  btSetUI('', savedName || 'Not connected', 'Tap Connect to reconnect');
+  showPrinterReconnectPrompt(savedName);
+}
+
+// A small, dismissible prompt so reconnecting after an app restart is ONE
+// tap from wherever the user already is.
+function showPrinterReconnectPrompt(savedName) {
+  if (document.getElementById('bt-reconnect-bar')) return;
+  var bar = document.createElement('div');
+  bar.id = 'bt-reconnect-bar';
+  bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:78px;z-index:9000;background:#1A2B3C;color:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;font-size:0.82rem';
+  bar.innerHTML =
+    '<span style="font-size:1.2rem">🖨️</span>'
+    + '<span style="flex:1">Printer <b>' + esc(savedName || '') + '</b> connect karein?</span>'
+    + '<button style="background:#00A878;color:#fff;border:none;border-radius:10px;padding:8px 14px;font-weight:800;cursor:pointer" onclick="dismissPrinterReconnectPrompt();btConnect()">Connect</button>'
+    + '<button style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:10px;width:30px;height:30px;cursor:pointer" onclick="dismissPrinterReconnectPrompt()">✕</button>';
+  document.body.appendChild(bar);
+  // Auto-hide after a while so it never becomes permanent clutter.
+  setTimeout(dismissPrinterReconnectPrompt, 15000);
+}
+
+function dismissPrinterReconnectPrompt() {
+  var bar = document.getElementById('bt-reconnect-bar');
+  if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
 }
 
 async function btDisconnect() {
@@ -10095,7 +10543,8 @@ function showPrinterModal() {
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">🖨️ Bluetooth Printer</div>'
-    + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px">Har device pe printer alag se connect karna padta hai — apne is device ke liye yahan se connect karein.</div>'
+    + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Har device pe printer alag se connect karna padta hai — apne is device ke liye yahan se connect karein.</div>'
+    + '<div style="background:#EFF6FF;border-radius:10px;padding:10px;font-size:0.72rem;color:#1D4ED8;margin-bottom:12px;line-height:1.5">💡 <b>App kholte hi printer apne aap connect ho</b> — iske liye ek baar Chrome setting on karni padti hai:<br>Chrome mein <b>chrome://flags</b> kholein → <b>"Web Bluetooth new permissions backend"</b> dhoondein → <b>Enabled</b> karein → Chrome restart karein.<br><span style="color:#6B7A99">Ye Chrome ki apni setting hai (app ki nahi) — iske bina browser kisi bhi website ko purana printer bina tap kiye dobara connect karne hi nahi deta.</span></div>'
     + '<div style="background:#1A2B3C;border-radius:12px;padding:12px;margin-bottom:10px">'
     + '<div class="bt-bar">'
     + '<div class="bt-dot' + (connected?' connected':'') + '" id="bt2-dot"></div>'
@@ -10305,6 +10754,11 @@ initLicense();
 // Firebase loads in background — doesn't block app
 try { initFirebase(); } catch(e) {}
 
+</script>
+<script>
+  // Offline Mode is a paid add-on (see applyOfflineModeFeature, called from
+  // applyFeatureGating) rather than being registered unconditionally here —
+  // only clients whose plan includes it get the service worker at all.
 </script>
 </body>
 </html>

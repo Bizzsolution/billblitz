@@ -782,6 +782,7 @@ function saveClient() {
     plan: client.plan,
     expiry: client.expiry,
     status: 'active',
+    restaurantId: generateRestaurantId(),
     createdAt: new Date().toISOString()
   });
 
@@ -993,6 +994,19 @@ function toggleBlock(clientId) {
 }
 
 // ══ LICENSE KEYS ════════════════════════════════════
+// The data path a client's restaurant data lives under in Firestore.
+// Deliberately random and unrelated to the license key: the app's source is
+// public, so a path derived from the key could be computed by anyone who
+// learned/guessed a key. crypto.getRandomValues gives ~128 bits of entropy,
+// which is not guessable by brute force.
+function generateRestaurantId() {
+  var bytes = new Uint8Array(16);
+  (window.crypto || window.msCrypto).getRandomValues(bytes);
+  var hex = '';
+  for (var i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+  return 'r_' + hex;
+}
+
 function generateLicenseKey() {
   const prefix = adminData.settings.prefix || 'BB';
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1029,6 +1043,7 @@ function generateKey() {
     phone: c ? (c.phone||'') : '',
     plan, expiry,
     status: 'active',
+    restaurantId: generateRestaurantId(),
     createdAt: new Date().toISOString()
   });
 
@@ -1302,6 +1317,8 @@ var ALL_FEATURES = [
   {id:'kitchen_display', name:'Kitchen Display System', tier:'premium', always:false, desc:'Live kitchen order queue, table/room-wise — kitchen staff sees KOTs in real time'},
   {id:'order_manager_role', name:'Order Manager Role', tier:'premium', always:false, desc:'Extra staff login role — can ONLY send KOT and generate bills; payment/table-clear stays with Owner/Cashier unless explicitly authorised'},
   {id:'smart_order', name:'Smart Order (Type + Voice)', tier:'premium', always:false, desc:'The Smart Order box on the billing screen — type or speak items in natural language and they get added to the order automatically'},
+  {id:'offline_mode', name:'Offline Mode', tier:'premium', always:false, desc:'App keeps working with no internet — billing, tables, orders stay usable, syncing automatically once back online. OFF removes this from the client\'s device (not just hidden).'},
+  {id:'banquet', name:'Banquet Module', tier:'premium', always:false, desc:'Separate Banquet tab for per-plate event billing — customer name/address/GST captured per booking, own bill format with advance & balance due.'},
 ];
 
 var TIER_FEATURES = {
@@ -1322,8 +1339,26 @@ var muExistingItems = [];
 var muCurrentClientId = null;
 var muCurrentRestaurantId = null;
 
+// Legacy path — only correct for licenses issued BEFORE random restaurantIds
+// existed. Kept as the fallback so old clients keep resolving to their
+// existing data.
 function computeRestaurantId(licenseKey) {
   return (licenseKey || '').replace(/[^A-Z0-9]/gi, '').toLowerCase();
+}
+
+// Authoritative lookup: prefer the restaurantId stored on the license doc,
+// fall back to the legacy derivation. Admin tools (menu updater, PIN reset)
+// MUST use this, otherwise they'd read/write the wrong path for any client
+// created after the random-id change.
+async function resolveRestaurantIdAdmin(licenseKey) {
+  try {
+    var doc = await db_admin.collection('licenses').doc(licenseKey).get();
+    if (doc.exists) {
+      var d = doc.data();
+      if (d && d.restaurantId) return d.restaurantId;
+    }
+  } catch (e) { /* fall through to legacy */ }
+  return computeRestaurantId(licenseKey);
 }
 
 function showMenuUpdaterSection() {
@@ -1391,7 +1426,7 @@ async function loadClientMenu() {
   if (!c.key) { toast('Is client ki license key nahi hai! Pehle key generate karein.', '#FF6B35'); return; }
 
   muCurrentClientId = clientId;
-  muCurrentRestaurantId = computeRestaurantId(c.key);
+  muCurrentRestaurantId = await resolveRestaurantIdAdmin(c.key);
   muImages = [];
   muExtractedItems = [];
 
