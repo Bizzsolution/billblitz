@@ -1228,6 +1228,14 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div class="page-title">📊 Reports</div>
 
+    <!-- Data Source selector — only shown when Banquet is enabled, so
+         everyone else's Reports look exactly as before -->
+    <div class="rep-tabs" id="rep-source-tabs" style="display:none;margin-bottom:6px">
+      <button class="rep-tab active" id="rep-src-restaurant" onclick="setReportSource('restaurant')">🍽️ Restaurant</button>
+      <button class="rep-tab" id="rep-src-banquet" onclick="setReportSource('banquet')">🎪 Banquet</button>
+      <button class="rep-tab" id="rep-src-combined" onclick="setReportSource('combined')">🔀 Combined</button>
+    </div>
+
     <!-- Period selector -->
     <div class="rep-tabs">
       <button class="rep-tab active" id="rep-today" onclick="setRepTab('today')">Today</button>
@@ -1405,6 +1413,17 @@ tr:nth-child(even) td{background:#FFFFFF;}
         <div class="form-group"><label class="form-label">Banquet Hall Address (optional)</label>
           <input class="form-inp" id="set-banquet-hall-addr" placeholder="Address"/></div>
         <button class="btn btn-primary btn-full" onclick="saveBanquetConfig()">Save Banquet Settings</button>
+      </div>
+    </div>
+
+    <!-- Discount Limit -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">🚫 Discount Limit</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Staff (Cashier/Order Manager) billing screen pe isse zyada discount% nahi de payenge. Aap khud (Owner) hamesha kitna bhi discount de sakte hain — yeh sirf staff ke liye hai. Khaali/0 rakhne par koi limit nahi.</div>
+        <div class="form-group"><label class="form-label">Maximum Discount Staff De Sakein (%)</label>
+          <input class="form-inp" id="set-max-discount-pct" type="number" min="0" max="100" placeholder="e.g. 10 (khaali = koi limit nahi)"/></div>
+        <button class="btn btn-primary btn-full" onclick="saveMaxDiscountLimit()">Save Discount Limit</button>
       </div>
     </div>
 
@@ -3673,6 +3692,8 @@ function renderSettingsPage(){
   var bqHallAddrInp = document.getElementById('set-banquet-hall-addr');
   if(bqHallNameInp) bqHallNameInp.value = bqCfg.hallName || '';
   if(bqHallAddrInp) bqHallAddrInp.value = bqCfg.hallAddress || '';
+  var maxDiscInp = document.getElementById('set-max-discount-pct');
+  if(maxDiscInp) maxDiscInp.value = (db.settings && db.settings.maxDiscountPct) || '';
   var bsPrefixInp = document.getElementById('set-bill-prefix');
   var bsNextInp = document.getElementById('set-bill-next');
   var bsCurrent = (db.settings && db.settings.billSeries) || { prefix: '', nextNumber: 1 };
@@ -3877,6 +3898,23 @@ function renderBillSeriesPreview() {
   if (!el) return;
   var bs = (db.settings && db.settings.billSeries) || { prefix: '', nextNumber: 1 };
   el.textContent = 'Agla bill number hoga: ' + (bs.prefix || '') + bs.nextNumber;
+}
+
+// Central helper used everywhere a discount % gets applied — owner is
+// never restricted by their own rule, only non-owner roles are capped.
+function getMaxDiscountPct() {
+  var v = db.settings && db.settings.maxDiscountPct;
+  return (v === undefined || v === null || v === '' || v <= 0) ? 100 : v;
+}
+
+function saveMaxDiscountLimit() {
+  var raw = document.getElementById('set-max-discount-pct').value;
+  var pct = raw === '' ? 0 : parseFloat(raw);
+  if (isNaN(pct) || pct < 0 || pct > 100) { toast('0 se 100 ke beech sahi % daalein!', '#FF6B35'); return; }
+  if (!db.settings) db.settings = {};
+  db.settings.maxDiscountPct = pct; // 0 stored as "no limit" (see getMaxDiscountPct)
+  save();
+  toast(pct > 0 ? ('✅ Staff ab max ' + pct + '% discount de sakte hain.') : '✅ Discount limit hata di gayi.', '#00A878');
 }
 
 function saveBanquetConfig() {
@@ -5174,7 +5212,17 @@ function processReturn(orderId, snapshot, reason) {
 function recalcBill(){
   const sub=order.items.reduce((s,i)=>s+i.price*i.qty,0);
   const taxPct=parseFloat(document.getElementById('bill-tax-pct').value)||0;
-  const discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  var discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  // Owner is never capped by their own rule — only non-owner roles are.
+  if (currentRole !== 'owner') {
+    var maxDisc = getMaxDiscountPct();
+    if (discPct > maxDisc) {
+      discPct = maxDisc;
+      var discInp = document.getElementById('bill-discount');
+      if (discInp) discInp.value = maxDisc;
+      toast('Aap max ' + maxDisc + '% tak hi discount de sakte hain.', '#FF6B35');
+    }
+  }
   const disc=sub*discPct/100;
   const tax=sub*taxPct/100;
   const total=Math.max(0,sub+tax-disc);
@@ -5537,7 +5585,15 @@ async function completeBill(payment){
   if(!order.items.length){ toast('Add items to the order first!','#FF6B35'); return; }
   const sub=order.items.reduce((s,i)=>s+i.price*i.qty,0);
   const taxPct=parseFloat(document.getElementById('bill-tax-pct').value)||0;
-  const discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  // Second, independent enforcement point (recalcBill already clamps the
+  // input live) — makes sure the ACTUAL charged discount can never exceed
+  // the owner's configured limit for a non-owner, even if something
+  // bypassed the input-level clamp.
+  var discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  if (currentRole !== 'owner') {
+    var maxDiscCB = getMaxDiscountPct();
+    if (discPct > maxDiscCB) discPct = maxDiscCB;
+  }
   const disc=sub*discPct/100;
   const tax=sub*taxPct/100;
   const total=Math.max(0,sub+tax-disc);
@@ -6649,12 +6705,58 @@ function getPeriodLabel(){
   return 'All Time';
 }
 
-function getPeriodOrders(){ return db.orders.filter(function(o){ return periodMatchDate(o.date); }); }
+// 'restaurant' (default, unchanged behaviour) | 'banquet' | 'combined'
+var reportSource = 'restaurant';
+
+// Reshapes a BILLED banquet booking to look like a regular order — same
+// field names (date, items, subtotal, tax, total, payment...) — so every
+// existing report renderer (Sales/GST/Profitability, their Excel/PDF
+// export) works completely unchanged, whether it's fed restaurant orders,
+// banquet bookings, or both. Only this one normalization function needs
+// to know banquet bookings look different internally.
+function normalizeBanquetForReports(bookings) {
+  return (bookings || []).filter(function(b){ return b.status === 'billed'; }).map(function(b){
+    return {
+      id: b.id, billNo: b.billNo,
+      date: b.eventDate,
+      items: [{ name: 'Banquet — ' + b.plates + ' plates @ ' + fmt(b.ratePerPlate), price: b.ratePerPlate, qty: b.plates }],
+      subtotal: b.subtotal, tax: b.tax, taxPct: b.taxPct, gstType: b.gstType,
+      discount: 0, total: b.total,
+      payment: b.payment || 'pending',
+      tableName: null
+    };
+  });
+}
+
+function getPeriodOrders(){
+  var restaurantOrders = (reportSource === 'banquet') ? [] : (db.orders || []);
+  var banquetOrders = (reportSource === 'restaurant') ? [] : normalizeBanquetForReports(db.banquetBookings);
+  return restaurantOrders.concat(banquetOrders).filter(function(o){ return periodMatchDate(o.date); });
+}
 function getPeriodExpenses(){ return (db.expenses||[]).filter(function(e){ return periodMatchDate(e.date); }); }
 function getPeriodPurchases(){ return (db.purchases||[]).filter(function(p){ return periodMatchDate(p.date); }); }
 
 // ── MAIN DISPATCHER ──────────────────────────────────────────
+function setReportSource(src) {
+  reportSource = src;
+  ['restaurant','banquet','combined'].forEach(function(x){
+    var el = document.getElementById('rep-src-'+x);
+    if(el) el.classList.toggle('active', x===src);
+  });
+  renderReports();
+}
+
 function renderReports(){
+  // Data-source selection (Restaurant/Banquet/Combined) only makes sense for
+  // revenue-based reports (Sales/GST/Profitability) — Expense and Purchase
+  // reports are about the restaurant's own operational costs regardless of
+  // which bills were banquet vs regular, so the selector stays hidden there
+  // and always uses ALL orders for those (reportSource is never consulted
+  // by getPeriodExpenses/getPeriodPurchases anyway).
+  var sourceTabs = document.getElementById('rep-source-tabs');
+  var showSourceTabs = hasFeature('banquet') && (reportType==='sales' || reportType==='gst' || reportType==='profit' || !reportType);
+  if (sourceTabs) sourceTabs.style.display = showSourceTabs ? 'flex' : 'none';
+
   if(reportType==='expense') renderExpenseReportView();
   else if(reportType==='purchase') renderPurchaseReportView();
   else if(reportType==='gst') renderGSTReportView();
@@ -7788,7 +7890,17 @@ function showQuickBillPaymentModal() {
   var taxInp = document.getElementById('bill-tax-pct');
   var discInp = document.getElementById('bill-discount');
   var taxPct = taxInp ? (parseFloat(taxInp.value) || 0) : 0;
-  var disc = discInp ? (parseFloat(discInp.value) || 0) : 0;
+  // Pre-existing bug found while adding the discount-limit feature: this
+  // preview was still treating the discount field as a raw rupee amount,
+  // left over from before discount became a percentage. It never affected
+  // what actually got charged (completeBill() already computed correctly),
+  // only this preview total shown just before tapping Generate Bill.
+  var discPctQB = discInp ? (parseFloat(discInp.value) || 0) : 0;
+  if (currentRole !== 'owner') {
+    var maxDiscQB = getMaxDiscountPct();
+    if (discPctQB > maxDiscQB) { discPctQB = maxDiscQB; if (discInp) discInp.value = maxDiscQB; }
+  }
+  var disc = sub * discPctQB / 100;
   var tax = sub * taxPct / 100;
   var total = Math.max(0, sub + tax - disc);
 
