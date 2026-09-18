@@ -5460,7 +5460,12 @@ function renderBanquetPage() {
 function viewBanquetBooking(id) {
   var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
   if (!b) return;
-  if (b.status === 'billed') { showBanquetBillReceipt(id); return; }
+  // Same bug class as the reports one — a CLOSED booking has already been
+  // billed too, so it must also route to the bill receipt view (with
+  // payment history), not fall through to the pre-bill draft view below
+  // (which would wrongly offer "Generate Bill" again on an already-closed
+  // booking).
+  if (b.status === 'billed' || b.status === 'closed') { showBanquetBillReceipt(id); return; }
 
   var subtotal = b.plates * b.ratePerPlate;
   var extra = b.additionalCharges || 0;
@@ -7043,7 +7048,13 @@ var reportSource = 'restaurant';
 // banquet bookings, or both. Only this one normalization function needs
 // to know banquet bookings look different internally.
 function normalizeBanquetForReports(bookings) {
-  return (bookings || []).filter(function(b){ return b.status === 'billed'; }).map(function(b){
+  // Both 'billed' AND 'closed' are real, revenue-generating bookings —
+  // 'closed' just means fully settled, it doesn't stop being a sale.
+  // (Bug found during testing: only 'billed' was matched here, so any
+  // booking marked Closed after full payment silently vanished from every
+  // report — this is the fix.) 'draft' bookings correctly stay excluded,
+  // since no bill has been generated for them yet.
+  return (bookings || []).filter(function(b){ return b.status === 'billed' || b.status === 'closed'; }).map(function(b){
     return {
       id: b.id, billNo: b.billNo,
       date: b.eventDate,
