@@ -567,6 +567,49 @@ tr:nth-child(even) td{background:#FFFFFF;}
 .print-bill-wrap table { width:100%; border-collapse:collapse; }
 .print-bill-wrap td { font-size:12px; padding:2px 0; }
 
+/* ══ PROFESSIONAL A4 INVOICE (Banquet) ═══════════════════ */
+/* A full-page, formal invoice layout — distinct from the narrow thermal-
+   receipt style above. Used only where explicitly chosen (banquet's
+   "Professional Invoice" print option), never affects the regular
+   thermal-receipt bills. */
+.print-pro-wrap {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  max-width: 720px; margin: 0 auto; color: #1A2B3C; font-size: 13px;
+}
+.print-pro-wrap .pro-letterhead { display:flex; align-items:center; gap:14px; border-bottom:3px solid #1A2B3C; padding-bottom:14px; margin-bottom:14px; }
+.print-pro-wrap .pro-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; }
+.print-pro-wrap .pro-hall-name { font-size:22px; font-weight:800; margin:0; }
+.print-pro-wrap .pro-hall-sub { font-size:11px; color:#475569; margin-top:2px; }
+.print-pro-wrap .pro-invoice-tag { text-align:right; flex-shrink:0; }
+.print-pro-wrap .pro-invoice-tag .big { font-size:18px; font-weight:800; letter-spacing:1px; color:#475569; }
+.print-pro-wrap .pro-meta-row { display:flex; justify-content:space-between; gap:20px; margin-bottom:18px; }
+.print-pro-wrap .pro-meta-block { flex:1; }
+.print-pro-wrap .pro-meta-label { font-size:10px; font-weight:700; letter-spacing:0.5px; color:#94A3B8; margin-bottom:4px; text-transform:uppercase; }
+.print-pro-wrap .pro-meta-value { font-size:13px; line-height:1.5; }
+.print-pro-wrap table.pro-items { width:100%; border-collapse:collapse; margin-bottom:16px; }
+.print-pro-wrap table.pro-items th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.4px; color:#fff; background:#1A2B3C; padding:8px 10px; }
+.print-pro-wrap table.pro-items th.r { text-align:right; }
+.print-pro-wrap table.pro-items td { padding:9px 10px; border-bottom:1px solid #E2E8F5; font-size:12.5px; }
+.print-pro-wrap table.pro-items td.r { text-align:right; }
+.print-pro-wrap .pro-totals { width:260px; margin-left:auto; margin-bottom:20px; }
+.print-pro-wrap .pro-totals .row { display:flex; justify-content:space-between; padding:5px 0; font-size:12.5px; }
+.print-pro-wrap .pro-totals .row.grand { border-top:2px solid #1A2B3C; margin-top:4px; padding-top:8px; font-size:15px; font-weight:800; }
+.print-pro-wrap .pro-totals .row.due { color:#DC2626; font-weight:800; }
+.print-pro-wrap .pro-footer { display:flex; justify-content:space-between; align-items:flex-end; margin-top:40px; padding-top:14px; border-top:1px solid #E2E8F5; }
+.print-pro-wrap .pro-terms { font-size:10.5px; color:#94A3B8; max-width:60%; }
+.print-pro-wrap .pro-sign { text-align:center; }
+.print-pro-wrap .pro-sign .line { width:150px; border-top:1px solid #1A2B3C; margin-bottom:4px; }
+.print-pro-wrap .pro-sign .label { font-size:10.5px; color:#475569; }
+/* Deliberately NO separate @page rule here. @page is a top-level print
+   directive that can't be scoped to a class — adding a second one would
+   have silently overridden the existing @page { size: auto; margin: 4mm }
+   used for thermal receipts (they share one print pipeline), breaking
+   those. .print-pro-wrap is instead sized to still look right within that
+   same margin. */
+@media print {
+  .print-pro-wrap { max-width: 100% !important; }
+}
+
 
 /* ══ STAFF ENHANCED ═══════════════════════════════════════ */
 .staff-tabs{display:flex;gap:6px;margin-bottom:14px;background:rgba(0,0,0,0.04);border-radius:12px;padding:4px;}
@@ -733,7 +776,6 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div id="dh-sync" style="font-size:0.72rem;color:rgba(255,255,255,0.4)"></div>
     <span id="dh-role-badge" class="dh-role role-owner">👑 Owner</span>
     <button class="dh-btn" id="dh-alerts-btn" style="background:rgba(255,255,255,0.12);position:relative;display:none" onclick="showOwnerAlertsModal()" title="Notifications">🔔<span id="dh-alerts-count" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
-    <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="forceRefreshFromCloud()" title="Refresh / Sync Now">🔄</button>
     <button class="dh-btn" style="background:rgba(255,255,255,0.12)" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
     <button class="dh-btn" id="dh-settings-btn" style="background:rgba(255,255,255,0.12)" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="dh-btn" onclick="quickBill()">+ New Bill</button>
@@ -874,7 +916,6 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="hdr-time" id="live-time"></div>
     <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
     <button class="hdr-btn" id="hdr-alerts-btn" style="background:rgba(255,255,255,0.12);color:#fff;position:relative;display:none" onclick="showOwnerAlertsModal()" title="Notifications">🔔<span id="hdr-alerts-count" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
-    <button class="hdr-btn" id="hdr-refresh-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="forceRefreshFromCloud()" title="Refresh / Sync Now">🔄</button>
     <button class="hdr-btn" id="hdr-printer-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
     <button class="hdr-btn" id="hdr-settings-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="logoutConfirm()">🔒</button>
@@ -1250,6 +1291,15 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <div class="page" id="page-settings">
     <div class="page-title">⚙️ Settings</div>
 
+    <!-- Refresh / Sync Now — moved here from the header to reduce clutter -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">🔄 Refresh / Sync Now</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Koi update kiya hai aur turant sab devices pe dikhna chahiye? Yahan tap karke turant sync kar lein.</div>
+        <button class="btn btn-primary btn-full" id="hdr-refresh-btn" onclick="forceRefreshFromCloud()">🔄 Ab Sync Karein</button>
+      </div>
+    </div>
+
     <!-- Backup & Restore -->
     <div class="sync-card">
       <div class="sync-title">☁️ Backup & Restore Data</div>
@@ -1394,6 +1444,20 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <div class="card" style="margin-bottom:10px">
       <div class="card-header"><div class="card-title">🍽️ Restaurant Info</div></div>
       <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">Logo (optional — bill pe print hoga)</label>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div id="logo-preview-wrap" style="width:64px;height:64px;border-radius:10px;border:1.5px dashed #CBD5E1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#F7F9FF;flex-shrink:0">
+              <img id="logo-preview-img" style="display:none;width:100%;height:100%;object-fit:contain"/>
+              <span id="logo-preview-placeholder" style="font-size:1.4rem;color:#CBD5E1">🖼️</span>
+            </div>
+            <div style="flex:1">
+              <input type="file" id="logo-file-input" accept="image/*" style="display:none" onchange="onLogoFileSelected(event)"/>
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('logo-file-input').click()">📤 Logo Chunein</button>
+              <button class="btn btn-outline btn-sm" id="logo-remove-btn" style="display:none;color:#DC2626;border-color:#FCA5A5" onclick="removeLogo()">Hataein</button>
+            </div>
+          </div>
+        </div>
         <div class="form-group"><label class="form-label">Restaurant Name</label><input class="form-inp" id="set-rest-name" placeholder="e.g. Spice Garden"/></div>
         <div class="form-group"><label class="form-label">Address</label><input class="form-inp" id="set-rest-addr" placeholder="Full address"/></div>
         <div style="display:flex;gap:8px">
@@ -3129,6 +3193,7 @@ function printBill(orderId){
   }
 
   var html = '<div class="print-bill-wrap">'
+    + (info.logo?'<img src="'+info.logo+'" style="max-width:60px;max-height:60px;display:block;margin:0 auto 6px">':'')
     + '<h2>'+rn+'</h2>'
     + (ra?'<div class="pc">'+ra+'</div>':'')
     + (rp?'<div class="pc">Ph: '+rp+'</div>':'')
@@ -3220,7 +3285,7 @@ function generateBillPDFBlob(o) {
   // otherwise the footer can spill past the bottom of the page.
   var nameLineCount = measureDoc.splitTextToSize(info.name || 'My Restaurant', 70).length;
   var addrLineCount = info.addr ? measureDoc.splitTextToSize(info.addr, 70).length : 0;
-  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + (info.gst ? 4 : 0) + (info.fssai ? 4 : 0) + (o.tableName ? 4 : 0) + 15;
+  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + (info.gst ? 4 : 0) + (info.fssai ? 4 : 0) + (o.tableName ? 4 : 0) + (info.logo ? 18 : 0) + 15;
   var gstLineCount = o.tax ? (o.gstType === 'igst' ? 1 : 2) : 0;
   var summaryHeight = 9 + (gstLineCount * 4) + (o.discount ? 4 : 0) + 11;
   var footerHeight = 16;
@@ -3230,6 +3295,13 @@ function generateBillPDFBlob(o) {
   doc.setFont('helvetica');
 
   var y = 8;
+  if (info.logo) {
+    try {
+      var logoSize = 16; // mm — small, centered, doesn't crowd a narrow 80mm receipt
+      doc.addImage(info.logo, 'PNG', 40 - logoSize/2, y, logoSize, logoSize);
+      y += logoSize + 2;
+    } catch(e) { /* corrupt/unsupported image data — skip silently, rest of the bill still prints */ }
+  }
   doc.setFontSize(11); doc.setFont(undefined, 'bold');
   // Wrap long restaurant names/addresses — an unwrapped centered string
   // wider than the page silently bleeds off BOTH edges.
@@ -3623,6 +3695,19 @@ function renderSettingsPage(){
   var op = document.getElementById('set-owner-phone');
   if(op) op.value = db.settings?.ownerPhone || '';
   const info = db.settings?.restInfo || {};
+  pendingLogoDataUrl = undefined; // reset any unsaved pick from a previous visit to this page
+  var logoImg = document.getElementById('logo-preview-img');
+  var logoPlaceholder = document.getElementById('logo-preview-placeholder');
+  var logoRemoveBtn = document.getElementById('logo-remove-btn');
+  if (info.logo) {
+    if(logoImg) { logoImg.src = info.logo; logoImg.style.display = ''; }
+    if(logoPlaceholder) logoPlaceholder.style.display = 'none';
+    if(logoRemoveBtn) logoRemoveBtn.style.display = '';
+  } else {
+    if(logoImg) { logoImg.style.display = 'none'; logoImg.removeAttribute('src'); }
+    if(logoPlaceholder) logoPlaceholder.style.display = '';
+    if(logoRemoveBtn) logoRemoveBtn.style.display = 'none';
+  }
   if(document.getElementById('set-rest-name')) document.getElementById('set-rest-name').value = info.name||'';
   if(document.getElementById('set-rest-addr')) document.getElementById('set-rest-addr').value = info.addr||'';
   if(document.getElementById('set-rest-phone')) document.getElementById('set-rest-phone').value = info.phone||'';
@@ -3653,8 +3738,60 @@ function pushRestaurantInfo(){
     .catch(function(){});
 }
 
+// Holds the logo as a compressed data-URL between "pick file" and "Save" —
+// kept separate from db.settings until Save so an accidental picker-cancel
+// doesn't half-apply anything.
+var pendingLogoDataUrl = undefined; // undefined = unchanged, null = removed, string = new logo
+
+function onLogoFileSelected(event) {
+  var file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (!file.type || file.type.indexOf('image/') !== 0) { toast('Sirf image file chunein!', '#FF6B35'); return; }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      // Resize down to a small square-ish thumbnail before storing — a
+      // full-resolution photo would bloat db.settings (synced on every
+      // save) and slow down every bill print unnecessarily.
+      var MAX = 200;
+      var scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var dataUrl = canvas.toDataURL('image/png', 0.85);
+      pendingLogoDataUrl = dataUrl;
+      var prevImg = document.getElementById('logo-preview-img');
+      var placeholder = document.getElementById('logo-preview-placeholder');
+      var removeBtn = document.getElementById('logo-remove-btn');
+      if (prevImg) { prevImg.src = dataUrl; prevImg.style.display = ''; }
+      if (placeholder) placeholder.style.display = 'none';
+      if (removeBtn) removeBtn.style.display = '';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeLogo() {
+  pendingLogoDataUrl = null;
+  var prevImg = document.getElementById('logo-preview-img');
+  var placeholder = document.getElementById('logo-preview-placeholder');
+  var removeBtn = document.getElementById('logo-remove-btn');
+  if (prevImg) { prevImg.style.display = 'none'; prevImg.removeAttribute('src'); }
+  if (placeholder) placeholder.style.display = '';
+  if (removeBtn) removeBtn.style.display = 'none';
+}
+
 function saveRestInfo(){
   if(!db.settings) db.settings = {};
+  var existingLogo = (db.settings.restInfo && db.settings.restInfo.logo) || '';
+  var finalLogo = pendingLogoDataUrl === undefined ? existingLogo
+                : pendingLogoDataUrl === null ? ''
+                : pendingLogoDataUrl;
   db.settings.restInfo = {
     name:  document.getElementById('set-rest-name').value.trim(),
     addr:  document.getElementById('set-rest-addr').value.trim(),
@@ -3663,7 +3800,9 @@ function saveRestInfo(){
     fssai: document.getElementById('set-rest-fssai')?.value.trim()||'',
     city:  document.getElementById('set-rest-city')?.value.trim()||'',
     msg:   document.getElementById('set-rest-msg').value.trim(),
+    logo:  finalLogo,
   };
+  pendingLogoDataUrl = undefined;
   save();
   pushRestaurantInfo();
   toast('Restaurant info saved!');
@@ -5269,10 +5408,74 @@ function showBanquetBillReceipt(id) {
     + (b.advance ? '<div class="bill-total" style="color:#DC2626"><span>Balance Due</span><span>' + fmt(b.balanceDue) + '</span></div>' : '')
     + '</div></div>'
     + '<div class="btn-row" style="margin-top:12px">'
-    + '<button class="btn btn-outline" data-bid="' + id + '" onclick="printBanquetBill(this.dataset.bid)">🖨️ Print</button>'
+    + '<button class="btn btn-outline" data-bid="' + id + '" onclick="printBanquetBill(this.dataset.bid)">🖨️ Quick Print</button>'
+    + '<button class="btn btn-primary" data-bid="' + id + '" onclick="printBanquetBillProfessional(this.dataset.bid)">📄 Professional Invoice</button>'
     + '<button class="btn btn-outline" onclick="closeModal()">Close</button>'
     + '</div>';
   openModal();
+}
+
+// Full-page, formal invoice format — an ADDITIONAL option alongside the
+// simple thermal-receipt-style printBanquetBill() above (kept as-is for
+// anyone who just wants a quick narrow-roll printout). This is what suits
+// a proper corporate/banquet client expecting a real tax invoice.
+function printBanquetBillProfessional(orderId) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === orderId; });
+  if (!b) { toast('Booking nahi mila!', '#FF6B35'); return; }
+  var info = (db.settings && db.settings.restInfo) || {};
+  var bqCfg = (db.settings && db.settings.banquetConfig) || {};
+  var hallName = bqCfg.hallName || info.name || 'Banquet Hall';
+  var hallAddr = bqCfg.hallAddress || info.addr || '';
+
+  var itemRows = '<tr><td>' + b.plates + ' Plates — Catering'
+    + (b.menuNotes ? '<div style="font-size:10.5px;color:#64748B;margin-top:2px">' + esc(b.menuNotes) + '</div>' : '')
+    + '</td><td class="r">' + b.plates + '</td><td class="r">Rs.' + b.ratePerPlate.toFixed(2) + '</td><td class="r">Rs.' + (b.plates * b.ratePerPlate).toFixed(2) + '</td></tr>';
+  if (b.additionalCharges) {
+    itemRows += '<tr><td>Additional Charges</td><td class="r">—</td><td class="r">—</td><td class="r">Rs.' + b.additionalCharges.toFixed(2) + '</td></tr>';
+  }
+
+  var gstRowsHtml = b.tax ? getGSTBreakdown(b).map(function(g) {
+    return '<div class="row"><span>' + g.name + ' (' + g.pct.toFixed(1).replace(/\.0$/, '') + '%)</span><span>Rs.' + g.amt.toFixed(2) + '</span></div>';
+  }).join('') : '';
+
+  var html = '<div class="print-pro-wrap">'
+    + '<div class="pro-letterhead">'
+    + (info.logo ? '<img class="pro-logo" src="' + info.logo + '"/>' : '')
+    + '<div style="flex:1">'
+    + '<div class="pro-hall-name">' + esc(hallName) + '</div>'
+    + (hallAddr ? '<div class="pro-hall-sub">' + esc(hallAddr) + '</div>' : '')
+    + ((info.phone || info.gst) ? '<div class="pro-hall-sub">' + (info.phone ? 'Ph: ' + esc(info.phone) + '  ' : '') + (info.gst ? 'GSTIN: ' + esc(info.gst) : '') + '</div>' : '')
+    + '</div>'
+    + '<div class="pro-invoice-tag"><div class="big">TAX INVOICE</div><div class="pro-hall-sub">' + displayBillNo(b) + '</div></div>'
+    + '</div>'
+
+    + '<div class="pro-meta-row">'
+    + '<div class="pro-meta-block"><div class="pro-meta-label">Bill To</div><div class="pro-meta-value"><b>' + esc(b.customerName) + '</b>'
+    + (b.customerAddress ? '<br>' + esc(b.customerAddress) : '')
+    + (b.customerGST ? '<br>GSTIN: ' + esc(b.customerGST) : '')
+    + '</div></div>'
+    + '<div class="pro-meta-block" style="text-align:right"><div class="pro-meta-label">Event Details</div><div class="pro-meta-value">Date: ' + fmtDate(b.eventDate) + '<br>Guests: ' + b.plates + ' Plates</div></div>'
+    + '</div>'
+
+    + '<table class="pro-items"><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>'
+    + itemRows
+    + '</tbody></table>'
+
+    + '<div class="pro-totals">'
+    + '<div class="row"><span>Subtotal</span><span>Rs.' + b.subtotal.toFixed(2) + '</span></div>'
+    + gstRowsHtml
+    + '<div class="row grand"><span>Total</span><span>Rs.' + b.total.toFixed(2) + '</span></div>'
+    + (b.advance ? '<div class="row"><span>Advance Received</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
+    + (b.advance ? '<div class="row due"><span>Balance Due</span><span>Rs.' + b.balanceDue.toFixed(2) + '</span></div>' : '')
+    + '</div>'
+
+    + '<div class="pro-footer">'
+    + '<div class="pro-terms">Thank you for choosing ' + esc(hallName) + '. This is a computer-generated invoice.</div>'
+    + '<div class="pro-sign"><div class="line"></div><div class="label">Authorised Signatory</div></div>'
+    + '</div>'
+    + '</div>';
+
+  printPreviewOverlay(html);
 }
 
 function printBanquetBill(orderId) {
@@ -5293,6 +5496,7 @@ function printBanquetBill(orderId) {
   }).join('') : '';
 
   var html = '<div class="print-bill-wrap">'
+    + (info.logo?'<img src="'+info.logo+'" style="max-width:60px;max-height:60px;display:block;margin:0 auto 6px">':'')
     + '<h2>' + esc(hallName) + '</h2>'
     + (hallAddr ? '<div class="pc">' + esc(hallAddr) + '</div>' : '')
     + (hallPhone ? '<div class="pc">Ph: ' + esc(hallPhone) + '</div>' : '')
