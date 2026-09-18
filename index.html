@@ -1915,6 +1915,7 @@ async function authenticateClient(licKey, retryCount) {
     listenToQROrders();
     await new Promise(function(r){ setTimeout(r, 100); });
     listenToMenuUpdates();
+    listenToBanquetMenuUpdates();
     await new Promise(function(r){ setTimeout(r, 100); });
     startAllRealtimeSync();
     pushAllDataToCloud();
@@ -2381,7 +2382,7 @@ function listenToCustomersSync() {
 async function hydrateAllFromCloud() {
   if (!isFirebaseReady || !firestoreDb || !restaurantId) { hasHydratedFromCloud = true; return; }
   var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
-  var metaKeys = ['tables','rooms','expenses','purchases','inventory','staff','menu','banquetBookings'];
+  var metaKeys = ['tables','rooms','expenses','purchases','inventory','staff','menu','banquetBookings','banquetMenu'];
   var maxAttempts = 3;
 
   for (var attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -2404,7 +2405,8 @@ async function hydrateAllFromCloud() {
             else if (key === 'staff') db.staff = data.items;
             else if (key === 'menu') db.menu = data.items;
             else if (key === 'banquetBookings') db.banquetBookings = data.items;
-            if (key !== 'menu') _lastPushedSnapshot[key] = JSON.stringify(data.items);
+            else if (key === 'banquetMenu') db.banquetMenu = data.items;
+            if (key !== 'menu' && key !== 'banquetMenu') _lastPushedSnapshot[key] = JSON.stringify(data.items);
           }
         }
         await new Promise(function(r){ setTimeout(r, 60); });
@@ -5294,7 +5296,14 @@ function displayBillNo(o) {
 // ║   details per booking (Bill To), reuses the SAME GST/      ║
 // ║   discount/bill-numbering logic already built and tested   ║
 // ╚══════════════════════════════════════════════════════════╝
+// Selected banquet menu items for the booking currently being created —
+// reset each time the New Booking modal opens. Search reuses
+// searchMenuItems() (the exact same ranking already used for POS Smart
+// Search), just pointed at db.banquetMenu instead of db.menu.
+var bqSelectedMenuItems = [];
+
 function showNewBanquetModal() {
+  bqSelectedMenuItems = [];
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">🎪 Naya Banquet Booking</div>'
@@ -5306,13 +5315,62 @@ function showNewBanquetModal() {
     + '<div class="form-group" style="flex:1"><label class="form-label">Plates *</label><input class="form-inp" id="bq-plates" type="number" min="1" placeholder="e.g. 200"/></div>'
     + '<div class="form-group" style="flex:1"><label class="form-label">Rate/Plate (₹) *</label><input class="form-inp" id="bq-rate" type="number" min="0" placeholder="e.g. 500"/></div>'
     + '</div>'
-    + '<div class="form-group"><label class="form-label">Menu / Notes (optional)</label><textarea class="form-inp" id="bq-menu-notes" rows="2" placeholder="e.g. Veg Thali, Starters, Dessert"></textarea></div>'
+    + '<div class="form-group">'
+    + '<label class="form-label">Menu Items (search karke select karein)</label>'
+    + '<input class="form-inp" id="bq-menu-search" placeholder="🔍 Item dhoondein..." oninput="renderBqMenuSearchResults()"/>'
+    + '<div id="bq-menu-search-results" style="max-height:160px;overflow-y:auto;margin-top:6px"></div>'
+    + '<div id="bq-selected-menu-items" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>'
+    + (!(db.banquetMenu||[]).length ? '<div style="font-size:0.72rem;color:#9CA3AF;margin-top:6px">Abhi koi banquet menu upload nahi hua — BillBlitz support se karwa lein, ya neeche Notes mein likh dein.</div>' : '')
+    + '</div>'
+    + '<div class="form-group"><label class="form-label">Additional Notes (optional)</label><textarea class="form-inp" id="bq-menu-notes" rows="2" placeholder="e.g. Less spicy, extra live counter"></textarea></div>'
     + '<div style="display:flex;gap:8px">'
     + '<div class="form-group" style="flex:1"><label class="form-label">Extra Charges (₹)</label><input class="form-inp" id="bq-extra" type="number" min="0" value="0"/></div>'
     + '<div class="form-group" style="flex:1"><label class="form-label">Advance Received (₹)</label><input class="form-inp" id="bq-advance" type="number" min="0" value="0"/></div>'
     + '</div>'
     + '<button class="btn btn-primary btn-full" onclick="saveBanquetBooking()">✅ Booking Save Karein</button>';
   openModal();
+}
+
+function renderBqMenuSearchResults() {
+  var q = (document.getElementById('bq-menu-search').value || '').trim();
+  var resultsEl = document.getElementById('bq-menu-search-results');
+  if (!resultsEl) return;
+  if (!q) { resultsEl.innerHTML = ''; return; }
+  var matches = searchMenuItems(db.banquetMenu || [], q).slice(0, 8);
+  if (!matches.length) { resultsEl.innerHTML = '<div style="font-size:0.75rem;color:#9CA3AF;padding:6px 0">Koi item nahi mila.</div>'; return; }
+  resultsEl.innerHTML = matches.map(function(m) {
+    var already = bqSelectedMenuItems.some(function(x){ return x.id === m.id; });
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #EEF1F6;' + (already ? 'opacity:0.4' : 'cursor:pointer') + '" data-mid="' + m.id + '" onclick="' + (already ? '' : 'addBqMenuItem(this.dataset.mid)') + '">'
+      + '<span style="font-size:0.85rem">' + esc(m.name) + (m.category ? ' <span style="color:#9CA3AF;font-size:0.7rem">(' + esc(m.category) + ')</span>' : '') + '</span>'
+      + (already ? '<span style="font-size:0.7rem;color:#00A878">✓ Added</span>' : '<span style="font-size:0.85rem;color:#2563EB">+ Add</span>')
+      + '</div>';
+  }).join('');
+}
+
+function addBqMenuItem(itemId) {
+  var item = (db.banquetMenu || []).find(function(x){ return x.id === itemId; });
+  if (!item) return;
+  if (bqSelectedMenuItems.some(function(x){ return x.id === itemId; })) return;
+  bqSelectedMenuItems.push({ id: item.id, name: item.name, category: item.category || '' });
+  renderBqSelectedChips();
+  renderBqMenuSearchResults();
+}
+
+function removeBqMenuItem(itemId) {
+  bqSelectedMenuItems = bqSelectedMenuItems.filter(function(x){ return x.id !== itemId; });
+  renderBqSelectedChips();
+  renderBqMenuSearchResults();
+}
+
+function renderBqSelectedChips() {
+  var el = document.getElementById('bq-selected-menu-items');
+  if (!el) return;
+  el.innerHTML = bqSelectedMenuItems.map(function(m) {
+    return '<span style="background:#F0FDF4;color:#16A34A;border-radius:20px;padding:5px 10px;font-size:0.78rem;display:inline-flex;align-items:center;gap:6px">'
+      + esc(m.name)
+      + '<span data-mid="' + m.id + '" style="cursor:pointer;font-weight:800" onclick="removeBqMenuItem(this.dataset.mid)">✕</span>'
+      + '</span>';
+  }).join('');
 }
 
 function saveBanquetBooking() {
@@ -5332,6 +5390,7 @@ function saveBanquetBooking() {
     plates: plates,
     ratePerPlate: rate,
     menuNotes: (document.getElementById('bq-menu-notes').value || '').trim(),
+    menuItems: bqSelectedMenuItems.slice(),
     additionalCharges: parseFloat(document.getElementById('bq-extra').value) || 0,
     advance: parseFloat(document.getElementById('bq-advance').value) || 0,
     status: 'draft',
@@ -5407,6 +5466,11 @@ function viewBanquetBooking(id) {
   var extra = b.additionalCharges || 0;
   var preTax = subtotal + extra;
 
+  var menuItemsHtml = (b.menuItems && b.menuItems.length)
+    ? '<div style="margin-top:8px"><div style="font-size:0.68rem;font-weight:700;color:#9CA3AF;margin-bottom:4px">MENU</div>'
+      + b.menuItems.map(function(m){ return '<div style="font-size:0.8rem">• ' + esc(m.name) + (m.category?' <span style="color:#9CA3AF;font-size:0.7rem">('+esc(m.category)+')</span>':'') + '</div>'; }).join('')
+      + '</div>' : '';
+
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">🎪 ' + esc(b.customerName) + '</div>'
@@ -5414,11 +5478,13 @@ function viewBanquetBooking(id) {
     + '<div class="bill-row"><span>Event Date</span><span>' + fmtDate(b.eventDate) + '</span></div>'
     + '<div class="bill-row"><span>Plates</span><span>' + b.plates + ' × ' + fmt(b.ratePerPlate) + '</span></div>'
     + (extra ? '<div class="bill-row"><span>Extra Charges</span><span>' + fmt(extra) + '</span></div>' : '')
+    + menuItemsHtml
     + (b.menuNotes ? '<div style="font-size:0.78rem;color:#6B7A99;margin-top:6px">' + esc(b.menuNotes) + '</div>' : '')
     + '<div class="bill-total"><span>Subtotal (Tax Se Pehle)</span><span>' + fmt(preTax) + '</span></div>'
     + '</div></div>'
     + (b.advance ? '<div style="font-size:0.8rem;color:#16A34A;margin:10px 0">Advance Received: ' + fmt(b.advance) + '</div>' : '')
-    + '<button class="btn btn-primary btn-full" style="margin-top:10px;margin-bottom:8px" data-bid="' + id + '" onclick="generateBanquetBill(this.dataset.bid)">🧾 Generate Bill</button>'
+    + '<button class="btn btn-outline btn-full" style="margin-top:10px;margin-bottom:8px" data-bid="' + id + '" onclick="printBanquetPerforma(this.dataset.bid)">📋 Booking Performa (Customer Ko Dene Ke Liye)</button>'
+    + '<button class="btn btn-primary btn-full" style="margin-bottom:8px" data-bid="' + id + '" onclick="generateBanquetBill(this.dataset.bid)">🧾 Generate Bill</button>'
     + '<button class="btn btn-red btn-full" data-bid="' + id + '" onclick="deleteBanquetBooking(this.dataset.bid)">🗑️ Delete Booking</button>';
   openModal();
 }
@@ -5503,6 +5569,7 @@ function showBanquetBillReceipt(id) {
     + '<div class="card"><div class="card-body">'
     + '<div class="bill-row"><span>' + b.plates + ' Plates × ' + fmt(b.ratePerPlate) + '</span><span>' + fmt(b.plates * b.ratePerPlate) + '</span></div>'
     + (b.additionalCharges ? '<div class="bill-row"><span>Extra Charges</span><span>' + fmt(b.additionalCharges) + '</span></div>' : '')
+    + ((b.menuItems && b.menuItems.length) ? '<div style="font-size:0.76rem;color:#6B7A99;margin:6px 0">' + b.menuItems.map(function(m){return esc(m.name);}).join(', ') + '</div>' : '')
     + (b.menuNotes ? '<div style="font-size:0.76rem;color:#6B7A99;margin:6px 0">' + esc(b.menuNotes) + '</div>' : '')
     + '<div class="divider"></div>'
     + '<div class="bill-row"><span>Subtotal</span><span>' + fmt(b.subtotal) + '</span></div>'
@@ -5578,6 +5645,74 @@ function closeBanquetBooking(id) {
 // simple thermal-receipt-style printBanquetBill() above (kept as-is for
 // anyone who just wants a quick narrow-roll printout). This is what suits
 // a proper corporate/banquet client expecting a real tax invoice.
+// Booking Performa — a CONFIRMATION document to hand the customer before
+// final billing (no GST/tax breakdown, since it's not a tax invoice — just
+// what's been agreed: event details + selected menu). Uses the same
+// professional A4 layout as the tax invoice for visual consistency.
+function printBanquetPerforma(id) {
+  var b = (db.banquetBookings || []).find(function(x) { return x.id === id; });
+  if (!b) { toast('Booking nahi mila!', '#FF6B35'); return; }
+  var info = (db.settings && db.settings.restInfo) || {};
+  var bqCfg = (db.settings && db.settings.banquetConfig) || {};
+  var hallName = bqCfg.hallName || info.name || 'Banquet Hall';
+  var hallAddr = bqCfg.hallAddress || info.addr || '';
+  var subtotal = b.plates * b.ratePerPlate;
+  var extra = b.additionalCharges || 0;
+
+  // Group selected menu items by category for a cleaner performa layout.
+  var grouped = {};
+  (b.menuItems || []).forEach(function(m) {
+    var cat = m.category || 'Menu';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(m.name);
+  });
+  var menuHtml = Object.keys(grouped).length
+    ? Object.keys(grouped).map(function(cat) {
+        return '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:4px">' + esc(cat) + '</div>'
+          + '<div style="font-size:12.5px;line-height:1.7">' + grouped[cat].map(esc).join(' &nbsp;•&nbsp; ') + '</div></div>';
+      }).join('')
+    : (b.menuNotes ? '<div style="font-size:12.5px">' + esc(b.menuNotes) + '</div>' : '<div style="font-size:12.5px;color:#94A3B8">Menu abhi finalize nahi hua.</div>');
+
+  var html = '<div class="print-pro-wrap">'
+    + '<div class="pro-letterhead">'
+    + (info.logo ? '<img class="pro-logo" src="' + info.logo + '"/>' : '')
+    + '<div style="flex:1">'
+    + '<div class="pro-hall-name">' + esc(hallName) + '</div>'
+    + (hallAddr ? '<div class="pro-hall-sub">' + esc(hallAddr) + '</div>' : '')
+    + '</div>'
+    + '<div class="pro-invoice-tag"><div class="big">BOOKING PERFORMA</div><div class="pro-hall-sub">' + fmtDate(b.eventDate) + '</div></div>'
+    + '</div>'
+
+    + '<div class="pro-meta-row">'
+    + '<div class="pro-meta-block"><div class="pro-meta-label">Booked For</div><div class="pro-meta-value"><b>' + esc(b.customerName) + '</b>'
+    + (b.customerAddress ? '<br>' + esc(b.customerAddress) : '')
+    + (b.customerGST ? '<br>GSTIN: ' + esc(b.customerGST) : '')
+    + '</div></div>'
+    + '<div class="pro-meta-block" style="text-align:right"><div class="pro-meta-label">Event Details</div><div class="pro-meta-value">Date: ' + fmtDate(b.eventDate) + '<br>Guests: ' + b.plates + ' Plates<br>Rate: Rs.' + b.ratePerPlate.toFixed(2) + '/plate</div></div>'
+    + '</div>'
+
+    + '<div style="border-top:2px solid #1A2B3C;border-bottom:1px solid #E2E8F5;padding:14px 0;margin-bottom:16px">'
+    + '<div class="pro-meta-label" style="margin-bottom:8px">Menu Selected</div>'
+    + menuHtml
+    + '</div>'
+
+    + '<div class="pro-totals">'
+    + '<div class="row"><span>' + b.plates + ' Plates × Rs.' + b.ratePerPlate.toFixed(2) + '</span><span>Rs.' + subtotal.toFixed(2) + '</span></div>'
+    + (extra ? '<div class="row"><span>Extra Charges</span><span>Rs.' + extra.toFixed(2) + '</span></div>' : '')
+    + '<div class="row grand"><span>Estimated Total*</span><span>Rs.' + (subtotal + extra).toFixed(2) + '</span></div>'
+    + (b.advance ? '<div class="row"><span>Advance Received</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
+    + '</div>'
+    + '<div style="font-size:10px;color:#94A3B8;margin-bottom:20px">*Applicable taxes extra — final amount confirmed on the tax invoice at billing.</div>'
+
+    + '<div class="pro-footer">'
+    + '<div class="pro-terms">This is a booking confirmation, not a tax invoice. ' + esc(hallName) + ' thanks you for your booking.</div>'
+    + '<div class="pro-sign"><div class="line"></div><div class="label">Authorised Signatory</div></div>'
+    + '</div>'
+    + '</div>';
+
+  printPreviewOverlay(html);
+}
+
 function printBanquetBillProfessional(orderId) {
   var b = (db.banquetBookings || []).find(function(x) { return x.id === orderId; });
   if (!b) { toast('Booking nahi mila!', '#FF6B35'); return; }
@@ -10084,6 +10219,32 @@ function saveQuickAtt(staffId, dateStr) {
 
 // ── LISTEN FOR INCOMING CUSTOMER QR ORDERS ──────────────────
 // ── LISTEN FOR MENU UPDATES PUSHED BY ADMIN BACKEND ─────────
+// Banquet Menu — SAME pattern as the regular menu: admin-controlled
+// (pushed via the admin panel's Menu Updater, using the Banquet Menu
+// toggle), client only ever PULLS it, never pushes its own copy back —
+// this is what keeps an admin's update from being overwritten by a
+// device's own stale local snapshot.
+function listenToBanquetMenuUpdates() {
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var ref = firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('banquetMenu');
+  var unsub = ref.onSnapshot(function(doc) {
+    if (!doc.exists) return;
+    var data = doc.data();
+    if (!data.items) return;
+    var remoteJSON = JSON.stringify(data.items);
+    var localJSON = JSON.stringify(db.banquetMenu);
+    if (remoteJSON === localJSON) return;
+    db.banquetMenu = data.items;
+    save();
+    var banquetPage = document.getElementById('page-banquet');
+    if (banquetPage && banquetPage.classList.contains('active')) renderBanquetPage();
+    if (data.updatedBy === 'admin') toast('🎪 Banquet menu updated by BillBlitz support!', '#2563EB');
+  }, function(err) {
+    console.log('Banquet menu listener error:', err);
+  });
+  cloudListeners.push(unsub);
+}
+
 function listenToMenuUpdates() {
   if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
   var ref = firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('menu');

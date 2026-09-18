@@ -290,11 +290,24 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <!-- Client selector -->
       <div class="card" style="margin-bottom:14px">
         <div class="card-body">
-          <div class="form-group" style="margin-bottom:0">
+          <div class="form-group" style="margin-bottom:10px">
             <label class="form-label">Select Client</label>
             <select class="form-select" id="mu-client-sel" onchange="loadClientMenu()">
               <option value="">-- Client chunein --</option>
             </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Menu Type</label>
+            <div style="display:flex;gap:8px">
+              <label style="flex:1;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;cursor:pointer">
+                <input type="radio" name="mu-menu-type" id="mu-type-restaurant" checked onchange="onMuMenuTypeChange()"/>
+                <span style="font-size:0.82rem">🍽️ Restaurant Menu</span>
+              </label>
+              <label style="flex:1;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;cursor:pointer">
+                <input type="radio" name="mu-menu-type" id="mu-type-banquet" onchange="onMuMenuTypeChange()"/>
+                <span style="font-size:0.82rem">🎪 Banquet Menu</span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -1338,6 +1351,7 @@ var muExtractedItems = [];
 var muExistingItems = [];
 var muCurrentClientId = null;
 var muCurrentRestaurantId = null;
+var muMenuTarget = 'menu'; // 'menu' (restaurant) | 'banquetMenu' — which Firestore meta doc the AI-scan pipeline reads/writes
 
 // Legacy path — only correct for licenses issued BEFORE random restaurantIds
 // existed. Kept as the fallback so old clients keep resolving to their
@@ -1416,6 +1430,11 @@ async function resetClientPins() {
   }
 }
 
+function onMuMenuTypeChange() {
+  muMenuTarget = document.getElementById('mu-type-banquet').checked ? 'banquetMenu' : 'menu';
+  if (muCurrentClientId) loadClientMenu(); // re-load existing items for the newly selected target
+}
+
 async function loadClientMenu() {
   var sel = document.getElementById('mu-client-sel');
   var clientId = sel ? sel.value : '';
@@ -1437,7 +1456,7 @@ async function loadClientMenu() {
 
   try {
     var doc = await db_admin.collection('restaurants').doc(muCurrentRestaurantId)
-      .collection('meta').doc('menu').get();
+      .collection('meta').doc(muMenuTarget).get();
     muExistingItems = (doc.exists && doc.data().items) ? doc.data().items : [];
     document.getElementById('mu-existing-info').innerHTML =
       '<div class="mu-existing-badge">' + muExistingItems.length + ' items currently live</div>'
@@ -1653,10 +1672,11 @@ async function pushMenuToClient() {
 
   try {
     await db_admin.collection('restaurants').doc(muCurrentRestaurantId)
-      .collection('meta').doc('menu')
+      .collection('meta').doc(muMenuTarget)
       .set({ items: finalMenu, updatedBy: 'admin', updatedAt: new Date().toISOString() }, { merge: true });
 
-    toast('✅ ' + newItems.length + ' items pushed! Client ke app mein turant apply hoga.', '#00C896');
+    var muMenuLabel = muMenuTarget === 'banquetMenu' ? 'Banquet menu' : 'Restaurant menu';
+    toast('✅ ' + muMenuLabel + ': ' + newItems.length + ' items pushed! Client ke app mein turant apply hoga.', '#00C896');
     logActivity('Menu updated for client: ' + muCurrentRestaurantId);
 
     // Refresh existing count
