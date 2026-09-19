@@ -27,6 +27,23 @@ body{font-family:'Segoe UI',sans-serif;background:linear-gradient(160deg,#EEF2FF
 .logo small{display:block;font-size:0.68rem;color:rgba(255,215,0,0.4);font-family:sans-serif;letter-spacing:0.05em;}
 .header-right{display:flex;align-items:center;gap:6px;}
 .hdr-time{color:rgba(255,255,255,0.5);font-size:0.7rem;font-family:sans-serif;}
+
+/* On narrower phones, the header's 7 elements (logo, role badge, clock,
+   +Bill, and 4 icon buttons) had no room to breathe — nothing here
+   shrinks or wraps on its own, so on small/budget screens they squeezed
+   into each other, visually overlapping/ghosting into one another. This
+   is the app's first media query (there were none before): it only
+   scales things down proportionally on genuinely narrow viewports,
+   changing nothing for anyone on a normal-width phone. */
+@media (max-width: 380px) {
+  .header{padding:10px 8px;gap:4px;}
+  .logo{font-size:1.05rem;}
+  .logo small{display:none;} /* "Restaurant Manager" subtitle — the icon+name alone is enough at this width */
+  .header-right{gap:3px;}
+  .role-badge{padding:4px 7px;font-size:0.66rem;}
+  .hdr-time{display:none;} /* clock is a convenience, not essential — first to go when space is tight */
+  .hdr-btn{padding:7px 9px;font-size:0.78rem;}
+}
 .hdr-btn{background:linear-gradient(135deg,#FFD700,#FF8C42);color:#0F1923;border:none;padding:9px 16px;border-radius:10px;font-weight:800;font-size:0.9rem;cursor:pointer;box-shadow:0 3px 10px rgba(255,140,66,0.5);}
 
 /* ── BOTTOM NAV ── */
@@ -3311,7 +3328,7 @@ function generateBillPDFBlob(o) {
   // otherwise the footer can spill past the bottom of the page.
   var nameLineCount = measureDoc.splitTextToSize(info.name || 'My Restaurant', 70).length;
   var addrLineCount = info.addr ? measureDoc.splitTextToSize(info.addr, 70).length : 0;
-  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + (info.gst ? 4 : 0) + (info.fssai ? 4 : 0) + (o.tableName ? 4 : 0) + (info.logo ? 18 : 0) + 15;
+  var headerHeight = 10 + (nameLineCount * 5) + (addrLineCount * 4) + (info.phone ? 4 : 0) + (info.gst ? 4 : 0) + (info.fssai ? 4 : 0) + (o.tableName ? 4 : 0) + (info.logo ? 22 : 0) + 15;
   var gstLineCount = o.tax ? (o.gstType === 'igst' ? 1 : 2) : 0;
   var summaryHeight = 9 + (gstLineCount * 4) + (o.discount ? 4 : 0) + 11;
   var footerHeight = 16;
@@ -3325,7 +3342,12 @@ function generateBillPDFBlob(o) {
     try {
       var logoSize = 16; // mm — small, centered, doesn't crowd a narrow 80mm receipt
       doc.addImage(info.logo, 'PNG', 40 - logoSize/2, y, logoSize, logoSize);
-      y += logoSize + 2;
+      // jsPDF's doc.text() Y-coordinate is the BASELINE, not the top of the
+      // glyphs — an 11pt bold font's visible letters extend upward from
+      // that baseline by roughly 3mm. A 2mm gap here was not enough
+      // clearance, so the restaurant name visually crept up into the
+      // bottom of the logo. 6mm leaves a clean gap regardless of font.
+      y += logoSize + 6;
     } catch(e) { /* corrupt/unsupported image data — skip silently, rest of the bill still prints */ }
   }
   doc.setFontSize(11); doc.setFont(undefined, 'bold');
@@ -3780,17 +3802,28 @@ function onLogoFileSelected(event) {
   reader.onload = function(e) {
     var img = new Image();
     img.onload = function() {
-      // Resize down to a small square-ish thumbnail before storing — a
-      // full-resolution photo would bloat db.settings (synced on every
-      // save) and slow down every bill print unnecessarily.
+      // Resize down to a small thumbnail before storing — a full-
+      // resolution photo would bloat db.settings (synced on every save)
+      // and slow down every bill print unnecessarily. Also center-crop to
+      // a SQUARE and mask to a CIRCLE right here, once, at upload time —
+      // so the stored logo is already round wherever it's placed (browser
+      // print, PDF, banquet invoices) without needing separate circular-
+      // clip logic in each of those different rendering engines.
       var MAX = 200;
-      var scale = Math.min(1, MAX / Math.max(img.width, img.height));
-      var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      var srcSize = Math.min(img.width, img.height);
+      var srcX = (img.width - srcSize) / 2;
+      var srcY = (img.height - srcSize) / 2;
+      var outSize = Math.min(MAX, srcSize);
       var canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
+      canvas.width = outSize; canvas.height = outSize;
       var ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      var dataUrl = canvas.toDataURL('image/png', 0.85);
+      ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, outSize, outSize);
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.beginPath();
+      ctx.arc(outSize / 2, outSize / 2, outSize / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+      var dataUrl = canvas.toDataURL('image/png', 0.9);
       pendingLogoDataUrl = dataUrl;
       var prevImg = document.getElementById('logo-preview-img');
       var placeholder = document.getElementById('logo-preview-placeholder');
