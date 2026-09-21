@@ -176,8 +176,9 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
   <div class="login-box">
     <div class="login-logo">⚡ BillBlitz</div>
     <div class="login-sub">ADMIN PANEL — RESELLER DASHBOARD</div>
-    <input class="form-inp" id="admin-pass" type="password" placeholder="Admin Password" onkeydown="if(event.key==='Enter')adminLogin()"/>
-    <button class="btn-primary" onclick="adminLogin()">🔐 Login</button>
+    <input class="form-inp" id="admin-email" type="email" placeholder="Admin Email" autocomplete="username" style="margin-bottom:10px" onkeydown="if(event.key==='Enter')document.getElementById('admin-pass').focus()"/>
+    <input class="form-inp" id="admin-pass" type="password" placeholder="Admin Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')adminLogin()"/>
+    <button class="btn-primary" id="admin-login-btn" onclick="adminLogin()">🔐 Login</button>
     <div id="login-err" style="color:#FF6B35;font-size:0.8rem;text-align:center;margin-top:10px;min-height:18px;"></div>
   </div>
 </div>
@@ -481,6 +482,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <div class="card">
         <div class="card-hdr"><div class="card-title">🔐 Change Admin Password</div></div>
         <div class="card-body">
+          <div style="font-size:0.78rem;color:rgba(255,255,255,0.5);margin-bottom:10px">Naya admin ADD karna ho ya EMAIL badalna ho, wo Firebase Console → Authentication se hota hai — yahan sirf apna current account ka password badal sakte hain.</div>
           <div class="form-group"><label class="form-label">Current Password</label><input class="form-inp" id="curr-pass" type="password"/></div>
           <div class="form-group"><label class="form-label">New Password</label><input class="form-inp" id="new-pass" type="password"/></div>
           <div class="form-group"><label class="form-label">Confirm Password</label><input class="form-inp" id="conf-pass" type="password"/></div>
@@ -587,12 +589,6 @@ const FIREBASE_CONFIG = {
   projectId: "billblitz-a17dd"
 };
 
-// ── Admin Auth — SHA-256 hashed, not plain text ──
-const ADMIN_PASS_KEY = 'bb-admin-hash';
-// Default password: admin@2024
-// SHA-256 hash stored — plain text never saved!
-const DEFAULT_HASH = 'a8d6f3b2c9e1047856f4d2a3b7c8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
-
 let db_admin = null;
 let adminData = {
   clients: [],
@@ -615,74 +611,86 @@ function load() {
   } catch(e){}
 }
 
-// ══ AUTH ══════════════════════════════════════════
-async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + 'billblitz-salt-2024');
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+// ══ AUTH — real Firebase email/password sign-in ════
+// Previously this was a purely client-side check (a hash compared against
+// localStorage) — Firestore had no way to tell this session apart from
+// any other anonymous session, so admin-only data could only ever be as
+// protected as "any anonymous user" allowed. Signing in with a REAL
+// Firebase account lets the Firestore rules check for this SPECIFIC
+// identity (request.auth.token.email) instead.
+async function adminLogin() {
+  const email = (document.getElementById('admin-email').value || '').trim();
+  const pass = document.getElementById('admin-pass').value;
+  const btn = document.getElementById('admin-login-btn');
+  if (!email || !pass) { document.getElementById('login-err').textContent = 'Email aur Password dono daalein!'; return; }
+
+  btn.disabled = true;
+  document.getElementById('login-err').textContent = '';
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, pass);
+    // onAuthStateChanged (below) picks this up and shows the panel —
+    // nothing else to do here on success.
+  } catch (e) {
+    var msg = 'Login fail hua, dobara try karein!';
+    if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') msg = '❌ Galat email ya password!';
+    else if (e.code === 'auth/user-not-found') msg = '❌ Yeh email registered nahi hai! Firebase Console mein pehle add karein.';
+    else if (e.code === 'auth/invalid-email') msg = '❌ Sahi email daalein!';
+    else if (e.code === 'auth/too-many-requests') msg = '🔒 Bahut zyada attempts! Thodi der baad try karein.';
+    else if (e.code === 'auth/user-disabled') msg = '❌ Yeh account disable hai!';
+    document.getElementById('login-err').textContent = msg;
+  }
+  btn.disabled = false;
 }
 
-async function adminLogin() {
-  const pass = document.getElementById('admin-pass').value;
-  if(!pass) return;
-  
-  const inputHash = await hashPassword(pass);
-  const savedHash = localStorage.getItem(ADMIN_PASS_KEY);
-  
-  // First time: check against default password
-  const defaultHash = await hashPassword('admin@2024');
-  const validHash = savedHash || defaultHash;
-  
-  if(inputHash === validHash) {
-    // If using default password, prompt to change
-    if(!savedHash) {
-      document.getElementById('login-err').innerHTML = 
-        '<span style="color:#FFD700">⚠️ Default password use ho rahi hai! Settings mein change karein.</span>';
-    }
+function adminLogout() {
+  firebase.auth().signOut();
+  // onAuthStateChanged (below) shows the login screen once sign-out completes.
+}
+
+// Fires on every load AND whenever sign-in/sign-out happens — this is what
+// keeps a session persisted across page reloads (Firebase remembers it),
+// and is the single place that shows/hides the panel based on real auth
+// state instead of a client-side flag.
+firebase.auth().onAuthStateChanged(function(user) {
+  if (user) {
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('admin-wrap').style.display = 'block';
+    var emailInp = document.getElementById('admin-pass');
+    if (emailInp) emailInp.value = '';
     load();
     showSection('dashboard');
     syncFromFirebase();
   } else {
-    document.getElementById('login-err').textContent = '❌ Wrong password!';
-    // Lock after 5 failed attempts
-    let attempts = parseInt(sessionStorage.getItem('bb-login-attempts')||'0') + 1;
-    sessionStorage.setItem('bb-login-attempts', attempts);
-    if(attempts >= 5) {
-      document.getElementById('admin-pass').disabled = true;
-      document.querySelector('.btn-primary').disabled = true;
-      document.getElementById('login-err').textContent = '🔒 5 baar galat! Page refresh karein.';
-    }
+    document.getElementById('admin-wrap').style.display = 'none';
+    document.getElementById('admin-login').style.display = 'flex';
   }
-}
-function adminLogout() {
-  document.getElementById('admin-wrap').style.display = 'none';
-  document.getElementById('admin-login').style.display = 'flex';
-  document.getElementById('admin-pass').value = '';
-}
+});
+
 async function changeAdminPass() {
   const curr = document.getElementById('curr-pass').value;
   const np   = document.getElementById('new-pass').value;
   const cp   = document.getElementById('conf-pass').value;
-  
-  const currHash    = await hashPassword(curr);
-  const savedHash   = localStorage.getItem(ADMIN_PASS_KEY);
-  const defaultHash = await hashPassword('admin@2024');
-  const validHash   = savedHash || defaultHash;
-  
-  if(currHash !== validHash) { toast('Current password wrong!','#FF6B35'); return; }
-  if(np !== cp)  { toast('Passwords match nahi!','#FF6B35'); return; }
-  if(np.length < 8) { toast('Min 8 characters chahiye!','#FF6B35'); return; }
-  if(!/[A-Z]/.test(np)) { toast('Ek capital letter zaroori!','#FF6B35'); return; }
-  if(!/[0-9]/.test(np)) { toast('Ek number zaroori!','#FF6B35'); return; }
-  
-  const newHash = await hashPassword(np);
-  localStorage.setItem(ADMIN_PASS_KEY, newHash);
-  toast('✅ Password changed! Dobara login karein.','#00C896');
-  setTimeout(adminLogout, 1500);
+
+  if (np !== cp)  { toast('Passwords match nahi!','#FF6B35'); return; }
+  if (np.length < 8) { toast('Min 8 characters chahiye!','#FF6B35'); return; }
+  if (!/[A-Z]/.test(np)) { toast('Ek capital letter zaroori!','#FF6B35'); return; }
+  if (!/[0-9]/.test(np)) { toast('Ek number zaroori!','#FF6B35'); return; }
+
+  var user = firebase.auth().currentUser;
+  if (!user) { toast('Session expire ho gaya, dobara login karein!','#FF6B35'); return; }
+  try {
+    var cred = firebase.auth.EmailAuthProvider.credential(user.email, curr);
+    await user.reauthenticateWithCredential(cred);
+    await user.updatePassword(np);
+    toast('✅ Password changed!','#00C896');
+    document.getElementById('curr-pass').value = '';
+    document.getElementById('new-pass').value = '';
+    document.getElementById('conf-pass').value = '';
+  } catch (e) {
+    var msg = 'Password change fail hua!';
+    if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') msg = 'Current password galat hai!';
+    toast(msg, '#FF6B35');
+  }
 }
 
 // ══ NAVIGATION ════════════════════════════════════
@@ -720,7 +728,10 @@ function showSection(id) {
 // ══ FIREBASE SYNC ══════════════════════════════════
 async function syncFromFirebase() {
   try {
-    await firebase.auth().signInAnonymously();
+    // No sign-in call here anymore — by the time this runs, adminLogin()
+    // has already authenticated with a real account (this used to call
+    // signInAnonymously(), which would have silently REPLACED that real
+    // session with an anonymous one, undoing the whole point of this fix).
     // Sync clients
     const snap = await db_admin.collection('admin_clients').get();
     if(!snap.empty) {
