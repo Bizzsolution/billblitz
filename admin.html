@@ -492,19 +492,26 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
             </select>
           </div>
           <div id="del-client-details" style="display:none">
-            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.8rem;color:rgba(255,255,255,0.6);line-height:1.6">
-              Yeh sab delete hoga:<br>
-              • Orders, Customers (loyalty)<br>
-              • Tables, Rooms, Staff, Expenses, Purchases, Inventory<br>
-              • Banquet Bookings, Banquet Menu, Restaurant Menu, Settings<br>
-              • QR Orders, Kitchen Orders, Owner Alerts<br>
-              • License Key aur Client Record
+            <div style="font-size:0.8rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:8px">Kya-Kya Delete Karna Hai (chunein)</div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:4px 12px;margin-bottom:14px">
+              <label style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer">
+                <input type="checkbox" id="del-opt-appdata" checked onchange="updateDeleteButtonState()" style="width:18px;height:18px"/>
+                <span style="font-size:0.82rem">📦 App Data — Orders, Tables, Staff, Banquet Bookings, Menu, Settings, QR/Kitchen Orders, sab kuch restaurant ke andar ka</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer">
+                <input type="checkbox" id="del-opt-license" checked onchange="updateDeleteButtonState()" style="width:18px;height:18px"/>
+                <span style="font-size:0.82rem">🔑 License Key — <i>uncheck karein agar key rakhni hai (client dobara wahi key se, fresh data ke saath use kar sakega)</i></span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer">
+                <input type="checkbox" id="del-opt-clientrecord" checked onchange="updateDeleteButtonState()" style="width:18px;height:18px"/>
+                <span style="font-size:0.82rem">👤 Client Record — Admin Panel ki client list se naam/phone hataana</span>
+              </label>
             </div>
             <div class="form-group">
               <label class="form-label">Confirm karne ke liye client ka EXACT naam type karein: <b id="del-client-name-target"></b></label>
               <input class="form-inp" id="del-confirm-input" placeholder="Client ka naam yahan type karein" oninput="onDeleteConfirmInput()"/>
             </div>
-            <button class="btn-primary" id="del-confirm-btn" onclick="executeClientDeletion()" disabled style="background:#DC2626;opacity:0.5">🗑️ Permanently Delete This Client</button>
+            <button class="btn-primary" id="del-confirm-btn" onclick="executeClientDeletion()" disabled style="background:#DC2626;opacity:0.5">🗑️ Delete Selected Data</button>
             <div id="del-progress" style="margin-top:14px;font-size:0.82rem;color:rgba(255,255,255,0.6)"></div>
           </div>
         </div>
@@ -1445,6 +1452,13 @@ function showMenuUpdaterSection() {
 // ══ DANGER ZONE — permanently delete a client's data ══════════════
 var delSelectedClient = null;
 
+function resetDeleteCheckboxes() {
+  ['del-opt-appdata','del-opt-license','del-opt-clientrecord'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.checked = true; // default = everything, matching the original full-delete behaviour
+  });
+}
+
 function showDangerZoneSection() {
   var sel = document.getElementById('del-client-sel');
   if (sel) {
@@ -1458,6 +1472,7 @@ function showDangerZoneSection() {
   document.getElementById('del-client-details').style.display = 'none';
   document.getElementById('del-confirm-input').value = '';
   document.getElementById('del-progress').textContent = '';
+  resetDeleteCheckboxes();
   updateDeleteButtonState();
 }
 
@@ -1469,6 +1484,7 @@ function onDeleteClientSelected() {
   document.getElementById('del-client-name-target').textContent = delSelectedClient ? delSelectedClient.name : '';
   document.getElementById('del-confirm-input').value = '';
   document.getElementById('del-progress').textContent = '';
+  resetDeleteCheckboxes();
   updateDeleteButtonState();
 }
 
@@ -1479,9 +1495,13 @@ function onDeleteConfirmInput() {
 function updateDeleteButtonState() {
   var btn = document.getElementById('del-confirm-btn');
   var input = document.getElementById('del-confirm-input');
-  var matches = delSelectedClient && input && input.value.trim() === delSelectedClient.name;
-  btn.disabled = !matches;
-  btn.style.opacity = matches ? '1' : '0.5';
+  var nameMatches = delSelectedClient && input && input.value.trim() === delSelectedClient.name;
+  var anySelected = document.getElementById('del-opt-appdata').checked
+    || document.getElementById('del-opt-license').checked
+    || document.getElementById('del-opt-clientrecord').checked;
+  var canDelete = nameMatches && anySelected;
+  btn.disabled = !canDelete;
+  btn.style.opacity = canDelete ? '1' : '0.5';
 }
 
 // Deletes every document in a collection, 500 at a time (Firestore's batch
@@ -1511,55 +1531,74 @@ async function executeClientDeletion() {
   btn.disabled = true;
   document.getElementById('del-confirm-input').disabled = true;
 
+  // Each is independently optional — e.g. wiping only app data while
+  // deliberately keeping the license key intact so the client can keep
+  // using it with a fresh start.
+  var deleteAppData = document.getElementById('del-opt-appdata').checked;
+  var deleteLicense = document.getElementById('del-opt-license').checked;
+  var deleteClientRecord = document.getElementById('del-opt-clientrecord').checked;
+
   function log(msg) { progressEl.innerHTML += '<div>' + msg + '</div>'; }
 
   try {
-    log('🔍 Restaurant ID dhoond rahe hain...');
-    var restaurantId = client.key ? await resolveRestaurantIdAdmin(client.key) : null;
+    if (deleteAppData) {
+      log('🔍 Restaurant ID dhoond rahe hain...');
+      var restaurantId = client.key ? await resolveRestaurantIdAdmin(client.key) : null;
 
-    if (restaurantId) {
-      var restRef = db_admin.collection('restaurants').doc(restaurantId);
-      var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts'];
-      for (var i = 0; i < subcollections.length; i++) {
-        var name = subcollections[i];
-        log('🗑️ ' + name + ' delete ho raha hai...');
-        var count = await deleteCollectionInBatches(restRef.collection(name));
-        log('&nbsp;&nbsp;✓ ' + count + ' documents delete hue (' + name + ')');
+      if (restaurantId) {
+        var restRef = db_admin.collection('restaurants').doc(restaurantId);
+        var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts'];
+        for (var i = 0; i < subcollections.length; i++) {
+          var name = subcollections[i];
+          log('🗑️ ' + name + ' delete ho raha hai...');
+          var count = await deleteCollectionInBatches(restRef.collection(name));
+          log('&nbsp;&nbsp;✓ ' + count + ' documents delete hue (' + name + ')');
+        }
+        log('🗑️ Restaurant document delete ho raha hai...');
+        await restRef.delete();
+        log('&nbsp;&nbsp;✓ Restaurant document delete ho gaya');
+      } else {
+        log('⚠️ Restaurant ID nahi mila (shayad license kabhi activate nahi hui) — app data skip kar rahe hain.');
       }
-      log('🗑️ Restaurant document delete ho raha hai...');
-      await restRef.delete();
-      log('&nbsp;&nbsp;✓ Restaurant document delete ho gaya');
     } else {
-      log('⚠️ Restaurant ID nahi mila (shayad license kabhi activate nahi hui) — app data skip kar rahe hain.');
+      log('⏭️ App Data — skip kiya gaya (checkbox uncheck tha)');
     }
 
-    if (client.key) {
-      log('🗑️ License key delete ho raha hai...');
-      await db_admin.collection('licenses').doc(client.key).delete();
-      log('&nbsp;&nbsp;✓ License delete ho gaya');
+    if (deleteLicense) {
+      if (client.key) {
+        log('🗑️ License key delete ho raha hai...');
+        await db_admin.collection('licenses').doc(client.key).delete();
+        log('&nbsp;&nbsp;✓ License delete ho gaya');
+      }
+    } else {
+      log('⏭️ License Key — RAKHI GAYI (delete nahi hui)');
     }
 
-    // Any admin_keys entries pointing at this client (a client can have
-    // more than one key generated over time).
-    log('🗑️ Key records delete ho rahe hain...');
-    var keySnap = await db_admin.collection('admin_keys').where('clientId', '==', client.id).get();
-    var keyBatch = db_admin.batch();
-    keySnap.docs.forEach(function(d) { keyBatch.delete(d.ref); });
-    if (!keySnap.empty) await keyBatch.commit();
-    log('&nbsp;&nbsp;✓ ' + keySnap.docs.length + ' key record(s) delete hue');
+    if (deleteClientRecord) {
+      // Any admin_keys entries pointing at this client (a client can have
+      // more than one key generated over time).
+      log('🗑️ Key records delete ho rahe hain...');
+      var keySnap = await db_admin.collection('admin_keys').where('clientId', '==', client.id).get();
+      var keyBatch = db_admin.batch();
+      keySnap.docs.forEach(function(d) { keyBatch.delete(d.ref); });
+      if (!keySnap.empty) await keyBatch.commit();
+      log('&nbsp;&nbsp;✓ ' + keySnap.docs.length + ' key record(s) delete hue');
 
-    log('🗑️ Client record delete ho raha hai...');
-    await db_admin.collection('admin_clients').doc(client.id).delete();
-    log('&nbsp;&nbsp;✓ Client record delete ho gaya');
+      log('🗑️ Client record delete ho raha hai...');
+      await db_admin.collection('admin_clients').doc(client.id).delete();
+      log('&nbsp;&nbsp;✓ Client record delete ho gaya');
 
-    // Reflect the deletion locally too, so the dashboard/client list don't
-    // still show this client until the next full Firebase sync.
-    adminData.clients = adminData.clients.filter(function(c){ return c.id !== client.id; });
-    adminData.keys = adminData.keys.filter(function(k){ return k.clientId !== client.id; });
-    save();
+      // Reflect the deletion locally too, so the dashboard/client list
+      // don't still show this client until the next full Firebase sync.
+      adminData.clients = adminData.clients.filter(function(c){ return c.id !== client.id; });
+      adminData.keys = adminData.keys.filter(function(k){ return k.clientId !== client.id; });
+      save();
+    } else {
+      log('⏭️ Client Record — RAKHA GAYA (client list mein dikhta rahega)');
+    }
 
-    log('<b style="color:#00C896">✅ "' + esc(client.name) + '" poori tarah delete ho gaya!</b>');
-    toast('✅ Client permanently deleted!', '#00C896');
+    log('<b style="color:#00C896">✅ Selected items delete ho gaye — "' + esc(client.name) + '"</b>');
+    toast('✅ Delete complete!', '#00C896');
     delSelectedClient = null;
     document.getElementById('del-client-sel').value = '';
     document.getElementById('del-client-details').style.display = 'none';
