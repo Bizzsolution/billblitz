@@ -207,6 +207,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <div class="sb-link" id="nav-features" onclick="showSection('features');closeMobileSidebar()"><span>🎛️</span> Features</div>
       <div class="sb-link" id="nav-menuup" onclick="showSection('menuup');closeMobileSidebar()"><span>🍜</span> Menu Updater</div>
       <div class="sb-link" id="nav-revenue" onclick="showSection('revenue');closeMobileSidebar()"><span>💰</span> Revenue</div>
+      <div class="sb-link" id="nav-danger" onclick="showSection('danger');closeMobileSidebar()"><span>⚠️</span> Danger Zone</div>
       <div class="sb-link" id="nav-settings" onclick="showSection('asettings');closeMobileSidebar()"><span>⚙️</span> Settings</div>
       <div class="sb-link" style="margin-top:auto;color:#FF6B35" onclick="adminLogout()"><span>🚪</span> Logout</div>
     </nav>
@@ -476,6 +477,40 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       </div>
     </div>
 
+    <!-- DANGER ZONE -->
+    <div id="sec-danger" style="display:none">
+      <div class="topbar"><div class="topbar-title">⚠️ Danger Zone — Delete Client Data</div></div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-body">
+          <div style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.8rem;color:#FCA5A5;line-height:1.5">
+            ⚠️ Yeh action <b>PERMANENT</b> hai — koi undo nahi hai. Client ka POORA data (orders, tables, staff, banquet bookings, settings, license, sab kuch) Firestore se hamesha ke liye delete ho jaayega.
+          </div>
+          <div class="form-group">
+            <label class="form-label">Client Chunein</label>
+            <select class="form-select" id="del-client-sel" onchange="onDeleteClientSelected()">
+              <option value="">-- Client chunein --</option>
+            </select>
+          </div>
+          <div id="del-client-details" style="display:none">
+            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.8rem;color:rgba(255,255,255,0.6);line-height:1.6">
+              Yeh sab delete hoga:<br>
+              • Orders, Customers (loyalty)<br>
+              • Tables, Rooms, Staff, Expenses, Purchases, Inventory<br>
+              • Banquet Bookings, Banquet Menu, Restaurant Menu, Settings<br>
+              • QR Orders, Kitchen Orders, Owner Alerts<br>
+              • License Key aur Client Record
+            </div>
+            <div class="form-group">
+              <label class="form-label">Confirm karne ke liye client ka EXACT naam type karein: <b id="del-client-name-target"></b></label>
+              <input class="form-inp" id="del-confirm-input" placeholder="Client ka naam yahan type karein" oninput="onDeleteConfirmInput()"/>
+            </div>
+            <button class="btn-primary" id="del-confirm-btn" onclick="executeClientDeletion()" disabled style="background:#DC2626;opacity:0.5">🗑️ Permanently Delete This Client</button>
+            <div id="del-progress" style="margin-top:14px;font-size:0.82rem;color:rgba(255,255,255,0.6)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="sec-asettings" style="display:none">
       <div class="topbar"><div class="topbar-title">⚙️ Admin Settings</div></div>
@@ -709,7 +744,7 @@ function closeMobileSidebar() {
 }
 
 function showSection(id) {
-  ['dashboard','clients','keys','announce','revenue','asettings','features','menuup'].forEach(s => {
+  ['dashboard','clients','keys','announce','revenue','asettings','features','menuup','danger'].forEach(s => {
     const el = document.getElementById('sec-'+s);
     const nav = document.getElementById('nav-'+s);
     if(el) el.style.display = s===id ? 'block' : 'none';
@@ -718,6 +753,7 @@ function showSection(id) {
   if(id==='dashboard') renderDashboard();
   if(id==='features') showFeaturesSection();
   if(id==='menuup') showMenuUpdaterSection();
+  if(id==='danger') showDangerZoneSection();
   if(id==='clients') renderClients();
   if(id==='keys') renderKeys();
   if(id==='announce') renderAnnouncements();
@@ -1404,6 +1440,138 @@ function showMenuUpdaterSection() {
   document.getElementById('mu-panel').style.display = 'none';
   muImages = [];
   muExtractedItems = [];
+}
+
+// ══ DANGER ZONE — permanently delete a client's data ══════════════
+var delSelectedClient = null;
+
+function showDangerZoneSection() {
+  var sel = document.getElementById('del-client-sel');
+  if (sel) {
+    var opts = '<option value="">-- Client chunein --</option>';
+    adminData.clients.forEach(function(c) {
+      opts += '<option value="' + c.id + '">' + esc(c.name) + (c.key ? ' (' + c.key + ')' : ' (No key yet)') + '</option>';
+    });
+    sel.innerHTML = opts;
+  }
+  delSelectedClient = null;
+  document.getElementById('del-client-details').style.display = 'none';
+  document.getElementById('del-confirm-input').value = '';
+  document.getElementById('del-progress').textContent = '';
+  updateDeleteButtonState();
+}
+
+function onDeleteClientSelected() {
+  var sel = document.getElementById('del-client-sel');
+  var clientId = sel.value;
+  delSelectedClient = clientId ? adminData.clients.find(function(c){ return c.id === clientId; }) : null;
+  document.getElementById('del-client-details').style.display = delSelectedClient ? '' : 'none';
+  document.getElementById('del-client-name-target').textContent = delSelectedClient ? delSelectedClient.name : '';
+  document.getElementById('del-confirm-input').value = '';
+  document.getElementById('del-progress').textContent = '';
+  updateDeleteButtonState();
+}
+
+function onDeleteConfirmInput() {
+  updateDeleteButtonState();
+}
+
+function updateDeleteButtonState() {
+  var btn = document.getElementById('del-confirm-btn');
+  var input = document.getElementById('del-confirm-input');
+  var matches = delSelectedClient && input && input.value.trim() === delSelectedClient.name;
+  btn.disabled = !matches;
+  btn.style.opacity = matches ? '1' : '0.5';
+}
+
+// Deletes every document in a collection, 500 at a time (Firestore's batch
+// limit) — repeats until the collection is empty. Used for every
+// subcollection under a client's restaurant document, since Firestore
+// never cascade-deletes a subcollection just because its parent document
+// was deleted.
+async function deleteCollectionInBatches(collectionRef, onProgress) {
+  var totalDeleted = 0;
+  while (true) {
+    var snap = await collectionRef.limit(500).get();
+    if (snap.empty) break;
+    var batch = db_admin.batch();
+    snap.docs.forEach(function(d) { batch.delete(d.ref); });
+    await batch.commit();
+    totalDeleted += snap.docs.length;
+    if (onProgress) onProgress(totalDeleted);
+  }
+  return totalDeleted;
+}
+
+async function executeClientDeletion() {
+  if (!delSelectedClient) return;
+  var client = delSelectedClient;
+  var btn = document.getElementById('del-confirm-btn');
+  var progressEl = document.getElementById('del-progress');
+  btn.disabled = true;
+  document.getElementById('del-confirm-input').disabled = true;
+
+  function log(msg) { progressEl.innerHTML += '<div>' + msg + '</div>'; }
+
+  try {
+    log('🔍 Restaurant ID dhoond rahe hain...');
+    var restaurantId = client.key ? await resolveRestaurantIdAdmin(client.key) : null;
+
+    if (restaurantId) {
+      var restRef = db_admin.collection('restaurants').doc(restaurantId);
+      var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts'];
+      for (var i = 0; i < subcollections.length; i++) {
+        var name = subcollections[i];
+        log('🗑️ ' + name + ' delete ho raha hai...');
+        var count = await deleteCollectionInBatches(restRef.collection(name));
+        log('&nbsp;&nbsp;✓ ' + count + ' documents delete hue (' + name + ')');
+      }
+      log('🗑️ Restaurant document delete ho raha hai...');
+      await restRef.delete();
+      log('&nbsp;&nbsp;✓ Restaurant document delete ho gaya');
+    } else {
+      log('⚠️ Restaurant ID nahi mila (shayad license kabhi activate nahi hui) — app data skip kar rahe hain.');
+    }
+
+    if (client.key) {
+      log('🗑️ License key delete ho raha hai...');
+      await db_admin.collection('licenses').doc(client.key).delete();
+      log('&nbsp;&nbsp;✓ License delete ho gaya');
+    }
+
+    // Any admin_keys entries pointing at this client (a client can have
+    // more than one key generated over time).
+    log('🗑️ Key records delete ho rahe hain...');
+    var keySnap = await db_admin.collection('admin_keys').where('clientId', '==', client.id).get();
+    var keyBatch = db_admin.batch();
+    keySnap.docs.forEach(function(d) { keyBatch.delete(d.ref); });
+    if (!keySnap.empty) await keyBatch.commit();
+    log('&nbsp;&nbsp;✓ ' + keySnap.docs.length + ' key record(s) delete hue');
+
+    log('🗑️ Client record delete ho raha hai...');
+    await db_admin.collection('admin_clients').doc(client.id).delete();
+    log('&nbsp;&nbsp;✓ Client record delete ho gaya');
+
+    // Reflect the deletion locally too, so the dashboard/client list don't
+    // still show this client until the next full Firebase sync.
+    adminData.clients = adminData.clients.filter(function(c){ return c.id !== client.id; });
+    adminData.keys = adminData.keys.filter(function(k){ return k.clientId !== client.id; });
+    save();
+
+    log('<b style="color:#00C896">✅ "' + esc(client.name) + '" poori tarah delete ho gaya!</b>');
+    toast('✅ Client permanently deleted!', '#00C896');
+    delSelectedClient = null;
+    document.getElementById('del-client-sel').value = '';
+    document.getElementById('del-client-details').style.display = 'none';
+    document.getElementById('del-confirm-input').disabled = false;
+    showDangerZoneSection();
+    renderDashboard();
+  } catch (e) {
+    log('<b style="color:#DC2626">❌ Error: ' + esc(e.message || 'kuch galat ho gaya') + '</b>');
+    log('Jo bhi steps upar "✓" ke saath dikh rahe hain, wo ho chuke hain — baaki dobara try kar sakte hain.');
+    document.getElementById('del-confirm-input').disabled = false;
+    updateDeleteButtonState();
+  }
 }
 
 function saveAdminAiKeys() {

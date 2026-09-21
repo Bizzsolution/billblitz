@@ -1287,6 +1287,12 @@ tr:nth-child(even) td{background:#FFFFFF;}
       <button class="btn btn-outline" id="rt-profit" onclick="setReportType('profit')" style="grid-column:1/-1">📈 Profitability Report</button>
     </div>
 
+    <!-- Only relevant for Sales Report — shown/hidden by renderReports() -->
+    <div class="rep-tabs" id="sales-view-tabs" style="display:none;margin-bottom:6px">
+      <button class="rep-tab active" id="sales-view-txn" onclick="setSalesView('txn')">📋 Transactions</button>
+      <button class="rep-tab" id="sales-view-split" onclick="setSalesView('split')">💳 Payment Split</button>
+    </div>
+
     <div id="report-content"></div>
 
     <!-- Order History Export (moved out of the main view — export only) -->
@@ -5360,6 +5366,8 @@ function showNewBanquetModal() {
     + '<div class="form-group" style="flex:1"><label class="form-label">Extra Charges (₹)</label><input class="form-inp" id="bq-extra" type="number" min="0" value="0"/></div>'
     + '<div class="form-group" style="flex:1"><label class="form-label">Advance Received (₹)</label><input class="form-inp" id="bq-advance" type="number" min="0" value="0"/></div>'
     + '</div>'
+    + '<div class="form-group"><label class="form-label">Advance Payment Mode</label>'
+    + '<select class="form-inp" id="bq-advance-mode"><option value="cash">💵 Cash</option><option value="card">💳 Card</option><option value="other">📱 UPI / QR</option></select></div>'
     + '<button class="btn btn-primary btn-full" onclick="saveBanquetBooking()">✅ Booking Save Karein</button>';
   openModal();
 }
@@ -5426,6 +5434,7 @@ function saveBanquetBooking() {
     menuItems: bqSelectedMenuItems.slice(),
     additionalCharges: parseFloat(document.getElementById('bq-extra').value) || 0,
     advance: parseFloat(document.getElementById('bq-advance').value) || 0,
+    advanceMode: document.getElementById('bq-advance-mode').value,
     status: 'draft',
     createdAt: new Date().toISOString()
   };
@@ -5520,7 +5529,7 @@ function viewBanquetBooking(id) {
     + (b.menuNotes ? '<div style="font-size:0.78rem;color:#6B7A99;margin-top:6px">' + esc(b.menuNotes) + '</div>' : '')
     + '<div class="bill-total"><span>Subtotal (Tax Se Pehle)</span><span>' + fmt(preTax) + '</span></div>'
     + '</div></div>'
-    + (b.advance ? '<div style="font-size:0.8rem;color:#16A34A;margin:10px 0">Advance Received: ' + fmt(b.advance) + '</div>' : '')
+    + (b.advance ? '<div style="font-size:0.8rem;color:#16A34A;margin:10px 0">Advance Received: ' + fmt(b.advance) + ' (' + (b.advanceMode||'cash').toUpperCase() + ')</div>' : '')
     + '<button class="btn btn-outline btn-full" style="margin-top:10px;margin-bottom:8px" data-bid="' + id + '" onclick="printBanquetPerforma(this.dataset.bid)">📋 Booking Performa (Customer Ko Dene Ke Liye)</button>'
     + '<button class="btn btn-primary btn-full" style="margin-bottom:8px" data-bid="' + id + '" onclick="generateBanquetBill(this.dataset.bid)">🧾 Generate Bill</button>'
     + '<button class="btn btn-red btn-full" data-bid="' + id + '" onclick="deleteBanquetBooking(this.dataset.bid)">🗑️ Delete Booking</button>';
@@ -5575,7 +5584,7 @@ function showBanquetBillReceipt(id) {
   var remaining = getBanquetRemainingBalance(b);
 
   var paymentRows = '';
-  if (b.advance) paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Advance (Booking Time)</span><span>-' + fmt(b.advance) + '</span></div>';
+  if (b.advance) paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Advance — ' + (b.advanceMode||'cash').toUpperCase() + ' (Booking Time)</span><span>-' + fmt(b.advance) + '</span></div>';
   (b.payments || []).forEach(function(p) {
     paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Payment — ' + esc((p.mode||'').toUpperCase()) + ' (' + fmtDate(p.date) + ')</span><span>-' + fmt(p.amount) + '</span></div>';
   });
@@ -5738,7 +5747,7 @@ function printBanquetPerforma(id) {
     + '<div class="row"><span>' + b.plates + ' Plates × Rs.' + b.ratePerPlate.toFixed(2) + '</span><span>Rs.' + subtotal.toFixed(2) + '</span></div>'
     + (extra ? '<div class="row"><span>Extra Charges</span><span>Rs.' + extra.toFixed(2) + '</span></div>' : '')
     + '<div class="row grand"><span>Estimated Total*</span><span>Rs.' + (subtotal + extra).toFixed(2) + '</span></div>'
-    + (b.advance ? '<div class="row"><span>Advance Received</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
+    + (b.advance ? '<div class="row"><span>Advance Received — ' + (b.advanceMode||'cash').toUpperCase() + '</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
     + '</div>'
     + '<div style="font-size:10px;color:#94A3B8;margin-bottom:20px">*Applicable taxes extra — final amount confirmed on the tax invoice at billing.</div>'
 
@@ -5797,7 +5806,7 @@ function printBanquetBillProfessional(orderId) {
     + '<div class="row"><span>Subtotal</span><span>Rs.' + b.subtotal.toFixed(2) + '</span></div>'
     + gstRowsHtml
     + '<div class="row grand"><span>Total</span><span>Rs.' + b.total.toFixed(2) + '</span></div>'
-    + (b.advance ? '<div class="row"><span>Advance Received</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
+    + (b.advance ? '<div class="row"><span>Advance Received — ' + (b.advanceMode||'cash').toUpperCase() + '</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
     + (b.payments || []).map(function(p){ return '<div class="row"><span>Payment — ' + p.mode.toUpperCase() + '</span><span>-Rs.' + p.amount.toFixed(2) + '</span></div>'; }).join('')
     + (getBanquetRemainingBalance(b) > 0 ? '<div class="row due"><span>Balance Due</span><span>Rs.' + getBanquetRemainingBalance(b).toFixed(2) + '</span></div>' : '')
     + '</div>'
@@ -5846,7 +5855,7 @@ function printBanquetBill(orderId) {
     + '<tr><td>Subtotal</td><td style="text-align:right">Rs.' + b.subtotal.toFixed(2) + '</td></tr>'
     + gstRows
     + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.' + b.total.toFixed(2) + '</td></tr>'
-    + (b.advance ? '<tr><td>Advance Received</td><td style="text-align:right">-Rs.' + b.advance.toFixed(2) + '</td></tr>' : '')
+    + (b.advance ? '<tr><td>Advance Received — ' + (b.advanceMode||'cash').toUpperCase() + '</td><td style="text-align:right">-Rs.' + b.advance.toFixed(2) + '</td></tr>' : '')
     + (b.payments || []).map(function(p){ return '<tr><td>Payment — ' + p.mode.toUpperCase() + '</td><td style="text-align:right">-Rs.' + p.amount.toFixed(2) + '</td></tr>'; }).join('')
     + (getBanquetRemainingBalance(b) > 0 ? '<tr style="font-weight:700"><td>Balance Due</td><td style="text-align:right">Rs.' + getBanquetRemainingBalance(b).toFixed(2) + '</td></tr>' : '')
     + '</table>'
@@ -7135,6 +7144,12 @@ function renderReports(){
   var showSourceTabs = hasFeature('banquet') && (reportType==='sales' || reportType==='gst' || reportType==='profit' || !reportType);
   if (sourceTabs) sourceTabs.style.display = showSourceTabs ? 'flex' : 'none';
 
+  // The Transactions/Payment-Split sub-tabs only make sense for Sales —
+  // hide them for every other report type (renderSalesReportView() is the
+  // one place that re-shows them, each time it actually runs).
+  var salesTabs = document.getElementById('sales-view-tabs');
+  if (salesTabs && reportType !== 'sales' && reportType) salesTabs.style.display = 'none';
+
   // Only Sales/GST/Profitability actually consume getPeriodOrders() — no
   // need to trigger a Firestore fetch for Expense/Purchase report views.
   if (reportType==='sales' || reportType==='gst' || reportType==='profit' || !reportType) {
@@ -7149,7 +7164,26 @@ function renderReports(){
 }
 
 // ── 1. SALES REPORT ──────────────────────────────────────────
+// 'txn' (default) = summary + a transaction-by-transaction list.
+// 'split' = a per-payment-mode breakdown (totals AND the transactions
+// that make up each mode) — answers "kitna cash mein aaya, kitna card
+// se" directly instead of just order counts.
+var salesView = 'txn';
+
+function setSalesView(v) {
+  salesView = v;
+  ['txn','split'].forEach(function(x){
+    var el = document.getElementById('sales-view-'+x);
+    if (el) el.classList.toggle('active', x===v);
+  });
+  renderSalesReportView();
+}
+
 function renderSalesReportView(){
+  var tabsEl = document.getElementById('sales-view-tabs');
+  if (tabsEl) tabsEl.style.display = 'flex';
+  if (salesView === 'split') { renderPaymentSplitView(); return; }
+
   var orders = getPeriodOrders();
   var total=orders.reduce(function(s,o){return s+o.total;},0);
   var tax=orders.reduce(function(s,o){return s+o.tax;},0);
@@ -7161,6 +7195,17 @@ function renderSalesReportView(){
   var itemCount={};
   orders.forEach(function(o){o.items.forEach(function(i){ itemCount[i.name]=(itemCount[i.name]||0)+i.qty; });});
   var topItems=Object.entries(itemCount).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+
+  // Transaction-wise list — newest first, capped at 200 rows on screen so
+  // a very busy period doesn't freeze rendering (Excel/PDF export already
+  // has every transaction regardless of this on-screen cap).
+  var sortedOrders = orders.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+  var txnRows = sortedOrders.slice(0, 200).map(function(o){
+    var modeIcon = o.payment==='cash'?'💵':o.payment==='card'?'💳':o.payment==='other'?'📱':'⏳';
+    return '<div class="list-row"><div class="list-main"><div class="list-title">'+displayBillNo(o)+(o.tableName?' · '+esc(o.tableName):'')+'</div>'
+      + '<div class="list-sub">'+fmtDate(o.date)+' '+fmtTime(o.date)+'</div></div>'
+      + '<div class="list-right"><div style="font-weight:800">'+fmt(o.total)+'</div><div style="font-size:0.7rem;color:#6B7A99">'+modeIcon+' '+(o.payment||'pending').toUpperCase()+'</div></div></div>';
+  }).join('');
 
   document.getElementById('report-content').innerHTML =
     '<div style="font-size:0.75rem;color:#6B7A99;margin-bottom:8px">📅 '+getPeriodLabel()+'</div>'
@@ -7180,7 +7225,42 @@ function renderSalesReportView(){
     +'<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">🏆 Top Selling Items</div></div><div class="card-body">'
     +(topItems.length?topItems.map(function(item,i){return '<div class="bill-row"><span><span style="font-weight:700;color:#FFD700;margin-right:6px">#'+(i+1)+'</span>'+esc(item[0])+'</span><span class="badge badge-green">'+item[1]+' sold</span></div>';}).join(''):'<div class="empty" style="padding:1rem">No orders in this period.</div>')
     +'</div></div>'
+    +'<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">📋 Transactions ('+orders.length+')</div></div><div class="card-body" style="max-height:400px;overflow-y:auto">'
+    +(txnRows || '<div class="empty" style="padding:1rem">Is period mein koi transaction nahi.</div>')
+    +(orders.length>200?'<div style="font-size:0.7rem;color:#9CA3AF;text-align:center;padding:8px 0">...aur '+(orders.length-200)+' — poori list Excel export mein milegi</div>':'')
+    +'</div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="rep-export-area"></div>';
+  renderExportButtons('sales', orders.length>0);
+}
+
+function renderPaymentSplitView(){
+  var orders = getPeriodOrders();
+  var modes = [
+    { key:'cash', label:'💵 Cash' },
+    { key:'card', label:'💳 Card' },
+    { key:'other', label:'📱 UPI / QR' },
+    { key:'pending', label:'⏳ Pending (Bill Generated, Payment Baaki)' }
+  ];
+
+  var sectionsHtml = modes.map(function(m){
+    var matched = orders.filter(function(o){ return (o.payment||'pending') === m.key; })
+      .sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+    if (!matched.length) return '';
+    var modeTotal = matched.reduce(function(s,o){ return s + o.total; }, 0);
+    var rows = matched.slice(0, 100).map(function(o){
+      return '<div class="bill-row"><span>'+displayBillNo(o)+(o.tableName?' · '+esc(o.tableName):'')+' — '+fmtDate(o.date)+'</span><span style="font-weight:700">'+fmt(o.total)+'</span></div>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">'+m.label+'</div></div><div class="card-body">'
+      + '<div class="bill-total" style="margin-bottom:8px"><span>Total ('+matched.length+' transactions)</span><span>'+fmt(modeTotal)+'</span></div>'
+      + '<div style="max-height:280px;overflow-y:auto">'+rows+'</div>'
+      + (matched.length>100?'<div style="font-size:0.7rem;color:#9CA3AF;text-align:center;padding:8px 0">...aur '+(matched.length-100)+' more</div>':'')
+      + '</div></div>';
+  }).join('');
+
+  document.getElementById('report-content').innerHTML =
+    '<div style="font-size:0.75rem;color:#6B7A99;margin-bottom:8px">📅 '+getPeriodLabel()+'</div>'
+    + (sectionsHtml || '<div class="empty" style="padding:2rem">Is period mein koi transaction nahi.</div>')
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="rep-export-area"></div>';
   renderExportButtons('sales', orders.length>0);
 }
 
