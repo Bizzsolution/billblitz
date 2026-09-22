@@ -7089,6 +7089,29 @@ var reportSource = 'restaurant';
 // export) works completely unchanged, whether it's fed restaurant orders,
 // banquet bookings, or both. Only this one normalization function needs
 // to know banquet bookings look different internally.
+// A banquet booking never had a single `.payment` field — it tracks
+// payment via `advance`+`advanceMode` plus a `payments[]` array of
+// separately-moded entries (see the "Record Payment" flow), because a
+// banquet balance can genuinely be settled across more than one mode.
+// Bug found during testing: normalizeBanquetForReports() below used to
+// read `b.payment` directly — a field that never existed on a booking —
+// so it silently fell back to 'pending' for EVERY banquet booking, no
+// matter how much (or how fully) it had actually been paid. This
+// collapses the real payment records into one representative value:
+// 'pending' only when truly nothing has been received, the actual mode
+// when every payment used the same one, or 'mixed' when genuinely split
+// across modes (which the dedicated Payment Split report view — see
+// getBanquetModeAmounts() below — breaks down precisely rather than
+// forcing into a single bucket).
+function getBanquetReportPaymentMode(b) {
+  var modes = [];
+  if (b.advance > 0) modes.push(b.advanceMode || 'cash');
+  (b.payments || []).forEach(function(p){ modes.push(p.mode); });
+  if (!modes.length) return 'pending';
+  var unique = modes.filter(function(v, i, a){ return a.indexOf(v) === i; });
+  return unique.length === 1 ? unique[0] : 'mixed';
+}
+
 function normalizeBanquetForReports(bookings) {
   // Both 'billed' AND 'closed' are real, revenue-generating bookings —
   // 'closed' just means fully settled, it doesn't stop being a sale.
@@ -7103,8 +7126,9 @@ function normalizeBanquetForReports(bookings) {
       items: [{ name: 'Banquet — ' + b.plates + ' plates @ ' + fmt(b.ratePerPlate), price: b.ratePerPlate, qty: b.plates }],
       subtotal: b.subtotal, tax: b.tax, taxPct: b.taxPct, gstType: b.gstType,
       discount: 0, total: b.total,
-      payment: b.payment || 'pending',
-      tableName: null
+      payment: getBanquetReportPaymentMode(b),
+      tableName: null,
+      _banquetSourceId: b.id // lets Payment Split find the real underlying record for precise per-mode amount splitting
     };
   });
 }
@@ -7201,7 +7225,7 @@ function renderSalesReportView(){
   // has every transaction regardless of this on-screen cap).
   var sortedOrders = orders.slice().sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
   var txnRows = sortedOrders.slice(0, 200).map(function(o){
-    var modeIcon = o.payment==='cash'?'💵':o.payment==='card'?'💳':o.payment==='other'?'📱':'⏳';
+    var modeIcon = o.payment==='cash'?'💵':o.payment==='card'?'💳':o.payment==='other'?'📱':o.payment==='mixed'?'🔀':'⏳';
     return '<div class="list-row"><div class="list-main"><div class="list-title">'+displayBillNo(o)+(o.tableName?' · '+esc(o.tableName):'')+'</div>'
       + '<div class="list-sub">'+fmtDate(o.date)+' '+fmtTime(o.date)+'</div></div>'
       + '<div class="list-right"><div style="font-weight:800">'+fmt(o.total)+'</div><div style="font-size:0.7rem;color:#6B7A99">'+modeIcon+' '+(o.payment||'pending').toUpperCase()+'</div></div></div>';
@@ -7233,8 +7257,41 @@ function renderSalesReportView(){
   renderExportButtons('sales', orders.length>0);
 }
 
+// Buckets EVERY actual payment amount — restaurant orders (single mode,
+// as before) AND banquet bookings (their real advance+payments[] records,
+// which can genuinely span more than one mode) — into cash/card/other/
+// pending, each with the exact transactions/contributions that make it
+// up. This is what makes "kitna cash mein aaya, kitna card se" accurate
+// for banquet's split-payment reality instead of collapsing a whole
+// booking into one bucket (or, before the fix, ALWAYS into "pending").
+function getPaymentSplitEntries(orders) {
+  var entries = []; // {mode, label, amount}
+  orders.forEach(function(o){
+    if (!o._banquetSourceId) {
+      // Restaurant order — single mode, exactly as it's always been.
+      entries.push({ mode: o.payment || 'pending', label: displayBillNo(o) + (o.tableName ? ' · ' + esc(o.tableName) : ''), date: o.date, amount: o.total });
+      return;
+    }
+    var b = (db.banquetBookings || []).find(function(x){ return x.id === o._banquetSourceId; });
+    if (!b) { entries.push({ mode: 'pending', label: displayBillNo(o) + ' (Banquet)', date: o.date, amount: o.total }); return; }
+    var label = displayBillNo(o) + ' — ' + esc(b.customerName) + ' (Banquet)';
+    if (b.advance > 0) entries.push({ mode: b.advanceMode || 'cash', label: label + ' · Advance', date: o.date, amount: b.advance });
+    (b.payments || []).forEach(function(p){
+      entries.push({ mode: p.mode, label: label + ' · Payment', date: p.date || o.date, amount: p.amount });
+    });
+    var remaining = getBanquetRemainingBalance(b);
+    if (remaining > 0) entries.push({ mode: 'pending', label: label + ' · Balance Due', date: o.date, amount: remaining });
+  });
+  return entries;
+}
+
 function renderPaymentSplitView(){
   var orders = getPeriodOrders();
+  var entries = getPaymentSplitEntries(orders);
+  // Note: 'mixed' (a banquet booking paid across more than one mode) never
+  // appears as its own bucket here — getPaymentSplitEntries() already
+  // splits it into its real individual cash/card/other/pending
+  // contributions above, which is more accurate than a combined bucket.
   var modes = [
     { key:'cash', label:'💵 Cash' },
     { key:'card', label:'💳 Card' },
@@ -7243,15 +7300,15 @@ function renderPaymentSplitView(){
   ];
 
   var sectionsHtml = modes.map(function(m){
-    var matched = orders.filter(function(o){ return (o.payment||'pending') === m.key; })
+    var matched = entries.filter(function(e){ return e.mode === m.key; })
       .sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
     if (!matched.length) return '';
-    var modeTotal = matched.reduce(function(s,o){ return s + o.total; }, 0);
-    var rows = matched.slice(0, 100).map(function(o){
-      return '<div class="bill-row"><span>'+displayBillNo(o)+(o.tableName?' · '+esc(o.tableName):'')+' — '+fmtDate(o.date)+'</span><span style="font-weight:700">'+fmt(o.total)+'</span></div>';
+    var modeTotal = matched.reduce(function(s,e){ return s + e.amount; }, 0);
+    var rows = matched.slice(0, 100).map(function(e){
+      return '<div class="bill-row"><span>'+e.label+' — '+fmtDate(e.date)+'</span><span style="font-weight:700">'+fmt(e.amount)+'</span></div>';
     }).join('');
     return '<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">'+m.label+'</div></div><div class="card-body">'
-      + '<div class="bill-total" style="margin-bottom:8px"><span>Total ('+matched.length+' transactions)</span><span>'+fmt(modeTotal)+'</span></div>'
+      + '<div class="bill-total" style="margin-bottom:8px"><span>Total ('+matched.length+' entries)</span><span>'+fmt(modeTotal)+'</span></div>'
       + '<div style="max-height:280px;overflow-y:auto">'+rows+'</div>'
       + (matched.length>100?'<div style="font-size:0.7rem;color:#9CA3AF;text-align:center;padding:8px 0">...aur '+(matched.length-100)+' more</div>':'')
       + '</div></div>';
