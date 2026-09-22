@@ -7321,13 +7321,84 @@ function renderPaymentSplitView(){
   renderExportButtons('sales', orders.length>0);
 }
 
+// Returns the mode-by-mode breakdown for one order — same underlying
+// advance/payments[] logic as getPaymentSplitEntries(), just scoped to a
+// single order/booking instead of a whole period, for the Excel breakup
+// sheet's per-order rows.
+function getOrderPaymentBreakup(o) {
+  if (!o._banquetSourceId) return [{ mode: o.payment || 'pending', amount: o.total, date: o.date }];
+  var b = (db.banquetBookings || []).find(function(x){ return x.id === o._banquetSourceId; });
+  if (!b) return [{ mode: 'pending', amount: o.total, date: o.date }];
+  var rows = [];
+  if (b.advance > 0) rows.push({ mode: (b.advanceMode||'cash')+' (Advance)', amount: b.advance, date: o.date });
+  (b.payments || []).forEach(function(p){ rows.push({ mode: p.mode+' (Payment)', amount: p.amount, date: p.date || o.date }); });
+  var remaining = getBanquetRemainingBalance(b);
+  if (remaining > 0) rows.push({ mode: 'pending (Balance Due)', amount: remaining, date: o.date });
+  return rows;
+}
+
 function exportSalesExcel(){
   var orders = getPeriodOrders();
   var headers = ['Order#','Date','Time','Items','Subtotal','Tax','Discount','Total','Payment'];
   var rows = orders.map(function(o){
     return [displayBillNo(o), fmtDate(o.date), fmtTime(o.date), o.items.length, o.subtotal, o.tax, o.discount, o.total, o.payment];
   });
-  exportToExcel('Sales_Report_'+getPeriodLabel().replace(/\s/g,'_'), 'Sales', headers, rows);
+
+  // Any order paid across more than one mode gets an in-workbook hyperlink
+  // on its Payment cell — click it in Excel and it jumps straight to that
+  // order's exact breakdown on a second sheet, instead of just showing
+  // the word "mixed" with no way to see what made it up.
+  var mixedOrders = orders.filter(function(o){ return o.payment === 'mixed'; });
+
+  if (!mixedOrders.length) {
+    // No mixed-mode orders this period — the plain single-sheet export
+    // already tells the whole story, so keep using the same shared
+    // exporter everyone else's reports use.
+    exportToExcel('Sales_Report_'+getPeriodLabel().replace(/\s/g,'_'), 'Sales', headers, rows);
+    return;
+  }
+
+  ensureXLSXLib(function(){
+    try {
+      var wb = XLSX.utils.book_new();
+      var ws = XLSX.utils.aoa_to_sheet([headers].concat(rows));
+
+      var breakupHeaders = ['Order#', 'Mode', 'Amount', 'Date'];
+      var breakupRows = [];
+      var firstBreakupRowByOrder = {}; // order# -> 1-based row number in the breakup sheet (for the hyperlink target)
+
+      orders.forEach(function(o){
+        if (o.payment !== 'mixed') return;
+        var billNo = displayBillNo(o);
+        var breakup = getOrderPaymentBreakup(o);
+        firstBreakupRowByOrder[billNo] = breakupRows.length + 2; // +1 for header row, +1 to convert to 1-based
+        breakup.forEach(function(r){
+          breakupRows.push([billNo, r.mode, r.amount, fmtDate(r.date)]);
+        });
+      });
+      var breakupWs = XLSX.utils.aoa_to_sheet([breakupHeaders].concat(breakupRows));
+
+      // Attach the hyperlink to each mixed order's Payment cell (column I,
+      // index 8) on the main sheet, pointing at that order's first row on
+      // the breakup sheet.
+      orders.forEach(function(o, i){
+        if (o.payment !== 'mixed') return;
+        var billNo = displayBillNo(o);
+        var targetRow = firstBreakupRowByOrder[billNo];
+        var cellAddr = XLSX.utils.encode_cell({ r: i + 1, c: 8 }); // +1 for header row
+        if (ws[cellAddr]) {
+          ws[cellAddr].l = { Target: "#'Payment Breakup'!A" + targetRow, Tooltip: 'Click to see payment breakup' };
+        }
+      });
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Sales');
+      XLSX.utils.book_append_sheet(wb, breakupWs, 'Payment Breakup');
+      XLSX.writeFile(wb, 'Sales_Report_'+getPeriodLabel().replace(/\s/g,'_')+'.xlsx');
+      toast('✅ Excel file download ho gayi! "Mixed" pe click karke breakup dekhein.', '#00A878');
+    } catch (e) {
+      toast('Excel export mein error: ' + e.message, '#FF6B35');
+    }
+  });
 }
 
 function exportSalesPDF(){
