@@ -1373,6 +1373,16 @@ tr:nth-child(even) td{background:#FFFFFF;}
       </div>
     </div>
 
+    <!-- Owner Recovery Code (security audit fix) -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">🔐 Owner Recovery Code</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:8px">Owner PIN bhool jaane par isi code se reset hoga. Yeh sirf ek baar dikhta hai — safe jagah note karein aur staff ke saath share na karein.</div>
+        <div id="recovery-code-status" style="font-size:0.82rem;margin-bottom:10px"></div>
+        <button class="btn btn-primary btn-full" onclick="generateOwnerRecoveryCode()">🔐 Naya Recovery Code Banayein</button>
+      </div>
+    </div>
+
     <!-- GST Configuration -->
     <div class="card" style="margin-bottom:10px">
       <div class="card-header"><div class="card-title">📋 GST Configuration</div></div>
@@ -1895,6 +1905,58 @@ async function resolveRestaurantId(licKey) {
   return fallback;
 }
 
+// ── RESTAURANT MEMBERSHIP (security audit Phase 2) ───────────────
+// The QR code on every table publicly shows this restaurant's id, and the
+// old rules let ANY anonymous session read/write everything under it.
+// Now a device must first register as a member of the restaurant — and
+// the Firestore rules only allow that when it presents a license key
+// whose license document points at this exact restaurant. Private data
+// (orders, customers, staff, settings, PINs...) is then readable only by
+// members. A QR customer never has the license key, so they can only see
+// the menu and place/track their own order.
+// Non-fatal by design: under the older (transition) rules this simply
+// succeeds or is ignored, so nothing breaks before the new rules go live.
+async function ensureRestaurantMembership(licKey) {
+  try {
+    var uid = fbAuth.currentUser && fbAuth.currentUser.uid;
+    if (!uid || !restaurantId || !licKey) return false;
+    await firestoreDb.collection('restaurants').doc(restaurantId)
+      .collection('members').doc(uid)
+      .set({ licenseKey: licKey, joinedAt: new Date().toISOString(),
+             device: (navigator.userAgent || '').slice(0, 80) }, { merge: true });
+    return true;
+  } catch (e) {
+    // Only prompt for a new key when the license genuinely no longer
+    // exists (it was rotated by support) — never on a plain network error.
+    try {
+      var lic = await firestoreDb.collection('licenses').doc(licKey).get();
+      if (!lic.exists) showLicenseRotatedPrompt();
+    } catch (e2) {}
+    return false;
+  }
+}
+
+function showLicenseRotatedPrompt() {
+  if (document.getElementById('lic-rotated-flag')) return;
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div><span id="lic-rotated-flag"></span>'
+    + '<div class="modal-title">🔑 License Key Update Hui Hai</div>'
+    + '<div style="background:#FEF3C7;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#92400E;line-height:1.6">'
+    + 'Security upgrade ke liye aapki License Key badli gayi hai. Aapka saara data bilkul safe hai — bas is device pe nayi key ek baar daalni hai.'
+    + '<br><br>Nayi key BillBlitz support se lein, phir neeche button dabakar daalein.</div>'
+    + '<button class="btn btn-primary btn-full" style="margin-bottom:8px" onclick="resetLicenseForNewKey()">🔑 Nayi Key Daalein</button>'
+    + '<button class="btn btn-outline btn-full" onclick="closeModal()">Baad Mein</button>';
+  openModal();
+}
+
+function resetLicenseForNewKey() {
+  // Clears ONLY the stored license (not restaurant data) so the app
+  // reopens on the activation screen for the new key. Local data stays
+  // and the new key resolves to the same restaurant, so nothing is lost.
+  try { localStorage.removeItem('bb-lic-v1'); } catch (e) {}
+  location.reload();
+}
+
 async function authenticateClient(licKey, retryCount) {
   if (!isFirebaseReady) return;
   retryCount = retryCount || 0;
@@ -1908,6 +1970,9 @@ async function authenticateClient(licKey, retryCount) {
     // Resolve the real data path AFTER auth (reading the license doc needs
     // an authenticated session) and BEFORE any data work starts.
     restaurantId = await resolveRestaurantId(licKey);
+    // Must complete BEFORE any data read/listener starts below — under the
+    // enforced rules, nothing private is readable until this device is a member.
+    await ensureRestaurantMembership(licKey);
     // Small pause lets the SDK's internal auth/connection state fully settle
     // before we start firing Firestore operations — reduces the chance of
     // triggering the Firestore SDK's known "INTERNAL ASSERTION FAILED" bug,
@@ -2866,10 +2931,76 @@ function updatePinDots(){
 }
 
 
+// ── PIN HASHING (security audit fix) ─────────────────────────────
+// The old hash was a 32-bit non-cryptographic string hash — any 4-digit
+// PIN could be recovered from it in milliseconds. New PINs use SHA-256
+// iterated 3000 times ('S2$' prefix), making each guess far costlier.
+// Kept synchronous (pure-JS SHA-256, verified byte-for-byte against a
+// reference implementation) so none of the existing call sites had to
+// become async. Existing stored hashes keep working: verifyPin() still
+// recognises the old 'H...' format, and upgradePinHash() silently
+// re-saves it in the new format the first time that PIN is used —
+// nobody has to reset anything.
+var _shaK = null, _shaH = null;
+function sha256Hex(ascii) {
+  function rr(v, a) { return (v >>> a) | (v << (32 - a)); }
+  if (!_shaK) {
+    _shaK = []; _shaH = []; var isPrime = {}, cand = 2, n = 0;
+    while (n < 64) { if (!isPrime[cand]) { for (var p = 0; p < 313; p += cand) isPrime[p] = cand;
+        if (n < 8) _shaH[n] = (Math.pow(cand, .5) * 4294967296) | 0; _shaK[n++] = (Math.pow(cand, 1/3) * 4294967296) | 0; } cand++; }
+  }
+  var K = _shaK, i, j;
+  var bytes = unescape(encodeURIComponent(ascii)), words = [], bitLen = bytes.length * 8;
+  bytes += '\x80'; while (bytes.length % 64 - 56) bytes += '\x00';
+  for (i = 0; i < bytes.length; i++) words[i >> 2] |= bytes.charCodeAt(i) << ((3 - i) % 4) * 8;
+  words[words.length] = (bitLen / 4294967296) | 0; words[words.length] = bitLen;
+  var h0=_shaH[0],h1=_shaH[1],h2=_shaH[2],h3=_shaH[3],h4=_shaH[4],h5=_shaH[5],h6=_shaH[6],h7=_shaH[7], w = new Array(64);
+  for (j = 0; j < words.length; j += 16) {
+    var a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+    for (i = 0; i < 64; i++) {
+      if (i < 16) w[i] = words[j + i] | 0;
+      else { var w15=w[i-15], w2=w[i-2];
+        w[i] = (w[i-16] + (rr(w15,7)^rr(w15,18)^(w15>>>3)) + w[i-7] + (rr(w2,17)^rr(w2,19)^(w2>>>10))) | 0; }
+      var t1 = (h + (rr(e,6)^rr(e,11)^rr(e,25)) + ((e&f)^(~e&g)) + K[i] + w[i]) | 0;
+      var t2 = ((rr(a,2)^rr(a,13)^rr(a,22)) + ((a&b)^(a&c)^(b&c))) | 0;
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+    }
+    h0=(h0+a)|0; h1=(h1+b)|0; h2=(h2+c)|0; h3=(h3+d)|0; h4=(h4+e)|0; h5=(h5+f)|0; h6=(h6+g)|0; h7=(h7+h)|0;
+  }
+  var out = '', hs = [h0,h1,h2,h3,h4,h5,h6,h7];
+  for (i = 0; i < 8; i++) for (j = 3; j >= 0; j--) { var by = (hs[i] >> (j * 8)) & 255; out += (by < 16 ? '0' : '') + by.toString(16); }
+  return out;
+}
+
+var PIN_HASH_ROUNDS = 3000;
 function hashPin(pin) {
+  var h = String(pin) + '|bb-pin-v2';
+  for (var i = 0; i < PIN_HASH_ROUNDS; i++) h = sha256Hex(h + '|bb-pin-v2');
+  return 'S2$' + h;
+}
+function legacyHashPin(pin) {
   var h = 0; var str = pin + 'bb-pin-2024';
   for(var i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h=h&h;}
   return 'H'+Math.abs(h).toString(16).padStart(8,'0').toUpperCase();
+}
+// Works for all three formats a stored PIN can be in: new 'S2$', old 'H',
+// or a plain default ('1234' etc., never actually stored hashed).
+function verifyPin(entered, stored) {
+  if (!stored) return false;
+  entered = String(entered || '');
+  if (stored.indexOf('S2$') === 0) return hashPin(entered) === stored;
+  if (stored.charAt(0) === 'H') return legacyHashPin(entered) === stored;
+  return entered === stored;
+}
+function isLegacyPinHash(stored) { return !!stored && stored.charAt(0) === 'H' && stored.indexOf('S2$') !== 0; }
+// Upgrades a role PIN stored in db.settings.pins from the old format,
+// right after it was verified correct (the only moment the plain PIN is
+// known). No-op for defaults (not stored) or already-upgraded hashes.
+function upgradeRolePinIfLegacy(role, entered) {
+  var pins = db.settings && db.settings.pins;
+  if (!pins || !isLegacyPinHash(pins[role])) return;
+  pins[role] = hashPin(entered);
+  save();
 }
 
 var clientFeatures = {};
@@ -3026,16 +3157,41 @@ function applyFeatureGating() {
   }
 }
 
+// ── OWNER PIN RECOVERY (security audit fix) ──────────────────────
+// Previously a forgotten Owner PIN could be reset with just the License
+// Key — but owners routinely share that key with staff to activate new
+// devices, and it's stored on every device. That let any staff member
+// who knew it take over the Owner account. Recovery now needs an Owner
+// Recovery Code instead: a random code generated in Settings, shown to
+// the owner ONCE, with only its (iterated SHA-256) hash stored. Staff can
+// see the hash but can't work backwards from it (~60 bits of randomness,
+// not a 4-digit PIN). Without a code set up, reset goes through BillBlitz
+// support (admin panel) instead of being self-service.
+function normalizeRecoveryCode(c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
 function showForgotPinInfo(){
+  var hasCode = !!(db.settings && db.settings.ownerRecoveryHash);
+  if (!hasCode) {
+    document.getElementById('modal-body').innerHTML =
+      '<div class="modal-handle"></div>'
+      + '<div class="modal-title">🔑 PIN Bhool Gaye?</div>'
+      + '<div style="background:#FEF3C7;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#92400E;line-height:1.6">'
+      + 'Is device pe Owner Recovery Code set nahi hai. Security ke liye PIN reset ab sirf BillBlitz Support se hota hai — apne BillBlitz support contact ko message karein, woh turant reset kar denge.'
+      + '<br><br>Aage ke liye: login karke <b>Settings → Owner Recovery Code</b> zaroor bana lein, taaki khud reset kar sakein.'
+      + '</div>'
+      + '<button class="btn btn-outline btn-full" onclick="closeModal()">Theek Hai</button>';
+    openModal();
+    return;
+  }
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">🔑 PIN Bhool Gaye?</div>'
     + '<div style="background:#EFF6FF;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#1D4ED8;line-height:1.6">'
-    + 'Apni License Key type karke confirm karein — sirf Owner ko yeh pata honi chahiye, isliye yeh ek safe tareeka hai PIN reset karne ka.'
+    + 'Apna <b>Owner Recovery Code</b> daalein (jo Settings mein banate waqt aapne note kiya tha).'
     + '</div>'
-    + '<div class="form-group"><label class="form-label">License Key</label>'
-    + '<input class="form-inp" id="forgot-pin-key" placeholder="BB-XXXX-XXXX-XXXX" style="text-align:center;font-weight:700;letter-spacing:1px;text-transform:uppercase"/></div>'
-    + '<div id="forgot-pin-err" style="color:#DC2626;font-size:0.78rem;margin-bottom:10px;display:none">Galat License Key!</div>'
+    + '<div class="form-group"><label class="form-label">Recovery Code</label>'
+    + '<input class="form-inp" id="forgot-pin-key" placeholder="XXXX-XXXX-XXXX" autocomplete="off" style="text-align:center;font-weight:700;letter-spacing:1px;text-transform:uppercase"/></div>'
+    + '<div id="forgot-pin-err" style="color:#DC2626;font-size:0.78rem;margin-bottom:10px;display:none">Galat Recovery Code!</div>'
     + '<div style="display:flex;gap:8px">'
     + '<button class="btn btn-outline" style="flex:1" onclick="closeModal()">Cancel</button>'
     + '<button class="btn btn-primary" style="flex:2" onclick="verifyForgotPinKey()">Verify Karein</button>'
@@ -3043,23 +3199,68 @@ function showForgotPinInfo(){
   openModal();
 }
 
+var _pinResetAuthorized = false;
+var _recoveryFailCount = 0;
+
 function verifyForgotPinKey(){
-  var entered = (document.getElementById('forgot-pin-key').value || '').trim().toUpperCase();
-  var saved = loadLicenseState();
-  var actualKey = (saved && saved.key || '').toUpperCase();
-  if (!entered || entered !== actualKey) {
+  var hash = db.settings && db.settings.ownerRecoveryHash;
+  if (!hash) return;
+  if (_recoveryFailCount >= 5) {
+    var errL = document.getElementById('forgot-pin-err');
+    if (errL) { errL.textContent = '🔒 Bahut zyada galat attempts. App dobara kholke try karein.'; errL.style.display = 'block'; }
+    return;
+  }
+  var entered = normalizeRecoveryCode(document.getElementById('forgot-pin-key').value);
+  if (!entered || !verifyPin(entered, hash)) {
+    _recoveryFailCount++;
     var err = document.getElementById('forgot-pin-err');
     if (err) err.style.display = 'block';
     return;
   }
+  _recoveryFailCount = 0;
+  _pinResetAuthorized = true;
   showSetNewPinScreen();
+}
+
+function generateOwnerRecoveryCode() {
+  if (currentRole !== 'owner') { toast('Sirf Owner yeh kar sakta hai!', '#FF6B35'); return; }
+  var hadOne = !!(db.settings && db.settings.ownerRecoveryHash);
+  if (hadOne && !confirm('Naya code banane se purana code kaam karna band kar dega. Continue?')) return;
+  var alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
+  var bytes = new Uint8Array(12);
+  (window.crypto || window.msCrypto).getRandomValues(bytes);
+  var raw = '';
+  for (var i = 0; i < 12; i++) raw += alphabet[bytes[i] % alphabet.length];
+  var display = raw.slice(0,4) + '-' + raw.slice(4,8) + '-' + raw.slice(8,12);
+  if (!db.settings) db.settings = {};
+  db.settings.ownerRecoveryHash = hashPin(raw);
+  save();
+  renderRecoveryCodeStatus();
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🔐 Aapka Owner Recovery Code</div>'
+    + '<div style="background:#FEF3C7;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.8rem;color:#92400E;line-height:1.6">'
+    + '⚠️ Yeh code <b>SIRF EK BAAR</b> dikhega. Abhi kahin safe likh lein (staff ke saath share NA karein). Owner PIN bhool jaane par isi se reset hoga.'
+    + '</div>'
+    + '<div style="text-align:center;font-size:1.5rem;font-weight:800;letter-spacing:3px;background:#F7F9FF;border-radius:12px;padding:16px;margin-bottom:14px;user-select:all">' + display + '</div>'
+    + '<button class="btn btn-primary btn-full" onclick="closeModal()">✅ Maine Note Kar Liya</button>';
+  openModal();
+}
+
+function renderRecoveryCodeStatus() {
+  var el = document.getElementById('recovery-code-status');
+  if (!el) return;
+  var has = !!(db.settings && db.settings.ownerRecoveryHash);
+  el.innerHTML = has
+    ? '<span style="color:#16A34A;font-weight:700">✅ Recovery Code set hai</span>'
+    : '<span style="color:#DC2626;font-weight:700">⚠️ Set nahi hai — abhi bana lein</span>';
 }
 
 function showSetNewPinScreen(){
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">🔑 Naya PIN Set Karein</div>'
-    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px">License Key verify ho gayi ✅ — ab naya Owner PIN set karein.</div>'
+    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px">Recovery Code verify ho gaya ✅ — ab naya Owner PIN set karein.</div>'
     + '<div class="form-group"><label class="form-label">Naya Owner PIN (4-digit)</label>'
     + '<input class="form-inp" id="new-owner-pin" type="password" maxlength="4" inputmode="numeric" placeholder="4-digit PIN" style="text-align:center;font-size:1.3rem;letter-spacing:6px"/></div>'
     + '<div class="form-group"><label class="form-label">PIN Confirm Karein</label>'
@@ -3077,18 +3278,24 @@ function saveNewOwnerPinFromReset(){
     if (err) err.style.display = 'block';
     return;
   }
+  if (!_pinResetAuthorized) { closeModal(); toast('Pehle Recovery Code verify karein!', '#FF6B35'); return; }
+  _pinResetAuthorized = false;
   if (!db.settings) db.settings = {};
   if (!db.settings.pins) db.settings.pins = {};
   db.settings.pins.owner = hashPin(pin);
+  // Single-use: a used recovery code is retired, so a code that was ever
+  // seen by anyone else can't be used a second time.
+  delete db.settings.ownerRecoveryHash;
   save();
+  try { createOwnerAlert('pin_reset', '🔑 Owner PIN Reset Hua', 'Recovery Code se Owner PIN reset kiya gaya. Agar yeh aapne nahi kiya, turant BillBlitz support se contact karein.'); } catch(e){}
   closeModal();
-  toast('✅ Naya Owner PIN set ho gaya! Ab isi se login karein.', '#00A878');
+  toast('✅ Naya Owner PIN set! Settings mein naya Recovery Code zaroor bana lein.', '#00A878');
 }
 
 function checkPin(){
   const correct = getPin(selectedLoginRole);
-  const inputToCheck = correct.startsWith("H") ? hashPin(pinBuffer) : pinBuffer;
-  if(inputToCheck === correct){
+  if(verifyPin(pinBuffer, correct)){
+    upgradeRolePinIfLegacy(selectedLoginRole, pinBuffer);
     currentRole = selectedLoginRole;
     document.getElementById('login-screen').style.display = 'none';
     // Mobile header badge
@@ -3225,9 +3432,9 @@ function printBill(orderId){
   var items = o.items || [];
   for(var k=0; k<items.length; k++){
     var it = items[k];
-    var nm = String(it.name||'Item');
-    var am = ((it.price||0)*(it.qty||1)).toFixed(2);
-    rows += '<tr><td style="padding:2px 0">'+(it.qty||1)+'x '+nm+'</td>'
+    var nm = esc(String(it.name||'Item'));
+    var am = ((Number(it.price)||0)*(Number(it.qty)||1)).toFixed(2);
+    rows += '<tr><td style="padding:2px 0">'+(parseInt(it.qty,10)||1)+'x '+nm+'</td>'
           + '<td style="text-align:right;padding:2px 0">Rs.'+am+'</td></tr>';
   }
 
@@ -3735,6 +3942,7 @@ function renderSettingsPage(){
   if(bsPrefixInp) bsPrefixInp.value = bsCurrent.prefix || '';
   if(bsNextInp) bsNextInp.value = bsCurrent.nextNumber || 1;
   renderBillSeriesPreview();
+  renderRecoveryCodeStatus();
   var gstCfg = getGSTConfig();
   var gstModeAuto = document.getElementById('gst-mode-auto');
   var gstModeManual = document.getElementById('gst-mode-manual');
@@ -4588,7 +4796,7 @@ function renderKitchenPage() {
     var statusColor = t.status === 'pending' ? '#DC2626' : (t.status === 'preparing' ? '#D97706' : '#16A34A');
     var statusLabel = t.status === 'pending' ? 'NAYA' : (t.status === 'preparing' ? 'BAN RAHA HAI' : 'READY');
     var elapsed = Math.round((new Date() - new Date(t.createdAt)) / 60000);
-    var itemsHtml = t.items.map(function(it){ return '<div style="font-weight:700;font-size:0.9rem">' + it.qty + 'x ' + esc(it.name) + '</div>'; }).join('');
+    var itemsHtml = t.items.map(function(it){ return '<div style="font-weight:700;font-size:0.9rem">' + (parseInt(it.qty,10)||0) + 'x ' + esc(it.name) + '</div>'; }).join('');
     var nextBtn = '';
     if (t.status === 'pending') nextBtn = '<button class="btn btn-yellow" style="flex:1" data-tid="' + t.id + '" onclick="advanceKitchenTicket(this.dataset.tid,\'preparing\')">👨‍🍳 Banana Shuru Karo</button>';
     else if (t.status === 'preparing') nextBtn = '<button class="btn btn-green" style="flex:1" data-tid="' + t.id + '" onclick="advanceKitchenTicket(this.dataset.tid,\'ready\')">✅ Ready!</button>';
@@ -4701,7 +4909,7 @@ async function printKOTRoundViaBT(items, roundNum) {
 
 function printKOTRoundViaOverlay(items, roundNum) {
   var rows = items.map(function(it) {
-    return '<tr><td style="padding:4px 0;font-weight:700">' + it.qty + 'x ' + esc(it.name) + '</td></tr>';
+    return '<tr><td style="padding:4px 0;font-weight:700">' + (parseInt(it.qty,10)||0) + 'x ' + esc(it.name) + '</td></tr>';
   }).join('');
 
   var html = '<div class="print-bill-wrap">'
@@ -5010,8 +5218,8 @@ function requestOwnerApproval(actionLabel, onApproved) {
 function verifyOwnerApproval() {
   var entered = (document.getElementById('owner-approval-pin').value || '').trim();
   var correct = getPin('owner');
-  var toCheck = correct.startsWith('H') ? hashPin(entered) : entered;
-  if (toCheck === correct) {
+  if (verifyPin(entered, correct)) {
+    upgradeRolePinIfLegacy('owner', entered);
     var cb = window._pendingOwnerApproval;
     window._pendingOwnerApproval = null;
     closeModal();
@@ -9187,7 +9395,8 @@ function verifyStaffPin(staffId) {
 
     function doVerify() {
       var entered = (document.getElementById('verify-staff-pin').value || '').trim();
-      if (hashPin(entered) === s.staffPinHash) {
+      if (verifyPin(entered, s.staffPinHash)) {
+        if (isLegacyPinHash(s.staffPinHash)) { s.staffPinHash = hashPin(entered); save(); }
         closeModal();
         resolve(true);
       } else {
@@ -10598,14 +10807,18 @@ function showQROrdersModal() {
   } else {
     orders.slice().reverse().forEach(function(o) {
       var isRoom = o.locationType === 'room';
-      var itemsHtml = o.items.map(function(it) {
+      // Display uses the SAME trusted menu-based rebuild as acceptance, so
+      // staff never see (or get misled by) a forged price or total.
+      var qrSan = sanitizeQROrderItems(o.items);
+      var qrTrustedTotal = qrSan.items.reduce(function(t, it){ return t + it.price * it.qty; }, 0);
+      var itemsHtml = qrSan.items.map(function(it) {
         return '<div class="qr-order-item"><span>' + it.qty + 'x ' + esc(it.name) + '</span><span>' + fmt(it.price * it.qty) + '</span></div>';
-      }).join('');
+      }).join('') + (qrSan.dropped ? '<div class="qr-order-note">⚠️ ' + qrSan.dropped + ' invalid item(s) ignore kiye gaye</div>' : '');
       html += '<div class="qr-order-card">'
         + '<div class="qr-order-hdr"><span class="qr-order-table">' + (isRoom?'🛏️ ':'🪑 ') + esc(o.tableName || 'Takeaway') + (isRoom?' <span style="font-size:0.62rem;color:#7C3AED;font-weight:700">ROOM SERVICE</span>':'') + '</span><span class="qr-order-time">' + fmtTime(o.date) + '</span></div>'
         + itemsHtml
         + (o.note ? '<div class="qr-order-note">📝 ' + esc(o.note) + '</div>' : '')
-        + '<div class="qr-order-total"><span>Total</span><span>' + fmt(o.total) + '</span></div>'
+        + '<div class="qr-order-total"><span>Total</span><span>' + fmt(qrTrustedTotal) + '</span></div>'
         + '<div class="qr-order-actions">'
         + '<button class="btn btn-green" style="flex:1" data-oid="' + o.id + '" onclick="acceptQROrder(this.dataset.oid)">✅ Accept</button>'
         + '<button class="btn btn-red" style="flex:1" data-oid="' + o.id + '" onclick="declineQROrder(this.dataset.oid)">✕ Decline</button>'
@@ -10618,9 +10831,31 @@ function showQROrdersModal() {
 }
 
 // ── ACCEPT: merge into table/room order / open billing ───────
+// Security audit fix: the QR page is public, so anything it sends can be
+// forged — a modified page could submit any price. Every item is rebuilt
+// from THIS restaurant's own menu (trusted), keeping only the item id and
+// a sanitised quantity from the customer. Items not on the menu are dropped.
+function sanitizeQROrderItems(items) {
+  var clean = [], dropped = 0;
+  (items || []).forEach(function(it) {
+    var m = (db.menu || []).find(function(x){ return x.id === it.menuId; });
+    var qty = parseInt(it.qty, 10);
+    if (!m || !(qty >= 1)) { dropped++; return; }
+    clean.push({ menuId: m.id, name: m.name, price: Number(m.price) || 0, qty: Math.min(qty, 99) });
+  });
+  return { items: clean, dropped: dropped };
+}
+
 async function acceptQROrder(orderId) {
   var o = (db.qrOrders || []).find(function(x){ return x.id === orderId; });
   if (!o) return;
+  var sanitized = sanitizeQROrderItems(o.items);
+  if (!sanitized.items.length) {
+    toast('⚠️ Is order ka koi bhi item menu mein nahi mila — accept nahi kiya.', '#FF6B35');
+    return;
+  }
+  if (sanitized.dropped) toast('⚠️ ' + sanitized.dropped + ' invalid item(s) hata diye gaye.', '#FF6B35');
+  o = Object.assign({}, o, { items: sanitized.items });
 
   // Update Firestore status so customer sees "accepted"
   try {

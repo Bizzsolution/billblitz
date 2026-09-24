@@ -409,7 +409,10 @@ async function placeOrder() {
         total: total,
         note: note,
         status: 'pending',
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        // Lets the rules allow THIS customer to read back only their own
+        // order's status — without being able to read anyone else's.
+        customerUid: (fbAuth.currentUser && fbAuth.currentUser.uid) || ''
       });
 
     currentOrderId = orderId;

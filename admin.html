@@ -479,7 +479,18 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
 
     <!-- DANGER ZONE -->
     <div id="sec-danger" style="display:none">
-      <div class="topbar"><div class="topbar-title">⚠️ Danger Zone — Delete Client Data</div></div>
+      <div class="topbar"><div class="topbar-title">⚠️ Danger Zone</div></div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-hdr"><div class="card-title">🔐 Security Upgrade Status (Phase 2)</div></div>
+        <div class="card-body">
+          <div style="font-size:0.78rem;color:rgba(255,255,255,0.55);margin-bottom:10px;line-height:1.5">
+            Har client ka status: <b>Secure</b> = random restaurant ID. <b>Legacy</b> = restaurant ID license key se bana hai, jo table QR se nikali ja sakti hai — inki key ek baar rotate karni zaroori hai (data waisa hi rahega, bas customer ko nayi key daalni hogi).
+            <br><b>Members</b> = kitne devices naye system mein join ho chuke hain. Final rules (Stage B) lagane se pehle har active client ke members &gt; 0 hone chahiye.
+          </div>
+          <button class="btn-primary" onclick="loadSecurityMigrationStatus()">🔄 Status Check Karein</button>
+          <div id="secmig-list" style="margin-top:12px"></div>
+        </div>
+      </div>
       <div class="card" style="margin-bottom:14px">
         <div class="card-body">
           <div style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.8rem;color:#FCA5A5;line-height:1.5">
@@ -1449,6 +1460,92 @@ function showMenuUpdaterSection() {
   muExtractedItems = [];
 }
 
+// ══ SECURITY UPGRADE (Phase 2) ═══════════════════════════════════
+async function loadSecurityMigrationStatus() {
+  var el = document.getElementById('secmig-list');
+  el.innerHTML = '<div style="font-size:0.8rem;color:rgba(255,255,255,0.5)">Check ho raha hai...</div>';
+  var rows = [];
+  for (var i = 0; i < adminData.clients.length; i++) {
+    var c = adminData.clients[i];
+    if (!c.key) continue;
+    var badge = '', members = '—', action = '';
+    try {
+      var lic = await db_admin.collection('licenses').doc(c.key).get();
+      if (!lic.exists) {
+        badge = '<span style="color:#FCA5A5">License doc nahi mila</span>';
+      } else {
+        var rid = lic.data().restaurantId;
+        var effectiveRid = rid || computeRestaurantId(c.key);
+        try {
+          var ms = await db_admin.collection('restaurants').doc(effectiveRid).collection('members').get();
+          members = String(ms.size);
+        } catch (e) { members = '?'; }
+        if (rid && rid !== computeRestaurantId(c.key)) {
+          badge = '<span style="color:#00C896;font-weight:700">✅ Secure</span>';
+        } else {
+          badge = '<span style="color:#FFD700;font-weight:700">⚠️ Legacy</span>';
+          action = '<button class="btn-primary" style="margin-top:6px;padding:6px 10px;font-size:0.75rem;background:#B45309" data-cid="' + c.id + '" onclick="rotateClientKey(this.dataset.cid)">🔁 Key Rotate Karein</button>';
+        }
+      }
+    } catch (e) { badge = '<span style="color:#FCA5A5">Error: ' + esc(e.message || '') + '</span>'; }
+    rows.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;margin-bottom:8px;font-size:0.8rem">'
+      + '<div style="display:flex;justify-content:space-between;gap:8px"><b>' + esc(c.name) + '</b>' + badge + '</div>'
+      + '<div style="color:rgba(255,255,255,0.5);margin-top:2px">' + esc(c.key) + ' · Members: <b>' + members + '</b></div>'
+      + action + '</div>');
+  }
+  el.innerHTML = rows.join('') || '<div style="font-size:0.8rem;color:rgba(255,255,255,0.5)">Koi licensed client nahi mila.</div>';
+}
+
+// Legacy clients' restaurant id is literally their license key with the
+// dashes removed — and that id is printed on every table QR. So the key
+// itself is effectively public. Rotation issues a brand-new random key
+// that points at the SAME restaurant id (so all data stays exactly where
+// it is, including already-printed QR codes), removes every existing
+// device membership (including any made with the old, exposed key), and
+// retires the old key. Order matters: the new license is created FIRST,
+// so a failure midway never leaves the client with no working key.
+async function rotateClientKey(clientId) {
+  var c = adminData.clients.find(function(x){ return x.id === clientId; });
+  if (!c || !c.key) return;
+  if (!confirm('"' + c.name + '" ki License Key rotate karni hai?\n\nData safe rahega, QR codes waise hi chalenge.\nLekin customer ko HAR device pe nayi key ek baar daalni padegi.')) return;
+  var oldKey = c.key;
+  try {
+    var licRef = db_admin.collection('licenses').doc(oldKey);
+    var lic = await licRef.get();
+    if (!lic.exists) { toast('Purana license doc nahi mila!', '#FF6B35'); return; }
+    var data = lic.data();
+    var rid = data.restaurantId || computeRestaurantId(oldKey);
+
+    var newKey = null;
+    for (var tries = 0; tries < 5 && !newKey; tries++) {
+      var candidate = generateLicenseKey();
+      var exists = await db_admin.collection('licenses').doc(candidate).get();
+      if (!exists.exists) newKey = candidate;
+    }
+    if (!newKey) { toast('Naya key generate nahi hua, dobara try karein.', '#FF6B35'); return; }
+
+    await db_admin.collection('licenses').doc(newKey).set(Object.assign({}, data, {
+      restaurantId: rid, rotatedAt: new Date().toISOString()
+    }));
+    await deleteCollectionInBatches(db_admin.collection('restaurants').doc(rid).collection('members'));
+    await licRef.delete();
+
+    c.key = newKey;
+    await pushToFirebase('admin_clients', c.id, c);
+    (adminData.keys || []).forEach(function(k){ if (k.key === oldKey) k.key = newKey; });
+    try {
+      var ks = await db_admin.collection('admin_keys').where('key', '==', oldKey).get();
+      for (var j = 0; j < ks.docs.length; j++) await ks.docs[j].ref.set({ key: newKey }, { merge: true });
+    } catch (e) {}
+    save();
+
+    alert('✅ Key rotate ho gayi!\n\n"' + c.name + '" ki NAYI License Key:\n\n' + newKey + '\n\nYeh key customer ko bhejein. Unke app mein "License Key Update Hui Hai" message aayega — wahan yeh nayi key daalni hai.');
+    loadSecurityMigrationStatus();
+  } catch (e) {
+    toast('Rotation fail: ' + (e.message || 'error'), '#FF6B35');
+  }
+}
+
 // ══ DANGER ZONE — permanently delete a client's data ══════════════
 var delSelectedClient = null;
 
@@ -1547,7 +1644,7 @@ async function executeClientDeletion() {
 
       if (restaurantId) {
         var restRef = db_admin.collection('restaurants').doc(restaurantId);
-        var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts'];
+        var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts', 'members'];
         for (var i = 0; i < subcollections.length; i++) {
           var name = subcollections[i];
           log('🗑️ ' + name + ' delete ho raha hai...');
