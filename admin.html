@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>BillBlitz Admin Panel</title>
 <style>
@@ -485,10 +487,11 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
         <div class="card-body">
           <div style="font-size:0.78rem;color:rgba(255,255,255,0.55);margin-bottom:10px;line-height:1.5">
             <b>⚠️ Zaroori:</b> Stage B publish karne se PEHLE har client ke License doc mein "restaurantId" field hona chahiye — warna wo client permanently lock ho jaata hai (member ban hi nahi paata). Neeche "Backfill" button yeh field un sab clients mein add kar deta hai jinke paas nahi hai — <b>na koi key rotate hoti hai, na QR badalte hain, na data hilta hai</b> — bas ek missing field bharta hai.
+            <br><br><b>Stage C ke liye:</b> yahi Backfill button har license mein <b>expiryTs</b> (expiry ka timestamp) bhi add karta hai. Stage C rules publish karne se PEHLE ek baar zaroor chalayein aur "⏰ expired" wali list check karein — jo paid client galti se expired dikhe usko pehle Extend karein.
             <br><br>Har client ka status: <b>Secure</b> = random restaurant ID (naya ya backfilled). <b>Legacy</b> = abhi bhi field missing hai. <b>Members</b> = kitne devices join ho chuke.
           </div>
           <button class="btn-primary" onclick="loadSecurityMigrationStatus()">🔄 Status Check Karein</button>
-          <button class="btn-primary" style="margin-left:8px;background:#7C3AED" onclick="backfillAllRestaurantIds()">🧩 Sab Clients Mein Missing Field Backfill Karein</button>
+          <button class="btn-primary" style="margin-left:8px;background:#7C3AED" onclick="backfillAllRestaurantIds()">🧩 Sab Clients Mein Missing Fields Backfill Karein</button>
           <div id="secmig-list" style="margin-top:12px"></div>
         </div>
       </div>
@@ -805,8 +808,22 @@ async function syncFromFirebase() {
   }
 }
 
+// Firestore rules can't parse a 'YYYY-MM-DD' string, so every license that
+// carries an expiry also gets a real timestamp copy (expiryTs) — the Stage C
+// rules use it to cut cloud access 3 days after a license expires.
+function expiryToTimestamp(expiry) {
+  if (!expiry || typeof expiry !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(expiry)) return null;
+  var d = new Date(expiry.slice(0, 10) + 'T23:59:59+05:30');
+  if (isNaN(d.getTime())) return null;
+  return firebase.firestore.Timestamp.fromDate(d);
+}
+
 async function pushToFirebase(collection, id, data) {
   try {
+    if (collection === 'licenses' && data && data.expiry) {
+      var ts = expiryToTimestamp(data.expiry);
+      if (ts) data = Object.assign({}, data, { expiryTs: ts });
+    }
     await db_admin.collection(collection).doc(id).set(data, {merge:true});
   } catch(e) { console.log('Firebase push:', e); }
 }
@@ -1335,7 +1352,7 @@ function fmtDate(d) {
   try { return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
   catch(e){ return d; }
 }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function copyKey(key) {
   navigator.clipboard.writeText(key).then(()=>toast('📋 Key copied!','#00C896')).catch(()=>{
     const ta=document.createElement('textarea'); ta.value=key;
@@ -1517,11 +1534,18 @@ async function backfillAllRestaurantIds() {
       var ref = db_admin.collection('licenses').doc(c.key);
       var doc = await ref.get();
       if (!doc.exists) { skipped++; log.push('⚠️ ' + esc(c.name) + ' — license doc nahi mila'); continue; }
-      if (doc.data().restaurantId) { alreadyOk++; continue; }
-      var rid = computeRestaurantId(c.key);
-      await ref.set({ restaurantId: rid }, { merge: true });
+      var d0 = doc.data() || {};
+      var patch = {};
+      if (!d0.restaurantId) patch.restaurantId = computeRestaurantId(c.key);
+      var wantTs = expiryToTimestamp(d0.expiry);
+      if (wantTs && (!d0.expiryTs || !d0.expiryTs.toMillis || d0.expiryTs.toMillis() !== wantTs.toMillis())) patch.expiryTs = wantTs;
+      if (wantTs && wantTs.toMillis() + 3 * 86400000 < Date.now() && d0.status !== 'blocked') {
+        log.push('⏰ ' + esc(c.name) + ' — license ' + esc(d0.expiry) + ' ko expire ho chuki hai → Stage C ke baad iska cloud access band rahega (Extend karein agar paid hai)');
+      }
+      if (!Object.keys(patch).length) { alreadyOk++; continue; }
+      await ref.set(patch, { merge: true });
       fixed++;
-      log.push('✅ ' + esc(c.name) + ' — restaurantId add hui');
+      log.push('✅ ' + esc(c.name) + ' — ' + Object.keys(patch).join(' + ') + ' add hua');
     } catch (e) {
       log.push('❌ ' + esc(c.name) + ' — error: ' + esc(e.message || ''));
     }
@@ -1679,7 +1703,7 @@ async function executeClientDeletion() {
 
       if (restaurantId) {
         var restRef = db_admin.collection('restaurants').doc(restaurantId);
-        var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts', 'members'];
+        var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts', 'members', 'revoked'];
         for (var i = 0; i < subcollections.length; i++) {
           var name = subcollections[i];
           log('🗑️ ' + name + ' delete ho raha hai...');
