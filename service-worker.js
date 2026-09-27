@@ -22,7 +22,7 @@
 // and this service worker must stay out of its way entirely.
 
 var SHELL_CACHE = 'billblitz-shell-v1';
-var LIB_CACHE   = 'billblitz-libs-v1';
+var LIB_CACHE   = 'billblitz-libs-v2'; // v2: libraries now version-pinned + integrity-checked
 
 var SHELL_URLS = [
   './',

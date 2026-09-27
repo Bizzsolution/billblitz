@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
 <title>Order Menu</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -198,7 +200,7 @@ var firestoreDb = null, fbAuth = null, isReady = false;
 var currentOrderId = null;
 
 // ── UTILS ───────────────────────────────────────────────────
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function fmt(n){ return 'Rs.'+(+n||0).toFixed(0); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
 
@@ -319,10 +321,12 @@ function renderMenu() {
       +(m.desc ? '<div class="mi-desc">'+esc(m.desc)+'</div>' : '')
       +'<div class="mi-price">'+fmt(m.price)+'</div>'
       +'</div>'
-      +'<div class="mi-add" data-mid="'+m.id+'">'
+      +'<div class="mi-add" data-mid="'+esc(m.id)+'">'
+      // Item id travels via an escaped data attribute, never pasted into
+      // JavaScript — a crafted menu id can't run code on customers' phones.
       +(qty>0
-        ? '<div class="qty-ctrl"><button class="qty-btn" onclick="changeQty(\''+m.id+'\',-1)">−</button><span class="qty-num">'+qty+'</span><button class="qty-btn" onclick="changeQty(\''+m.id+'\',1)">+</button></div>'
-        : '<button class="add-btn" onclick="changeQty(\''+m.id+'\',1)">+ Add</button>')
+        ? '<div class="qty-ctrl"><button class="qty-btn" data-mid="'+esc(m.id)+'" onclick="changeQty(this.dataset.mid,-1)">−</button><span class="qty-num">'+qty+'</span><button class="qty-btn" data-mid="'+esc(m.id)+'" onclick="changeQty(this.dataset.mid,1)">+</button></div>'
+        : '<button class="add-btn" data-mid="'+esc(m.id)+'" onclick="changeQty(this.dataset.mid,1)">+ Add</button>')
       +'</div>'
       +'</div>';
   }).join('');
@@ -363,7 +367,7 @@ function openCart() {
     var lineTotal = cart[mid] * m.price;
     total += lineTotal;
     rows += '<div class="cart-row">'
-      +'<div class="qty-ctrl" style="background:#F5F7FB"><button class="qty-btn" style="background:#1A2B3C;color:#FFD166" onclick="changeQty(\''+mid+'\',-1);openCart()">−</button><span class="qty-num" style="color:#1A2B3C">'+cart[mid]+'</span><button class="qty-btn" style="background:#1A2B3C;color:#FFD166" onclick="changeQty(\''+mid+'\',1);openCart()">+</button></div>'
+      +'<div class="qty-ctrl" style="background:#F5F7FB"><button class="qty-btn" style="background:#1A2B3C;color:#FFD166" data-mid="'+esc(mid)+'" onclick="changeQty(this.dataset.mid,-1);openCart()">−</button><span class="qty-num" style="color:#1A2B3C">'+cart[mid]+'</span><button class="qty-btn" style="background:#1A2B3C;color:#FFD166" data-mid="'+esc(mid)+'" onclick="changeQty(this.dataset.mid,1);openCart()">+</button></div>'
       +'<div class="cart-row-name">'+esc(m.name)+'</div>'
       +'<div class="cart-row-price">'+fmt(lineTotal)+'</div>'
       +'</div>';

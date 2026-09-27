@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1383,6 +1385,16 @@ tr:nth-child(even) td{background:#FFFFFF;}
       </div>
     </div>
 
+    <!-- Connected Devices (security audit — device revocation) -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">📱 Connected Devices</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:8px">Jin devices pe aapki License Key activate hai. Phone kho gaya / chori hua / staff ne job chhod di — to us device ko yahan se turant remove karein.</div>
+        <div id="devices-list" style="margin-bottom:10px"></div>
+        <button class="btn btn-outline btn-full" onclick="loadConnectedDevices()">🔄 Devices Dekhein / Refresh</button>
+      </div>
+    </div>
+
     <!-- GST Configuration -->
     <div class="card" style="margin-bottom:10px">
       <div class="card-header"><div class="card-title">📋 GST Configuration</div></div>
@@ -1755,7 +1767,16 @@ function seedDemo(){
 // ║                   HELPERS                            ║
 // ╚══════════════════════════════════════════════════════╝
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// Only allow real image data / https images as a logo source — a crafted
+// value (e.g. '" onerror=...') can never break out of the src attribute.
+function safeImgSrc(src){
+  src = String(src||'').trim();
+  if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+\/=\s]+$/i.test(src)) return src.replace(/\s/g,'');
+  if (/^https:\/\/[^\s"'<>]+$/i.test(src)) return src;
+  return '';
+}
+function logoImgTag(src, attrs){ var u = safeImgSrc(src); return u ? '<img src="'+u+'" '+(attrs||'')+'>' : ''; }
 function fmt(n){ return '₹'+(+n||0).toFixed(2); }
 function fmtDate(d){ if(!d) return '—'; return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
 function fmtTime(d){ if(!d) return ''; return new Date(d).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
@@ -1920,12 +1941,22 @@ async function ensureRestaurantMembership(licKey) {
   try {
     var uid = fbAuth.currentUser && fbAuth.currentUser.uid;
     if (!uid || !restaurantId || !licKey) return false;
-    await firestoreDb.collection('restaurants').doc(restaurantId)
-      .collection('members').doc(uid)
-      .set({ licenseKey: licKey, joinedAt: new Date().toISOString(),
-             device: (navigator.userAgent || '').slice(0, 80) }, { merge: true });
+    var memRef = firestoreDb.collection('restaurants').doc(restaurantId)
+      .collection('members').doc(uid);
+    var nowIso = new Date().toISOString();
+    var payload = { licenseKey: licKey, lastSeen: nowIso,
+                    device: (navigator.userAgent || '').slice(0, 80),
+                    deviceName: getFriendlyDeviceName() };
+    // Keep the ORIGINAL join date so the owner's device list is meaningful.
+    var existing = null;
+    try { existing = await memRef.get(); } catch (eGet) {}
+    if (!existing || !existing.exists) payload.joinedAt = nowIso;
+    await memRef.set(payload, { merge: true });
+    watchOwnMembership();
     return true;
   } catch (e) {
+    // Removed by the owner? Lock this device (and clear its local copy).
+    if (await isThisDeviceRevoked()) { handleDeviceRevoked(); return 'revoked'; }
     // Only prompt for a new key when the license genuinely no longer
     // exists (it was rotated by support) — never on a plain network error.
     try {
@@ -1934,6 +1965,159 @@ async function ensureRestaurantMembership(licKey) {
     } catch (e2) {}
     return false;
   }
+}
+
+// ── DEVICE REVOCATION (security audit — next batch) ─────────────
+// The owner can remove a lost/stolen/ex-staff device from Settings →
+// Connected Devices. The Firestore rules then refuse that device every
+// read/write, and it can never re-join under the same device id.
+function getFriendlyDeviceName() {
+  var ua = navigator.userAgent || '';
+  var os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad|iPod/i.test(ua) ? 'iPhone/iPad'
+         : /Windows/i.test(ua) ? 'Windows PC' : /Macintosh|Mac OS/i.test(ua) ? 'Mac'
+         : /Linux/i.test(ua) ? 'Linux' : 'Device';
+  var m = ua.match(/Android[^;]*;\s*([^;)]+?)(?:\sBuild|\))/i);
+  var model = m ? m[1].trim() : '';
+  if (model && /^(K|wv)$/i.test(model)) model = '';
+  var br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung'
+         : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+  return (os + (model ? ' · ' + model : '') + (br ? ' · ' + br : '')).slice(0, 60);
+}
+
+async function isThisDeviceRevoked() {
+  try {
+    var uid = fbAuth.currentUser && fbAuth.currentUser.uid;
+    if (!uid || !restaurantId) return false;
+    var r = await firestoreDb.collection('restaurants').doc(restaurantId)
+      .collection('revoked').doc(uid).get();
+    return r.exists;
+  } catch (e) { return false; } // offline / old rules — never lock on doubt
+}
+
+var _ownMembershipUnsub = null;
+var _ownMembershipSeen = false;
+function watchOwnMembership() {
+  try {
+    if (_ownMembershipUnsub || !firestoreDb || !restaurantId) return;
+    var uid = fbAuth.currentUser && fbAuth.currentUser.uid;
+    if (!uid) return;
+    _ownMembershipUnsub = firestoreDb.collection('restaurants').doc(restaurantId)
+      .collection('members').doc(uid)
+      .onSnapshot(function(doc) {
+        if (doc.metadata && doc.metadata.fromCache) return; // only trust the server
+        if (doc.exists) { _ownMembershipSeen = true; return; }
+        if (!_ownMembershipSeen) return;
+        isThisDeviceRevoked().then(function(rev) { if (rev) handleDeviceRevoked(); });
+      }, function() { /* ignore listener errors */ });
+  } catch (e) {}
+}
+
+function handleDeviceRevoked() {
+  if (window._deviceRevokedHandled) return;
+  window._deviceRevokedHandled = true;
+  try { if (_ownMembershipUnsub) { _ownMembershipUnsub(); _ownMembershipUnsub = null; } } catch (e) {}
+  // Stop any pending timer from writing the local copy back after the wipe.
+  try { window.save = function() {}; } catch (e) {}
+  // Remote wipe of this device's local copy (cloud data is untouched).
+  ['bb-db-v1', 'bb-lic-v1', 'bb-feat-v1', 'bb-pin-lock-v1'].forEach(function(k) {
+    try { localStorage.removeItem(k); } catch (e) {}
+  });
+  try {
+    if (firestoreDb && firestoreDb.terminate) {
+      firestoreDb.terminate().then(function() {
+        return firestoreDb.clearPersistence ? firestoreDb.clearPersistence() : null;
+      }).catch(function() {});
+    }
+  } catch (e) {}
+  document.body.innerHTML =
+    '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0F1923;padding:24px;font-family:Arial,sans-serif">'
+    + '<div style="max-width:360px;text-align:center;color:#fff">'
+    + '<div style="font-size:3rem;margin-bottom:10px">🚫</div>'
+    + '<div style="font-size:1.2rem;font-weight:800;margin-bottom:10px">Is device ka access hata diya gaya hai</div>'
+    + '<div style="font-size:0.85rem;color:rgba(255,255,255,0.65);line-height:1.6">Restaurant owner ne is device ko BillBlitz se remove kar diya hai. Is device ka local data bhi clear kar diya gaya hai.<br><br>Agar yeh galti se hua hai, owner se Settings → Connected Devices mein "Allow Again" karwayein.</div>'
+    + '</div></div>';
+}
+
+async function loadConnectedDevices() {
+  var box = document.getElementById('devices-list');
+  if (!box) return;
+  if (currentRole !== 'owner') { toast('Sirf Owner yeh dekh sakta hai!', '#FF6B35'); return; }
+  if (!isFirebaseReady || !firestoreDb || !restaurantId || licenseState.status !== 'active') {
+    box.innerHTML = '<div style="font-size:0.78rem;color:#9CA3AF">Cloud sync active hone par hi devices dikhenge.</div>';
+    return;
+  }
+  box.innerHTML = '<div style="font-size:0.78rem;color:#6B7A99">Loading...</div>';
+  try {
+    var rr = firestoreDb.collection('restaurants').doc(restaurantId);
+    var myUid = fbAuth.currentUser && fbAuth.currentUser.uid;
+    var ms = await rr.collection('members').get();
+    var rv = await rr.collection('revoked').get();
+    var members = [];
+    ms.forEach(function(d) { var x = d.data() || {}; x._uid = d.id; members.push(x); });
+    members.sort(function(a, b) { return String(b.lastSeen || b.joinedAt || '').localeCompare(String(a.lastSeen || a.joinedAt || '')); });
+    var html = '';
+    members.forEach(function(m) {
+      var mine = m._uid === myUid;
+      html += '<div style="display:flex;align-items:center;gap:8px;background:#F7F9FF;border-radius:10px;padding:10px;margin-bottom:6px">'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:700;font-size:0.82rem">' + esc(m.deviceName || m.device || 'Device')
+        + (mine ? ' <span style="background:#DCFCE7;color:#16A34A;border-radius:10px;padding:1px 7px;font-size:0.65rem">YEH DEVICE</span>' : '') + '</div>'
+        + '<div style="font-size:0.7rem;color:#6B7A99">Joined: ' + esc(m.joinedAt ? fmtDate(m.joinedAt) : '—')
+        + ' · Last seen: ' + esc(m.lastSeen ? (fmtDate(m.lastSeen) + ' ' + fmtTime(m.lastSeen)) : '—') + '</div>'
+        + '<div style="font-size:0.62rem;color:#9CA3AF">ID: ' + esc(m._uid.slice(0, 8)) + '…</div>'
+        + '</div>'
+        + (mine ? '' : '<button class="btn btn-outline" style="padding:6px 10px;font-size:0.72rem;color:#DC2626;border-color:#FCA5A5" data-uid="' + esc(m._uid) + '" onclick="revokeDevice(this.dataset.uid)">🚫 Remove</button>')
+        + '</div>';
+    });
+    if (!members.length) html += '<div style="font-size:0.78rem;color:#9CA3AF">Koi device nahi mila.</div>';
+    if (!rv.empty) {
+      html += '<div style="font-size:0.75rem;font-weight:700;color:#6B7A99;margin:10px 0 6px">Removed Devices</div>';
+      rv.forEach(function(d) {
+        var x = d.data() || {};
+        html += '<div style="display:flex;align-items:center;gap:8px;background:#FEF2F2;border-radius:10px;padding:8px 10px;margin-bottom:6px">'
+          + '<div style="flex:1;min-width:0;font-size:0.75rem"><b>' + esc(x.device || 'Device') + '</b><br><span style="color:#9CA3AF">Removed: ' + esc(x.revokedAt ? fmtDate(x.revokedAt) : '—') + '</span></div>'
+          + '<button class="btn btn-outline" style="padding:6px 10px;font-size:0.72rem" data-uid="' + esc(d.id) + '" onclick="unrevokeDevice(this.dataset.uid)">↩️ Allow Again</button>'
+          + '</div>';
+      });
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = '<div style="font-size:0.78rem;color:#DC2626">Devices load nahi hue' + (e && e.code === 'permission-denied' ? ' — naye Firestore rules (Stage C) publish hone ke baad chalega.' : '. Internet check karein.') + '</div>';
+  }
+}
+
+async function revokeDevice(uid) {
+  if (currentRole !== 'owner') { toast('Sirf Owner yeh kar sakta hai!', '#FF6B35'); return; }
+  var myUid = fbAuth.currentUser && fbAuth.currentUser.uid;
+  if (!uid || uid === myUid) return;
+  if (!confirm('Is device ko remove karna hai?\n\nWoh device turant BillBlitz data access nahi kar payega aur uska local data clear ho jayega.\n\nAgar phone CHORI hua hai, to BillBlitz support se License Key bhi rotate karwayein.')) return;
+  try {
+    var rr = firestoreDb.collection('restaurants').doc(restaurantId);
+    var snap = await rr.collection('members').doc(uid).get();
+    var m = snap.exists ? (snap.data() || {}) : {};
+    var batch = firestoreDb.batch();
+    batch.set(rr.collection('revoked').doc(uid), {
+      revokedAt: new Date().toISOString(),
+      device: String(m.deviceName || m.device || 'Device').slice(0, 80)
+    });
+    batch.delete(rr.collection('members').doc(uid));
+    await batch.commit();
+    try { createOwnerAlert('device_removed', '🚫 Device Remove Kiya Gaya', 'Device "' + String(m.deviceName || m.device || uid.slice(0, 8)) + '" ko BillBlitz access se hata diya gaya.'); } catch (e2) {}
+    toast('✅ Device remove ho gaya', '#00A878');
+  } catch (e) {
+    toast('Remove nahi hua: ' + (e && e.code === 'permission-denied' ? 'naye rules (Stage C) publish karein' : 'internet check karein'), '#FF6B35');
+  }
+  loadConnectedDevices();
+}
+
+async function unrevokeDevice(uid) {
+  if (currentRole !== 'owner') { toast('Sirf Owner yeh kar sakta hai!', '#FF6B35'); return; }
+  if (!confirm('Is device ko dobara allow karna hai? Uske baad woh License Key daal kar dobara jud sakta hai.')) return;
+  try {
+    await firestoreDb.collection('restaurants').doc(restaurantId).collection('revoked').doc(uid).delete();
+    toast('✅ Device ab dobara jud sakta hai', '#00A878');
+  } catch (e) { toast('Nahi hua — internet check karein', '#FF6B35'); }
+  loadConnectedDevices();
 }
 
 function showLicenseRotatedPrompt() {
@@ -1972,7 +2156,7 @@ async function authenticateClient(licKey, retryCount) {
     restaurantId = await resolveRestaurantId(licKey);
     // Must complete BEFORE any data read/listener starts below — under the
     // enforced rules, nothing private is readable until this device is a member.
-    await ensureRestaurantMembership(licKey);
+    if ((await ensureRestaurantMembership(licKey)) === 'revoked') return;
     // Small pause lets the SDK's internal auth/connection state fully settle
     // before we start firing Firestore operations — reduces the chance of
     // triggering the Firestore SDK's known "INTERNAL ASSERTION FAILED" bug,
@@ -3200,24 +3384,56 @@ function showForgotPinInfo(){
 }
 
 var _pinResetAuthorized = false;
+
+// ── PIN BRUTE-FORCE LOCKOUT (security audit — next batch) ─────────
+// 5 wrong tries → locked 30 sec, then 1, 2, 4, 8 min... up to 15 min per
+// wrong try. Survives app restart (stored on the device). Owner gets an
+// alert when someone keeps guessing. A correct PIN clears the counter.
+var PIN_LOCK_KEY = 'bb-pin-lock-v1';
+function _pinLockAll(){ try { return JSON.parse(localStorage.getItem(PIN_LOCK_KEY) || '{}') || {}; } catch(e){ return {}; } }
+function _pinLockSave(all){ try { localStorage.setItem(PIN_LOCK_KEY, JSON.stringify(all)); } catch(e){} }
+function pinLockRemaining(scope){
+  var s = _pinLockAll()[scope];
+  if (!s || !s.until) return 0;
+  var ms = s.until - Date.now();
+  // A lock more than 1 day in the future means the device clock was moved — reset it.
+  if (ms > 86400000) { pinLockReset(scope); return 0; }
+  return ms > 0 ? Math.ceil(ms / 1000) : 0;
+}
+function pinLockFail(scope, label){
+  var all = _pinLockAll();
+  var s = all[scope] || { fails: 0, until: 0 };
+  s.fails = (s.fails || 0) + 1;
+  if (s.fails >= 5) s.until = Date.now() + Math.min(900, 30 * Math.pow(2, s.fails - 5)) * 1000;
+  all[scope] = s; _pinLockSave(all);
+  if (s.fails === 5 || s.fails === 10 || s.fails === 20) {
+    try { createOwnerAlert('pin_bruteforce', '⚠️ Galat PIN Attempts', (label || 'PIN') + ' ke liye is device pe ' + s.fails + ' baar galat PIN daala gaya. Agar yeh aap nahi the, to PIN badal dein.'); } catch(e){}
+  }
+  return pinLockRemaining(scope);
+}
+function pinLockReset(scope){ var all = _pinLockAll(); if (all[scope]) { delete all[scope]; _pinLockSave(all); } }
+function fmtLockWait(sec){ return sec >= 60 ? Math.ceil(sec / 60) + ' min' : sec + ' sec'; }
 var _recoveryFailCount = 0;
 
 function verifyForgotPinKey(){
   var hash = db.settings && db.settings.ownerRecoveryHash;
   if (!hash) return;
-  if (_recoveryFailCount >= 5) {
+  var waitR = pinLockRemaining('recovery');
+  if (waitR > 0) {
     var errL = document.getElementById('forgot-pin-err');
-    if (errL) { errL.textContent = '🔒 Bahut zyada galat attempts. App dobara kholke try karein.'; errL.style.display = 'block'; }
+    if (errL) { errL.textContent = '🔒 Bahut zyada galat attempts. ' + fmtLockWait(waitR) + ' baad try karein.'; errL.style.display = 'block'; }
     return;
   }
   var entered = normalizeRecoveryCode(document.getElementById('forgot-pin-key').value);
   if (!entered || !verifyPin(entered, hash)) {
     _recoveryFailCount++;
+    var lockR = pinLockFail('recovery', 'Owner Recovery Code');
     var err = document.getElementById('forgot-pin-err');
-    if (err) err.style.display = 'block';
+    if (err) { if (lockR > 0) err.textContent = '🔒 Galat code. ' + fmtLockWait(lockR) + ' baad try karein.'; err.style.display = 'block'; }
     return;
   }
   _recoveryFailCount = 0;
+  pinLockReset('recovery');
   _pinResetAuthorized = true;
   showSetNewPinScreen();
 }
@@ -3293,8 +3509,17 @@ function saveNewOwnerPinFromReset(){
 }
 
 function checkPin(){
+  var lockScope = 'login-' + selectedLoginRole;
+  var waitL = pinLockRemaining(lockScope);
+  if (waitL > 0) {
+    document.getElementById('login-error').textContent = '🔒 Bahut zyada galat PIN. ' + fmtLockWait(waitL) + ' baad try karein.';
+    pinBuffer = '';
+    if (typeof updatePinDots === 'function') updatePinDots();
+    return;
+  }
   const correct = getPin(selectedLoginRole);
   if(verifyPin(pinBuffer, correct)){
+    pinLockReset(lockScope);
     upgradeRolePinIfLegacy(selectedLoginRole, pinBuffer);
     currentRole = selectedLoginRole;
     document.getElementById('login-screen').style.display = 'none';
@@ -3330,7 +3555,10 @@ function checkPin(){
     if(currentRole==='kitchen'){ setPage('kitchen'); }
     else { renderDashboard(); }
   } else {
-    document.getElementById('login-error').textContent = '❌ Wrong PIN. Try again.';
+    var lockW = pinLockFail(lockScope, (selectedLoginRole || '') + ' login');
+    document.getElementById('login-error').textContent = lockW > 0
+      ? '🔒 Bahut zyada galat PIN. ' + fmtLockWait(lockW) + ' baad try karein.'
+      : '❌ Wrong PIN. Try again.';
     pinBuffer = '';
     updatePinDots();
   }
@@ -3438,18 +3666,20 @@ function printBill(orderId){
           + '<td style="text-align:right;padding:2px 0">Rs.'+am+'</td></tr>';
   }
 
-  var rn = info.name||'My Restaurant';
-  var ra = info.addr||''; var rp = info.phone||'';
-  var rg = info.gst||'';  var rf = info.fssai||'';
-  var rm = info.msg||'Thank you! Visit again.';
+  // All restaurant/customer text is escaped — any member device can edit
+  // these values, so they must never be able to inject script into a bill.
+  var rn = esc(info.name||'My Restaurant');
+  var ra = esc(info.addr||''); var rp = esc(info.phone||'');
+  var rg = esc(info.gst||'');  var rf = esc(info.fssai||'');
+  var rm = esc(info.msg||'Thank you! Visit again.');
   var cn = '';
   if(o.customerId){
     var cx = db.customers.find(function(x){return x.id===o.customerId;});
-    if(cx) cn = cx.name||'';
+    if(cx) cn = esc(cx.name||'');
   }
 
   var html = '<div class="print-bill-wrap">'
-    + (info.logo?'<img src="'+info.logo+'" style="max-width:60px;max-height:60px;display:block;margin:0 auto 6px">':'')
+    + logoImgTag(info.logo, 'style="max-width:60px;max-height:60px;display:block;margin:0 auto 6px"')
     + '<h2>'+rn+'</h2>'
     + (ra?'<div class="pc">'+ra+'</div>':'')
     + (rp?'<div class="pc">Ph: '+rp+'</div>':'')
@@ -3467,10 +3697,10 @@ function printBill(orderId){
     + '<table>'+rows+'</table>'
     + '<hr class="s">'
     + '<table>'
-    + '<tr><td>Subtotal</td><td style="text-align:right">Rs.'+o.subtotal.toFixed(2)+'</td></tr>'
+    + '<tr><td>Subtotal</td><td style="text-align:right">Rs.'+(Number(o.subtotal)||0).toFixed(2)+'</td></tr>'
     + (o.tax?getGSTBreakdown(o).map(function(g){return '<tr><td>'+g.name+' ('+g.pct.toFixed(1).replace(/\.0$/,'')+'%)</td><td style="text-align:right">Rs.'+g.amt.toFixed(2)+'</td></tr>';}).join(''):'')
-    + (o.discount?'<tr><td>Discount</td><td style="text-align:right">-Rs.'+o.discount.toFixed(2)+'</td></tr>':'')
-    + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.'+o.total.toFixed(2)+'</td></tr>'
+    + (o.discount?'<tr><td>Discount</td><td style="text-align:right">-Rs.'+(Number(o.discount)||0).toFixed(2)+'</td></tr>':'')
+    + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.'+(Number(o.total)||0).toFixed(2)+'</td></tr>'
     + '</table>'
     + '<hr>'
     + '<div class="pc">'+rm+'</div>'
@@ -3514,6 +3744,7 @@ function ensureJsPDFLib(cb) {
   if (window.jspdf && window.jspdf.jsPDF) { cb(); return; }
   var s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  s.integrity = 'sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA=='; s.crossOrigin = 'anonymous'; s.referrerPolicy = 'no-referrer';
   s.onload = cb;
   s.onerror = function(){ toast('PDF library load nahi hui. Internet check karein.', '#FF6B35'); };
   document.head.appendChild(s);
@@ -5217,16 +5448,24 @@ function requestOwnerApproval(actionLabel, onApproved) {
 
 function verifyOwnerApproval() {
   var entered = (document.getElementById('owner-approval-pin').value || '').trim();
+  var waitA = pinLockRemaining('owner-approval');
+  if (waitA > 0) {
+    var errA = document.getElementById('owner-approval-err');
+    if (errA) { errA.textContent = '🔒 Bahut zyada galat PIN. ' + fmtLockWait(waitA) + ' baad try karein.'; errA.style.display = 'block'; }
+    return;
+  }
   var correct = getPin('owner');
   if (verifyPin(entered, correct)) {
+    pinLockReset('owner-approval');
     upgradeRolePinIfLegacy('owner', entered);
     var cb = window._pendingOwnerApproval;
     window._pendingOwnerApproval = null;
     closeModal();
     if (typeof cb === 'function') cb();
   } else {
+    var lockA = pinLockFail('owner-approval', 'Owner approval');
     var err = document.getElementById('owner-approval-err');
-    if (err) err.style.display = 'block';
+    if (err) { if (lockA > 0) err.textContent = '🔒 Bahut zyada galat PIN. ' + fmtLockWait(lockA) + ' baad try karein.'; err.style.display = 'block'; }
     var inp = document.getElementById('owner-approval-pin');
     if (inp) { inp.value = ''; inp.focus(); }
     toast('Galat Owner PIN!', '#FF6B35');
@@ -5737,7 +5976,7 @@ function viewBanquetBooking(id) {
     + (b.menuNotes ? '<div style="font-size:0.78rem;color:#6B7A99;margin-top:6px">' + esc(b.menuNotes) + '</div>' : '')
     + '<div class="bill-total"><span>Subtotal (Tax Se Pehle)</span><span>' + fmt(preTax) + '</span></div>'
     + '</div></div>'
-    + (b.advance ? '<div style="font-size:0.8rem;color:#16A34A;margin:10px 0">Advance Received: ' + fmt(b.advance) + ' (' + (b.advanceMode||'cash').toUpperCase() + ')</div>' : '')
+    + (b.advance ? '<div style="font-size:0.8rem;color:#16A34A;margin:10px 0">Advance Received: ' + fmt(b.advance) + ' (' + esc(String(b.advanceMode||'cash').toUpperCase()) + ')</div>' : '')
     + '<button class="btn btn-outline btn-full" style="margin-top:10px;margin-bottom:8px" data-bid="' + id + '" onclick="printBanquetPerforma(this.dataset.bid)">📋 Booking Performa (Customer Ko Dene Ke Liye)</button>'
     + '<button class="btn btn-primary btn-full" style="margin-bottom:8px" data-bid="' + id + '" onclick="generateBanquetBill(this.dataset.bid)">🧾 Generate Bill</button>'
     + '<button class="btn btn-red btn-full" data-bid="' + id + '" onclick="deleteBanquetBooking(this.dataset.bid)">🗑️ Delete Booking</button>';
@@ -5792,7 +6031,7 @@ function showBanquetBillReceipt(id) {
   var remaining = getBanquetRemainingBalance(b);
 
   var paymentRows = '';
-  if (b.advance) paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Advance — ' + (b.advanceMode||'cash').toUpperCase() + ' (Booking Time)</span><span>-' + fmt(b.advance) + '</span></div>';
+  if (b.advance) paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Advance — ' + esc(String(b.advanceMode||'cash').toUpperCase()) + ' (Booking Time)</span><span>-' + fmt(b.advance) + '</span></div>';
   (b.payments || []).forEach(function(p) {
     paymentRows += '<div class="bill-row" style="color:#16A34A"><span>Payment — ' + esc((p.mode||'').toUpperCase()) + ' (' + fmtDate(p.date) + ')</span><span>-' + fmt(p.amount) + '</span></div>';
   });
@@ -5930,7 +6169,7 @@ function printBanquetPerforma(id) {
 
   var html = '<div class="print-pro-wrap">'
     + '<div class="pro-letterhead">'
-    + (info.logo ? '<img class="pro-logo" src="' + info.logo + '"/>' : '')
+    + logoImgTag(info.logo, 'class="pro-logo"')
     + '<div style="flex:1">'
     + '<div class="pro-hall-name">' + esc(hallName) + '</div>'
     + (hallAddr ? '<div class="pro-hall-sub">' + esc(hallAddr) + '</div>' : '')
@@ -5955,7 +6194,7 @@ function printBanquetPerforma(id) {
     + '<div class="row"><span>' + b.plates + ' Plates × Rs.' + b.ratePerPlate.toFixed(2) + '</span><span>Rs.' + subtotal.toFixed(2) + '</span></div>'
     + (extra ? '<div class="row"><span>Extra Charges</span><span>Rs.' + extra.toFixed(2) + '</span></div>' : '')
     + '<div class="row grand"><span>Estimated Total*</span><span>Rs.' + (subtotal + extra).toFixed(2) + '</span></div>'
-    + (b.advance ? '<div class="row"><span>Advance Received — ' + (b.advanceMode||'cash').toUpperCase() + '</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
+    + (b.advance ? '<div class="row"><span>Advance Received — ' + esc(String(b.advanceMode||'cash').toUpperCase()) + '</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
     + '</div>'
     + '<div style="font-size:10px;color:#94A3B8;margin-bottom:20px">*Applicable taxes extra — final amount confirmed on the tax invoice at billing.</div>'
 
@@ -5989,7 +6228,7 @@ function printBanquetBillProfessional(orderId) {
 
   var html = '<div class="print-pro-wrap">'
     + '<div class="pro-letterhead">'
-    + (info.logo ? '<img class="pro-logo" src="' + info.logo + '"/>' : '')
+    + logoImgTag(info.logo, 'class="pro-logo"')
     + '<div style="flex:1">'
     + '<div class="pro-hall-name">' + esc(hallName) + '</div>'
     + (hallAddr ? '<div class="pro-hall-sub">' + esc(hallAddr) + '</div>' : '')
@@ -6014,8 +6253,8 @@ function printBanquetBillProfessional(orderId) {
     + '<div class="row"><span>Subtotal</span><span>Rs.' + b.subtotal.toFixed(2) + '</span></div>'
     + gstRowsHtml
     + '<div class="row grand"><span>Total</span><span>Rs.' + b.total.toFixed(2) + '</span></div>'
-    + (b.advance ? '<div class="row"><span>Advance Received — ' + (b.advanceMode||'cash').toUpperCase() + '</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
-    + (b.payments || []).map(function(p){ return '<div class="row"><span>Payment — ' + p.mode.toUpperCase() + '</span><span>-Rs.' + p.amount.toFixed(2) + '</span></div>'; }).join('')
+    + (b.advance ? '<div class="row"><span>Advance Received — ' + esc(String(b.advanceMode||'cash').toUpperCase()) + '</span><span>-Rs.' + b.advance.toFixed(2) + '</span></div>' : '')
+    + (b.payments || []).map(function(p){ return '<div class="row"><span>Payment — ' + esc(String(p.mode||'').toUpperCase()) + '</span><span>-Rs.' + p.amount.toFixed(2) + '</span></div>'; }).join('')
     + (getBanquetRemainingBalance(b) > 0 ? '<div class="row due"><span>Balance Due</span><span>Rs.' + getBanquetRemainingBalance(b).toFixed(2) + '</span></div>' : '')
     + '</div>'
 
@@ -6046,7 +6285,7 @@ function printBanquetBill(orderId) {
   }).join('') : '';
 
   var html = '<div class="print-bill-wrap">'
-    + (info.logo?'<img src="'+info.logo+'" style="max-width:60px;max-height:60px;display:block;margin:0 auto 6px">':'')
+    + logoImgTag(info.logo, 'style="max-width:60px;max-height:60px;display:block;margin:0 auto 6px"')
     + '<h2>' + esc(hallName) + '</h2>'
     + (hallAddr ? '<div class="pc">' + esc(hallAddr) + '</div>' : '')
     + (hallPhone ? '<div class="pc">Ph: ' + esc(hallPhone) + '</div>' : '')
@@ -6063,8 +6302,8 @@ function printBanquetBill(orderId) {
     + '<tr><td>Subtotal</td><td style="text-align:right">Rs.' + b.subtotal.toFixed(2) + '</td></tr>'
     + gstRows
     + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.' + b.total.toFixed(2) + '</td></tr>'
-    + (b.advance ? '<tr><td>Advance Received — ' + (b.advanceMode||'cash').toUpperCase() + '</td><td style="text-align:right">-Rs.' + b.advance.toFixed(2) + '</td></tr>' : '')
-    + (b.payments || []).map(function(p){ return '<tr><td>Payment — ' + p.mode.toUpperCase() + '</td><td style="text-align:right">-Rs.' + p.amount.toFixed(2) + '</td></tr>'; }).join('')
+    + (b.advance ? '<tr><td>Advance Received — ' + esc(String(b.advanceMode||'cash').toUpperCase()) + '</td><td style="text-align:right">-Rs.' + b.advance.toFixed(2) + '</td></tr>' : '')
+    + (b.payments || []).map(function(p){ return '<tr><td>Payment — ' + esc(String(p.mode||'').toUpperCase()) + '</td><td style="text-align:right">-Rs.' + p.amount.toFixed(2) + '</td></tr>'; }).join('')
     + (getBanquetRemainingBalance(b) > 0 ? '<tr style="font-weight:700"><td>Balance Due</td><td style="text-align:right">Rs.' + getBanquetRemainingBalance(b).toFixed(2) + '</td></tr>' : '')
     + '</table>'
     + '<hr><div class="pc">Thank you!</div>'
@@ -9395,13 +9634,22 @@ function verifyStaffPin(staffId) {
 
     function doVerify() {
       var entered = (document.getElementById('verify-staff-pin').value || '').trim();
+      var staffScope = 'staff-' + s.id;
+      var waitS = pinLockRemaining(staffScope);
+      if (waitS > 0) {
+        var errS = document.getElementById('verify-pin-err');
+        if (errS) { errS.textContent = '🔒 Bahut zyada galat PIN. ' + fmtLockWait(waitS) + ' baad try karein.'; errS.style.display = 'block'; }
+        return;
+      }
       if (verifyPin(entered, s.staffPinHash)) {
+        pinLockReset(staffScope);
         if (isLegacyPinHash(s.staffPinHash)) { s.staffPinHash = hashPin(entered); save(); }
         closeModal();
         resolve(true);
       } else {
+        var lockS = pinLockFail(staffScope, 'Staff (' + (s.name || '') + ')');
         var err = document.getElementById('verify-pin-err');
-        if (err) err.style.display = 'block';
+        if (err) { if (lockS > 0) err.textContent = '🔒 Bahut zyada galat PIN. ' + fmtLockWait(lockS) + ' baad try karein.'; err.style.display = 'block'; }
         var inp = document.getElementById('verify-staff-pin');
         if (inp) { inp.value = ''; inp.focus(); }
       }
@@ -9478,7 +9726,11 @@ var FACE_MATCH_THRESHOLD = 0.55; // lower = stricter match
 function ensureFaceApiLib(cb) {
   if (window.faceapi) { cb(); return; }
   var s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js';
+  // Pinned exact version + integrity hash: an unpinned URL silently loads
+  // whatever the latest upload is — a compromised release would run inside
+  // the app with full access. The browser now refuses any modified file.
+  s.src = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js';
+  s.integrity = 'sha512-bMy5Z7WuxvUuKNiaTPveQMoUe3bQjzrz9PHnLJzxFS5tnn7cajdwsiDKRX+MiJTWVGIPdy+h/Qn0Lp2bkt7zxg=='; s.crossOrigin = 'anonymous'; s.referrerPolicy = 'no-referrer';
   s.onload = cb;
   s.onerror = function(){ toast('Face recognition library load nahi hui. Internet check karein.', '#FF6B35'); };
   document.head.appendChild(s);
@@ -9487,7 +9739,7 @@ function ensureFaceApiLib(cb) {
 function loadFaceModels(cb, onError) {
   if (faceModelsLoaded) { cb(); return; }
   ensureFaceApiLib(function() {
-    var MODEL_URL = 'https://cdn.jsdelivr.net/gh/vladmandic/face-api/model/';
+    var MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/';
     Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
       faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -10944,6 +11196,7 @@ function ensureQRCodeLib(cb) {
   if (window.QRCode) { cb(); return; }
   var s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.integrity = 'sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=='; s.crossOrigin = 'anonymous'; s.referrerPolicy = 'no-referrer';
   s.onload = cb;
   s.onerror = function(){ toast('QR library load nahi hui. Internet check karein.', '#FF6B35'); };
   document.head.appendChild(s);
@@ -10953,6 +11206,7 @@ function ensureXLSXLib(cb) {
   if (window.XLSX) { cb(); return; }
   var s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.integrity = 'sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA=='; s.crossOrigin = 'anonymous'; s.referrerPolicy = 'no-referrer';
   s.onload = cb;
   s.onerror = function(){ toast('Excel library load nahi hui. Internet check karein.', '#FF6B35'); };
   document.head.appendChild(s);
@@ -11122,7 +11376,7 @@ function openPDF(title, bodyHTML) {
     + '.pf{text-align:center;font-size:10px;color:#9CA3AF;padding-top:12px;border-top:1px solid #E2E8F5;margin-top:16px}'
     + '@media print{@page{margin:8mm}button{display:none}}</style></head><body>'
     + '<div class="ph">'
-    + (info.logo?'<img src="'+info.logo+'" style="max-height:45px;max-width:150px;display:block;margin:0 auto 6px"/>':'')
+    + logoImgTag(info.logo, 'style="max-height:45px;max-width:150px;display:block;margin:0 auto 6px"')
     + '<div class="pn">'+esc(info.name||'My Restaurant')+'</div>'
     + '<div class="pt">'+title+'</div>'
     + '<div class="pd">Generated: '+new Date().toLocaleString('en-IN')+'</div></div>'
@@ -11164,7 +11418,7 @@ function pdfSalesReport() {
     +'</table></div>'
     +'<div class="ps"><div class="pst">🧾 Recent Orders</div>'
     +'<table><tr><th>Order#</th><th>Date</th><th>Items</th><th>Payment</th><th>Total</th></tr>'
-    +orders.slice(0,30).map(o=>'<tr><td>'+displayBillNo(o)+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td><span class="'+(o.payment==='cash'?'bg':o.payment==='card'?'by':'bg')+'">'+o.payment+'</span></td><td style="font-weight:700">'+fmt(o.total)+'</td></tr>').join('')
+    +orders.slice(0,30).map(o=>'<tr><td>'+displayBillNo(o)+'</td><td>'+fmtDate(o.date)+' '+fmtTime(o.date)+'</td><td>'+o.items.length+'</td><td><span class="'+(o.payment==='cash'?'bg':o.payment==='card'?'by':'bg')+'">'+esc(o.payment)+'</span></td><td style="font-weight:700">'+fmt(o.total)+'</td></tr>').join('')
     +'</table></div>';
   openPDF('Sales Report — '+(tab.charAt(0).toUpperCase()+tab.slice(1)), html);
 }
