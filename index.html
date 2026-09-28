@@ -2401,6 +2401,15 @@ function syncCurrentOrderIntoTableOrders() {
 
 function scheduleLiveOrderSync() {
   syncCurrentOrderIntoTableOrders();
+  scheduleLiveOrderPushOnly();
+}
+
+// Push the current tableOrders[] (debounced) WITHOUT first mirroring the live
+// `order` into it. Used right after a table/room's cart is deleted (bill
+// paid / table cleared): mirroring there would copy the still-loaded, already
+// -billed cart straight back in, so the next QR order for that table would be
+// merged into the previous customer's paid items.
+function scheduleLiveOrderPushOnly() {
   if (_liveOrderSyncTimer) clearTimeout(_liveOrderSyncTimer);
   _liveOrderSyncTimer = setTimeout(pushLiveOrdersToCloud, 1200);
 }
@@ -2435,14 +2444,12 @@ function listenToLiveOrdersSync() {
     var incoming = docData.data;
     Object.keys(incoming).forEach(function(tid) {
       if (order.tableId === tid) return; // skip — being actively edited here
-      if (qrMergeGuard[tid]) return; // skip — a QR order was just merged in here, not pushed/loaded yet
       tableOrders[tid] = incoming[tid];
     });
     // Also drop any table this device thinks is active but the cloud no
     // longer has (e.g. someone else completed/cleared it elsewhere).
     Object.keys(tableOrders).forEach(function(tid) {
       if (order.tableId === tid) return;
-      if (qrMergeGuard[tid]) return;
       if (!(tid in incoming)) delete tableOrders[tid];
     });
 
@@ -4698,16 +4705,18 @@ function renderDashboard(){
 // ╚══════════════════════════════════════════════════════╝
 let order = { items:[], customerId:'', tableId:null, tableName:'', locationType:'table', kotSent:{}, kotRound:0, taxManuallySet:false };
 let tableOrders = {}; // Per-table order storage: { tableId: {items,customerId,locationType,kotSent,kotRound} }
-// Tables whose tableOrders[] entry was JUST merged by an accepted QR order
-// but isn't safely reflected in Firestore yet (and/or hasn't become the
-// live `order` on this device yet). While a table id is in here, the
-// incoming live-order cloud listener (listenToLiveOrdersSync) must NOT
-// overwrite it with a possibly-stale snapshot — otherwise an add-on QR
-// order accepted for a table nobody is actively viewing right now can be
-// silently wiped out by the next unrelated snapshot. Set right when the
-// merge happens, cleared once that data has been pushed to the cloud and
-// (if applicable) loaded into the live `order`.
-let qrMergeGuard = {};
+
+// Older builds stored accepted QR items as {id: <menuId>} instead of the
+// {menuId} shape every POS function uses. Heals such items (in carts already
+// saved/synced) the moment they're loaded; normal items pass through as-is.
+function normalizeCartItem(it) {
+  if (it && !it.menuId && it.id) {
+    var fixed = Object.assign({}, it, { menuId: it.id });
+    delete fixed.id;
+    return fixed;
+  }
+  return it;
+}
 
 function getTableOrder(tableId) {
   if(!tableId) return order;
@@ -4729,7 +4738,7 @@ function switchToTable(tableId, tableName) {
   // Load the new table's order
   if(tableId) {
     var saved = tableOrders[tableId] || { items:[], customerId:'', tableId:tableId, tableName:tableName, locationType:'table', kotSent:{}, kotRound:0, taxManuallySet:false };
-    order.items = [...(saved.items||[])];
+    order.items = (saved.items||[]).map(normalizeCartItem);
     order.customerId = saved.customerId || '';
     order.tableId = tableId;
     order.tableName = tableName || '';
@@ -6379,7 +6388,7 @@ async function completeBill(payment){
     var tbl = db.tables ? db.tables.find(function(x){return x.id===order.tableId;}) : null;
     if(tbl) { tbl.status='bill'; tbl.orderId=orderId; }
     delete tableOrders[order.tableId];
-  scheduleLiveOrderSync(); // remove this table's now-finished cart from other devices too
+  scheduleLiveOrderPushOnly(); // remove this table's now-finished cart from other devices too
   }
   showBillReceipt(o);
   order={items:[],customerId:document.getElementById('pos-customer').value||'',tableId:null,tableName:'',kotSent:{},kotRound:0,taxManuallySet:false};
@@ -9131,7 +9140,7 @@ function completeTablePayment(tableId) {
   var t = db.tables.find(function(x){return x.id===tableId;}); if(!t) return;
   t.status='empty'; t.orderId=null;
   delete tableOrders[tableId];
-  scheduleLiveOrderSync(); // remove this table's cart from other devices too
+  scheduleLiveOrderPushOnly(); // remove this table's cart from other devices too
   if(order.tableId === tableId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
@@ -9146,7 +9155,7 @@ function clearTable(tableId) {
   var t = db.tables.find(function(x){return x.id===tableId;}); if(!t) return;
   t.status='empty'; t.orderId=null;
   delete tableOrders[tableId];
-  scheduleLiveOrderSync(); // remove this table's cart from other devices too
+  scheduleLiveOrderPushOnly(); // remove this table's cart from other devices too
   if(order.tableId === tableId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
@@ -9320,7 +9329,7 @@ function completeRoomPayment(roomId) {
   var r = db.rooms.find(function(x){return x.id===roomId;}); if(!r) return;
   r.status='empty'; r.orderId=null;
   delete tableOrders[roomId];
-  scheduleLiveOrderSync(); // remove this room's cart from other devices too
+  scheduleLiveOrderPushOnly(); // remove this room's cart from other devices too
   if(order.tableId === roomId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',locationType:'table',kotSent:{},kotRound:0,taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
@@ -9335,7 +9344,7 @@ function clearRoom(roomId) {
   var r = db.rooms.find(function(x){return x.id===roomId;}); if(!r) return;
   r.status='empty'; r.orderId=null;
   delete tableOrders[roomId];
-  scheduleLiveOrderSync(); // remove this room's cart from other devices too
+  scheduleLiveOrderPushOnly(); // remove this room's cart from other devices too
   if(order.tableId === roomId) {
     order = {items:[],customerId:'',tableId:null,tableName:'',locationType:'table',kotSent:{},kotRound:0,taxManuallySet:false};
     var tblLbl = document.getElementById('billing-table-name');
@@ -11135,9 +11144,13 @@ async function acceptQROrder(orderId) {
     }
   } catch(e) {}
 
-  // Convert QR items into internal order format
+  // Convert QR items into the SAME cart-item shape the POS uses everywhere
+  // (addToOrder, qty +/- buttons, KOT rounds, KOT edit, returns all key on
+  // `menuId`). Previously these were built as `{id: ...}`, so every QR item
+  // had menuId === undefined — qty buttons hit the wrong row and all QR items
+  // shared one KOT slot, so add-on items looked "already sent to kitchen".
   var newItems = o.items.map(function(it) {
-    return { id: it.menuId, name: it.name, price: it.price, qty: it.qty };
+    return { menuId: it.menuId, name: it.name, price: it.price, qty: it.qty };
   });
 
   var targetTableId = o.tableId;
@@ -11149,36 +11162,37 @@ async function acceptQROrder(orderId) {
       : db.tables.find(function(x){ return x.id === targetTableId; });
 
     if (loc) {
-      // Merge into existing table/room order (or create fresh)
+      // ADD-ON QR ORDER FIX. If this table/room's bill is the one currently
+      // open (the normal case for an add-on — the first order left it open),
+      // the live `order` object is the authoritative cart. Capture it into
+      // tableOrders[] first so nothing typed by staff is lost, then merge.
+      if (order.tableId === targetTableId) syncCurrentOrderIntoTableOrders();
       var existing = tableOrders[targetTableId] || { items: [], customerId: '', tableId: targetTableId, tableName: loc.name, locationType: isRoomOrder?'room':'table' };
+      existing.items = (existing.items || []).map(normalizeCartItem);
       newItems.forEach(function(ni) {
-        var found = existing.items.find(function(x){ return x.id === ni.id; });
+        var found = existing.items.find(function(x){ return x.menuId === ni.menuId; });
         if (found) found.qty += ni.qty; else existing.items.push(ni);
       });
       tableOrders[targetTableId] = existing;
-      // Protect this merge from the live-order cloud listener until it's
-      // either safely pushed to the cloud or loaded into the live `order`
-      // below — see qrMergeGuard's comment at its declaration.
-      qrMergeGuard[targetTableId] = true;
+      // Load the merged cart into the live `order` RIGHT NOW, before
+      // setPage('billing') below. setPage re-renders the bill, and every
+      // render mirrors the live `order` back into tableOrders[] — previously
+      // the live order was only switched 200ms later, so that render copied
+      // the OLD open bill (first order only) over the merge and the add-on
+      // items silently vanished.
+      switchToTable(targetTableId, loc.name);
+      order.locationType = isRoomOrder ? 'room' : 'table';
       loc.status = 'occupied';
       save();
-      // Push the merged cart to the cloud right away instead of waiting for
-      // some unrelated cart edit to trigger it — accepting a QR order never
-      // otherwise pushes tableOrders[], so without this the merge could sit
-      // cloud-invisible (and locally vulnerable) indefinitely.
-      pushLiveOrdersToCloud();
       closeModal();
       setPage('billing');
       var icon = isRoomOrder ? '🛏️' : '🪑';
       setTimeout(function() {
-        switchToTable(targetTableId, loc.name);
-        order.locationType = isRoomOrder ? 'room' : 'table';
         if (!order.taxManuallySet) applyAutoGST();
         var sel = document.getElementById('billing-table-name');
         if (sel){ sel.textContent = icon + ' ' + loc.name; sel.style.display='inline-block'; }
         renderOrderItems();
         toast('✅ Order accepted — ' + loc.name + ' billing khul gaya!', '#00A878');
-        delete qrMergeGuard[targetTableId];
       }, 200);
     } else {
       acceptAsTakeaway(o, newItems);
