@@ -4704,8 +4704,14 @@ function getTableOrder(tableId) {
 }
 
 function switchToTable(tableId, tableName) {
-  // Save current order back to its table
-  if(order.tableId) {
+  // Save current order back to its table — but ONLY when actually leaving it
+  // for a different table. If tableId is the SAME table already open, the
+  // caller (e.g. acceptQROrder merging an add-on QR order) may have just
+  // written fresher data straight into tableOrders[tableId]; the in-memory
+  // `order` object here is then stale, and saving it back would silently
+  // overwrite/discard that fresh merge (this caused add-on QR orders to
+  // vanish when accepted while that table's billing screen was open).
+  if(order.tableId && order.tableId !== tableId) {
     tableOrders[order.tableId] = { items:[...order.items], customerId:order.customerId, tableId:order.tableId, tableName:order.tableName, locationType:order.locationType||'table', kotSent:Object.assign({},order.kotSent), kotRound:order.kotRound||0, kotHistory:(order.kotHistory||[]).slice(), taxManuallySet:order.taxManuallySet||false };
   }
   // Load the new table's order
