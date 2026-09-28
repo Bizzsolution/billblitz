@@ -11072,8 +11072,8 @@ function showQROrdersModal() {
         + (o.note ? '<div class="qr-order-note">📝 ' + esc(o.note) + '</div>' : '')
         + '<div class="qr-order-total"><span>Total</span><span>' + fmt(qrTrustedTotal) + '</span></div>'
         + '<div class="qr-order-actions">'
-        + '<button class="btn btn-green" style="flex:1" data-oid="' + o.id + '" onclick="acceptQROrder(this.dataset.oid)">✅ Accept</button>'
-        + '<button class="btn btn-red" style="flex:1" data-oid="' + o.id + '" onclick="declineQROrder(this.dataset.oid)">✕ Decline</button>'
+        + '<button class="btn btn-green" style="flex:1" data-oid="' + esc(o.id) + '" onclick="acceptQROrder(this.dataset.oid)">✅ Accept</button>'
+        + '<button class="btn btn-red" style="flex:1" data-oid="' + esc(o.id) + '" onclick="declineQROrder(this.dataset.oid)">✕ Decline</button>'
         + '</div>'
         + '</div>';
     });
