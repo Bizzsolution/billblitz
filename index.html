@@ -2435,12 +2435,14 @@ function listenToLiveOrdersSync() {
     var incoming = docData.data;
     Object.keys(incoming).forEach(function(tid) {
       if (order.tableId === tid) return; // skip — being actively edited here
+      if (qrMergeGuard[tid]) return; // skip — a QR order was just merged in here, not pushed/loaded yet
       tableOrders[tid] = incoming[tid];
     });
     // Also drop any table this device thinks is active but the cloud no
     // longer has (e.g. someone else completed/cleared it elsewhere).
     Object.keys(tableOrders).forEach(function(tid) {
       if (order.tableId === tid) return;
+      if (qrMergeGuard[tid]) return;
       if (!(tid in incoming)) delete tableOrders[tid];
     });
 
@@ -4696,6 +4698,16 @@ function renderDashboard(){
 // ╚══════════════════════════════════════════════════════╝
 let order = { items:[], customerId:'', tableId:null, tableName:'', locationType:'table', kotSent:{}, kotRound:0, taxManuallySet:false };
 let tableOrders = {}; // Per-table order storage: { tableId: {items,customerId,locationType,kotSent,kotRound} }
+// Tables whose tableOrders[] entry was JUST merged by an accepted QR order
+// but isn't safely reflected in Firestore yet (and/or hasn't become the
+// live `order` on this device yet). While a table id is in here, the
+// incoming live-order cloud listener (listenToLiveOrdersSync) must NOT
+// overwrite it with a possibly-stale snapshot — otherwise an add-on QR
+// order accepted for a table nobody is actively viewing right now can be
+// silently wiped out by the next unrelated snapshot. Set right when the
+// merge happens, cleared once that data has been pushed to the cloud and
+// (if applicable) loaded into the live `order`.
+let qrMergeGuard = {};
 
 function getTableOrder(tableId) {
   if(!tableId) return order;
@@ -11144,8 +11156,17 @@ async function acceptQROrder(orderId) {
         if (found) found.qty += ni.qty; else existing.items.push(ni);
       });
       tableOrders[targetTableId] = existing;
+      // Protect this merge from the live-order cloud listener until it's
+      // either safely pushed to the cloud or loaded into the live `order`
+      // below — see qrMergeGuard's comment at its declaration.
+      qrMergeGuard[targetTableId] = true;
       loc.status = 'occupied';
       save();
+      // Push the merged cart to the cloud right away instead of waiting for
+      // some unrelated cart edit to trigger it — accepting a QR order never
+      // otherwise pushes tableOrders[], so without this the merge could sit
+      // cloud-invisible (and locally vulnerable) indefinitely.
+      pushLiveOrdersToCloud();
       closeModal();
       setPage('billing');
       var icon = isRoomOrder ? '🛏️' : '🪑';
@@ -11157,6 +11178,7 @@ async function acceptQROrder(orderId) {
         if (sel){ sel.textContent = icon + ' ' + loc.name; sel.style.display='inline-block'; }
         renderOrderItems();
         toast('✅ Order accepted — ' + loc.name + ' billing khul gaya!', '#00A878');
+        delete qrMergeGuard[targetTableId];
       }, 200);
     } else {
       acceptAsTakeaway(o, newItems);
