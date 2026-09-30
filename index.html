@@ -1112,7 +1112,10 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <div class="page" id="page-tables">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="page-title" style="margin:0">🪑 Table Management</div>
-      <button class="qr-badge-btn" data-qr-nav onclick="showQROrdersModal()">📱 QR Orders<span class="qr-badge-count-target"></span></button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="qr-badge-btn" onclick="showManageLocations('table')">✏️ Manage</button>
+        <button class="qr-badge-btn" data-qr-nav onclick="showQROrdersModal()">📱 QR Orders<span class="qr-badge-count-target"></span></button>
+      </div>
     </div>
     <div class="table-stats" id="table-stats"></div>
     <div class="table-section-tabs" id="table-section-tabs"></div>
@@ -1124,7 +1127,10 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <div class="page" id="page-rooms">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="page-title" style="margin:0">🛏️ Room Service</div>
-      <button class="qr-badge-btn" data-qr-nav onclick="showQROrdersModal()">📱 QR Orders<span class="qr-badge-count-target"></span></button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="qr-badge-btn" onclick="showManageLocations('room')">✏️ Manage</button>
+        <button class="qr-badge-btn" data-qr-nav onclick="showQROrdersModal()">📱 QR Orders<span class="qr-badge-count-target"></span></button>
+      </div>
     </div>
     <div class="table-stats" id="room-stats"></div>
     <div class="tables-grid" id="rooms-grid"></div>
@@ -9017,7 +9023,6 @@ function tableAction(tableId) {
       '<div style="display:flex;flex-direction:column;gap:8px">'+
       '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();startManualTableBilling(this.dataset.tid,this.dataset.tname)">➕ Start Billing (Manual)</button>'+
       qrBtn+
-      '<button class="btn btn-outline btn-full" data-tid="'+t.id+'" onclick="closeModal();editTableModal(this.dataset.tid)">✏️ Edit Table</button>'+
       '</div>';
     openModal();
   } else {
@@ -9050,7 +9055,6 @@ function tableAction(tableId) {
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
       (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+t.id+'\',\'table\')">💰 Collect Payment</button>':'')+
-      '<button class="btn btn-outline btn-full" data-tid="'+t.id+'" onclick="closeModal();editTableModal(this.dataset.tid)">✏️ Edit Table</button>'+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearTable(\''+t.id+'\')">🗑️ Clear Table</button>':'')+
       '</div>';
     openModal();
@@ -9224,8 +9228,74 @@ function editTableModal(tableId) {
     '<div class="form-group" style="flex:1"><label class="form-label">Section</label>'+
     '<input class="form-inp" id="edit-table-sec" value="'+esc(t.section||'Indoor')+'"/></div></div>'+
     '<div style="font-size:0.68rem;color:#6B7A99;margin-bottom:10px">Pehle se chhapa hua QR code kaam karta rahega — naya naam customer ko dikhane ke liye QR dobara print kar sakte hain.</div>'+
-    '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" onclick="saveEditTable(this.dataset.tid)">💾 Save Changes</button>';
+    '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" onclick="saveEditTable(this.dataset.tid)">💾 Save Changes</button>'+
+    '<button class="btn btn-outline btn-full" style="margin-top:8px" onclick="showManageLocations(\'table\')">← Back</button>';
   openModal();
+}
+
+// ── MANAGE TABLES / ROOMS ─────────────────────────────────────
+// Edit/Delete live ONLY here (header "✏️ Manage" button), never in the
+// popup that opens when a table/room is tapped — so a busy tap during
+// service can't lead to an accidental edit or delete.
+function showManageLocations(kind) {
+  var isRoom = kind === 'room';
+  if (isRoom && !checkFeatureAccess('room_service')) return;
+  var list = isRoom ? (db.rooms || []) : (db.tables || []);
+  var isOwner = currentRole === 'owner';
+  var rows = list.map(function(x) {
+    var sub = isRoom ? esc(x.type || 'Standard') + ' · ₹' + (x.tariff || 0) + '/night'
+                     : (parseInt(x.capacity) || 4) + ' seats · ' + esc(x.section || 'Indoor');
+    var st = x.status === 'empty' ? '🟢' : (x.status === 'occupied' ? '🟡' : '🔴');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #F1F5F9">'
+      + '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.88rem">' + st + ' ' + (isRoom ? '🛏️ ' : '') + esc(x.name) + '</div>'
+      + '<div style="font-size:0.7rem;color:#6B7A99">' + sub + '</div></div>'
+      + '<button class="btn btn-sm btn-outline" data-id="' + esc(x.id) + '" onclick="' + (isRoom ? 'editRoomModal' : 'editTableModal') + '(this.dataset.id)">✏️ Edit</button>'
+      + (isOwner ? '<button class="btn btn-sm btn-red" data-id="' + esc(x.id) + '" onclick="deleteLocation(\'' + kind + '\', this.dataset.id)">🗑️</button>' : '')
+      + '</div>';
+  }).join('');
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">✏️ Manage ' + (isRoom ? 'Rooms' : 'Tables') + '</div>'
+    + (rows || '<div class="empty">Koi ' + (isRoom ? 'room' : 'table') + ' nahi hai.</div>')
+    + (isOwner ? '<div style="font-size:0.68rem;color:#6B7A99;margin-top:10px">🗑️ Delete sirf khali ' + (isRoom ? 'room' : 'table') + ' ka hota hai (🟢).</div>'
+               : '<div style="font-size:0.68rem;color:#6B7A99;margin-top:10px">🔒 Delete sirf Owner kar sakta hai.</div>')
+    + '<button class="btn btn-outline btn-full" style="margin-top:10px" onclick="closeModal()">Close</button>';
+  openModal();
+}
+
+// ── DELETE TABLE / ROOM (created by mistake / no longer needed) ──
+// Owner only, and only when the table/room is completely free — never while
+// an order, unpaid bill, open cart or pending QR order is attached, so no
+// running order or bill data can be lost. Past bills keep their own copy of
+// the table/room name, so reports are unaffected.
+function deleteLocation(kind, id) {
+  var isRoom = kind === 'room';
+  var label = isRoom ? 'Room' : 'Table';
+  if (currentRole !== 'owner') { toast('🔒 Sirf Owner ' + label + ' delete kar sakta hai.', '#FF6B35'); return; }
+  var list = isRoom ? (db.rooms || []) : (db.tables || []);
+  var loc = list.find(function(x){ return x.id === id; });
+  if (!loc) return;
+  var cart = tableOrders[id];
+  var liveHere = order.tableId === id && order.items.length > 0;
+  var pendingQR = (db.qrOrders || []).some(function(o){ return o.tableId === id; });
+  if (loc.status !== 'empty' || (cart && (cart.items || []).length) || liveHere) {
+    toast('⚠️ ' + loc.name + ' abhi khali nahi hai — pehle bill/payment complete karke ' + label + ' clear karein, phir delete karein.', '#FF6B35');
+    return;
+  }
+  if (pendingQR) {
+    toast('⚠️ ' + loc.name + ' ka QR order pending hai — pehle use Accept/Decline karein.', '#FF6B35');
+    return;
+  }
+  if (!confirm(loc.name + ' ko permanently delete karein?\n\nIska QR code bhi kaam karna band kar dega.')) return;
+  if (isRoom) db.rooms = db.rooms.filter(function(x){ return x.id !== id; });
+  else db.tables = db.tables.filter(function(x){ return x.id !== id; });
+  if (order.tableId === id) switchToTable(null); // before the delete — switching away saves the cart back
+  delete tableOrders[id];
+  scheduleLiveOrderPushOnly();
+  save();
+  if (isRoom) renderRooms(); else renderTables();
+  showManageLocations(kind);
+  toast('🗑️ ' + loc.name + ' delete ho gaya.', '#00A878');
 }
 
 function saveEditTable(tableId) {
@@ -9238,7 +9308,7 @@ function saveEditTable(tableId) {
   t.capacity = parseInt(document.getElementById('edit-table-cap').value) || 4;
   t.section = document.getElementById('edit-table-sec').value.trim() || 'Indoor';
   renameLocationEverywhere(t.id, name, false);
-  save(); closeModal(); renderTables(); toast('✅ Table updated!', '#00A878');
+  save(); renderTables(); showManageLocations('table'); toast('✅ Table updated!', '#00A878');
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -9287,7 +9357,6 @@ function roomAction(roomId) {
       '<div style="display:flex;flex-direction:column;gap:8px">'+
       '<button class="btn btn-primary btn-full" data-rid="'+r.id+'" data-rname="'+esc(r.name)+'" onclick="closeModal();startManualRoomBilling(this.dataset.rid,this.dataset.rname)">➕ Start Order (Manual)</button>'+
       qrBtn+
-      '<button class="btn btn-outline btn-full" data-rid="'+r.id+'" onclick="closeModal();editRoomModal(this.dataset.rid)">✏️ Edit Room / Tariff</button>'+
       '</div>';
     openModal();
   } else {
@@ -9315,7 +9384,6 @@ function roomAction(roomId) {
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
       (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+r.id+'\',\'room\')">💰 Collect Payment</button>':'')+
-      '<button class="btn btn-outline btn-full" data-rid="'+r.id+'" onclick="closeModal();editRoomModal(this.dataset.rid)">✏️ Edit Room / Tariff</button>'+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearRoom(\''+r.id+'\')">🗑️ Clear Room</button>':'')+
       '</div>';
     openModal();
@@ -9335,7 +9403,8 @@ function editRoomModal(roomId) {
     '<div class="form-group"><label class="form-label">Room Tariff (₹/night) *</label>'+
     '<input class="form-inp" id="edit-room-tariff" type="number" value="'+(r.tariff||0)+'"/>'+
     '<div style="font-size:0.68rem;color:#6B7A99;margin-top:4px">GST rule: ₹7,500+ tariff waale room service pe 18% GST lagta hai, isse kam pe 5%</div></div>'+
-    '<button class="btn btn-primary btn-full" data-rid="'+r.id+'" onclick="saveEditRoom(this.dataset.rid)">💾 Save Changes</button>';
+    '<button class="btn btn-primary btn-full" data-rid="'+r.id+'" onclick="saveEditRoom(this.dataset.rid)">💾 Save Changes</button>'+
+    '<button class="btn btn-outline btn-full" style="margin-top:8px" onclick="showManageLocations(\'room\')">← Back</button>';
   openModal();
 }
 
@@ -9349,7 +9418,7 @@ function saveEditRoom(roomId) {
   r.type = document.getElementById('edit-room-type').value.trim() || 'Standard';
   r.tariff = parseFloat(document.getElementById('edit-room-tariff').value) || 0;
   renameLocationEverywhere(r.id, name, true);
-  save(); closeModal(); renderRooms(); toast('✅ Room updated!', '#00A878');
+  save(); renderRooms(); showManageLocations('room'); toast('✅ Room updated!', '#00A878');
 }
 
 function startManualRoomBilling(roomId, roomName) {
