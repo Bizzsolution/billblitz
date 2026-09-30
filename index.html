@@ -9017,6 +9017,7 @@ function tableAction(tableId) {
       '<div style="display:flex;flex-direction:column;gap:8px">'+
       '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" data-tname="'+esc(t.name)+'" onclick="closeModal();startManualTableBilling(this.dataset.tid,this.dataset.tname)">➕ Start Billing (Manual)</button>'+
       qrBtn+
+      '<button class="btn btn-outline btn-full" data-tid="'+t.id+'" onclick="closeModal();editTableModal(this.dataset.tid)">✏️ Edit Table</button>'+
       '</div>';
     openModal();
   } else {
@@ -9049,6 +9050,7 @@ function tableAction(tableId) {
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
       (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+t.id+'\',\'table\')">💰 Collect Payment</button>':'')+
+      '<button class="btn btn-outline btn-full" data-tid="'+t.id+'" onclick="closeModal();editTableModal(this.dataset.tid)">✏️ Edit Table</button>'+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearTable(\''+t.id+'\')">🗑️ Clear Table</button>':'')+
       '</div>';
     openModal();
@@ -9187,6 +9189,58 @@ function saveNewTable() {
   save(); closeModal(); renderTables(); toast('✅ '+name+' added!','#00A878');
 }
 
+// ── EDIT TABLE / ROOM ─────────────────────────────────────────
+// Only the display fields change — the internal id never does, so running
+// orders, bills, reports and already-printed QR codes (which route by id)
+// all keep working after a rename.
+function isDuplicateLocationName(list, name, selfId) {
+  var n = name.trim().toLowerCase();
+  return (list || []).some(function(x){ return x.id !== selfId && String(x.name || '').trim().toLowerCase() === n; });
+}
+
+// Carries a new name into the in-progress cart (this device + other devices
+// via live sync) and the billing header, if that table/room is open.
+function renameLocationEverywhere(id, newName, isRoom) {
+  if (tableOrders[id]) tableOrders[id].tableName = newName;
+  if (order.tableId === id) {
+    order.tableName = newName;
+    var lbl = document.getElementById('billing-table-name');
+    if (lbl && lbl.style.display !== 'none') lbl.textContent = (isRoom ? '🛏️ ' : '🪑 ') + newName;
+  }
+  if (tableOrders[id] || order.tableId === id) scheduleLiveOrderSync();
+}
+
+function editTableModal(tableId) {
+  var t = (db.tables || []).find(function(x){ return x.id === tableId; });
+  if (!t) return;
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'+
+    '<div class="modal-title">✏️ Edit '+esc(t.name)+'</div>'+
+    '<div class="form-group"><label class="form-label">Table Number/Name *</label>'+
+    '<input class="form-inp" id="edit-table-name" value="'+esc(t.name)+'"/></div>'+
+    '<div style="display:flex;gap:8px">'+
+    '<div class="form-group" style="flex:1"><label class="form-label">Capacity</label>'+
+    '<input class="form-inp" id="edit-table-cap" type="number" value="'+(parseInt(t.capacity)||4)+'"/></div>'+
+    '<div class="form-group" style="flex:1"><label class="form-label">Section</label>'+
+    '<input class="form-inp" id="edit-table-sec" value="'+esc(t.section||'Indoor')+'"/></div></div>'+
+    '<div style="font-size:0.68rem;color:#6B7A99;margin-bottom:10px">Pehle se chhapa hua QR code kaam karta rahega — naya naam customer ko dikhane ke liye QR dobara print kar sakte hain.</div>'+
+    '<button class="btn btn-primary btn-full" data-tid="'+t.id+'" onclick="saveEditTable(this.dataset.tid)">💾 Save Changes</button>';
+  openModal();
+}
+
+function saveEditTable(tableId) {
+  var t = (db.tables || []).find(function(x){ return x.id === tableId; });
+  if (!t) return;
+  var name = document.getElementById('edit-table-name').value.trim();
+  if (!name) { toast('Table naam daalo!', '#FF6B35'); return; }
+  if (isDuplicateLocationName(db.tables, name, t.id)) { toast('"' + name + '" naam ki table pehle se hai — alag naam daalein.', '#FF6B35'); return; }
+  t.name = name;
+  t.capacity = parseInt(document.getElementById('edit-table-cap').value) || 4;
+  t.section = document.getElementById('edit-table-sec').value.trim() || 'Indoor';
+  renameLocationEverywhere(t.id, name, false);
+  save(); closeModal(); renderTables(); toast('✅ Table updated!', '#00A878');
+}
+
 // ╔══════════════════════════════════════════════════════════╗
 // ║       ROOM SERVICE (Attached Hotel — mirrors Tables)       ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -9261,6 +9315,7 @@ function roomAction(roomId) {
       qrBtn2+
       (o?getBillPrintButtonFullHtml(o.id):'')+
       (o&&canClearTableOrRoom()?'<button class="btn btn-outline btn-full" onclick="closeModal();showPaymentModeModal(\''+r.id+'\',\'room\')">💰 Collect Payment</button>':'')+
+      '<button class="btn btn-outline btn-full" data-rid="'+r.id+'" onclick="closeModal();editRoomModal(this.dataset.rid)">✏️ Edit Room / Tariff</button>'+
       (canClearTableOrRoom()?'<button class="btn btn-red btn-full" onclick="closeModal();clearRoom(\''+r.id+'\')">🗑️ Clear Room</button>':'')+
       '</div>';
     openModal();
@@ -9289,9 +9344,11 @@ function saveEditRoom(roomId) {
   if (!r) return;
   var name = document.getElementById('edit-room-name').value.trim();
   if (!name) { toast('Room naam daalo!', '#FF6B35'); return; }
+  if (isDuplicateLocationName(db.rooms, name, r.id)) { toast('"' + name + '" naam ka room pehle se hai — alag naam daalein.', '#FF6B35'); return; }
   r.name = name;
   r.type = document.getElementById('edit-room-type').value.trim() || 'Standard';
   r.tariff = parseFloat(document.getElementById('edit-room-tariff').value) || 0;
+  renameLocationEverywhere(r.id, name, true);
   save(); closeModal(); renderRooms(); toast('✅ Room updated!', '#00A878');
 }
 
