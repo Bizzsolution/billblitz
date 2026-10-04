@@ -169,6 +169,20 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
 .mu-review-row2 input:last-child{width:80px;}
 .mu-existing-badge{background:rgba(17,138,178,0.15);color:#60C5E0;font-size:0.68rem;font-weight:700;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:10px;}
 
+/* ══ BILLING & INVOICES ═══════════════ */
+.modal-box.wide{max-width:640px;}
+.inv-box{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 12px 4px;margin-bottom:12px;}
+.inv-box-title{font-size:0.8rem;font-weight:800;color:#FFD700;margin-bottom:10px;}
+.inv-line{background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;margin-bottom:8px;}
+.inv-line-nums{display:grid;grid-template-columns:1fr 70px 1fr;gap:6px;margin-top:6px;}
+.inv-line-nums .form-label{margin-bottom:3px;}
+.inv-view-box{background:#1A2B3C;border:1px solid rgba(255,215,0,0.2);border-radius:16px;width:100%;max-width:860px;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;}
+.inv-view-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.inv-view-scroll{overflow:auto;padding:16px;background:#2A3A4C;flex:1;}
+#inv-view-doc{background:#fff;box-shadow:0 6px 30px rgba(0,0,0,0.35);overflow:hidden;margin:0 auto;max-width:794px;}
+.inv-view-actions{display:flex;gap:6px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08);}
+.inv-view-actions .btn{flex:1;min-width:110px;padding:10px 8px;}
+@media(max-width:700px){ .inv-view-scroll{padding:8px;} .modal-bg#modal-inv-view{padding:6px;} }
 </style>
 </head>
 <body>
@@ -209,6 +223,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <div class="sb-link" id="nav-features" onclick="showSection('features');closeMobileSidebar()"><span>🎛️</span> Features</div>
       <div class="sb-link" id="nav-menuup" onclick="showSection('menuup');closeMobileSidebar()"><span>🍜</span> Menu Updater</div>
       <div class="sb-link" id="nav-revenue" onclick="showSection('revenue');closeMobileSidebar()"><span>💰</span> Revenue</div>
+      <div class="sb-link" id="nav-billing" onclick="showSection('billing');closeMobileSidebar()"><span>🧾</span> Billing</div>
       <div class="sb-link" id="nav-danger" onclick="showSection('danger');closeMobileSidebar()"><span>⚠️</span> Danger Zone</div>
       <div class="sb-link" id="nav-settings" onclick="showSection('asettings');closeMobileSidebar()"><span>⚙️</span> Settings</div>
       <div class="sb-link" style="margin-top:auto;color:#FF6B35" onclick="adminLogout()"><span>🚪</span> Logout</div>
@@ -479,6 +494,37 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       </div>
     </div>
 
+    <!-- BILLING & INVOICES -->
+    <div id="sec-billing" style="display:none">
+      <div class="topbar">
+        <div class="topbar-title">🧾 Billing &amp; Invoices</div>
+        <div class="topbar-right">
+          <button class="btn btn-outline" onclick="showInvoiceSettings()">⚙️ Invoice Settings</button>
+          <button class="btn btn-gold" onclick="showNewInvoice()">➕ New Invoice</button>
+        </div>
+      </div>
+      <div id="bill-setup-banner" style="display:none;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.3);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:0.85rem;line-height:1.5">
+        <b>👋 Shuru karne se pehle:</b> "⚙️ Invoice Settings" me ek baar apni company ki details bharein — naam, address, GSTIN (agar hai), bank/UPI. Ye har invoice par apne-aap chhapengi.
+        <div style="margin-top:10px"><button class="btn btn-gold btn-sm" onclick="showInvoiceSettings()">⚙️ Abhi Setup Karein</button></div>
+      </div>
+      <div class="stats-row" id="bill-stats"></div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-title">📋 All Invoices</div></div>
+        <div class="card-body">
+          <div class="search-wrap">
+            <span class="search-ico">🔍</span>
+            <input class="search-inp" id="bill-search" placeholder="Invoice no. ya client ka naam..." oninput="renderBilling()"/>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="admin-table">
+              <thead><tr><th>Invoice</th><th>Client</th><th>Amount</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="bill-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- DANGER ZONE -->
     <div id="sec-danger" style="display:none">
       <div class="topbar"><div class="topbar-title">⚠️ Danger Zone</div></div>
@@ -630,6 +676,29 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
   </div>
 </div>
 
+<div class="modal-bg" id="modal-inv-settings" data-sticky="1">
+  <div class="modal-box wide" id="modal-inv-settings-body"></div>
+</div>
+<div class="modal-bg" id="modal-new-inv" data-sticky="1">
+  <div class="modal-box wide" id="modal-new-inv-body"></div>
+</div>
+<div class="modal-bg" id="modal-inv-view">
+  <div class="inv-view-box">
+    <div class="inv-view-hdr">
+      <div style="font-weight:800;color:#FFD700;font-size:0.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="inv-view-title"></div>
+      <button class="btn btn-outline btn-sm" onclick="closeModal('modal-inv-view')">✕ Close</button>
+    </div>
+    <div class="inv-view-scroll"><div id="inv-view-doc"></div></div>
+    <div class="inv-view-actions" id="inv-view-actions">
+      <button class="btn btn-gold" id="iv-btn-share" onclick="shareInvoice()">📤 Share PDF</button>
+      <button class="btn btn-green" id="iv-btn-wa" onclick="whatsappInvoice()">💬 WhatsApp</button>
+      <button class="btn btn-blue" id="iv-btn-mail" onclick="emailInvoice()">✉️ Email</button>
+      <button class="btn btn-outline" id="iv-btn-dl" onclick="downloadInvoicePdf()">⬇️ Download PDF</button>
+      <button class="btn btn-outline" onclick="printInvoice()">🖨️ Print</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -651,7 +720,9 @@ let adminData = {
   clients: [],
   keys: [],
   announcements: [],
-  settings: { prefix:'BB', trialDays:30, bizName:'', bizWa:'', bizUpi:'' }
+  settings: { prefix:'BB', trialDays:30, bizName:'', bizWa:'', bizUpi:'' },
+  invoices: [],
+  billingProfile: null
 };
 
 // ══ INIT ══════════════════════════════════════════
@@ -717,6 +788,7 @@ firebase.auth().onAuthStateChanged(function(user) {
     load();
     showSection('dashboard');
     syncFromFirebase();
+    syncBillingFromFirebase();
   } else {
     document.getElementById('admin-wrap').style.display = 'none';
     document.getElementById('admin-login').style.display = 'flex';
@@ -766,7 +838,7 @@ function closeMobileSidebar() {
 }
 
 function showSection(id) {
-  ['dashboard','clients','keys','announce','revenue','asettings','features','menuup','danger'].forEach(s => {
+  ['dashboard','clients','keys','announce','revenue','billing','asettings','features','menuup','danger'].forEach(s => {
     const el = document.getElementById('sec-'+s);
     const nav = document.getElementById('nav-'+s);
     if(el) el.style.display = s===id ? 'block' : 'none';
@@ -780,6 +852,7 @@ function showSection(id) {
   if(id==='keys') renderKeys();
   if(id==='announce') renderAnnouncements();
   if(id==='revenue') renderRevenue();
+  if(id==='billing') { renderBilling(); syncBillingFromFirebase(); }
   if(id==='asettings') loadSettings();
 }
 
@@ -1019,6 +1092,7 @@ function viewClient(clientId) {
     ${c.notes?`<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px;font-size:0.82rem;margin-bottom:12px;color:rgba(255,255,255,0.6)">${esc(c.notes)}</div>`:''}
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-gold btn-full" onclick="closeModal('modal-view-client');extendClient('${c.id}')">🔄 Extend / Renew</button>
+      <button class="btn btn-blue btn-full" data-id="${esc(c.id)}" onclick="newInvoiceForClient(this.dataset.id)">🧾 Create Invoice</button>
       <button class="btn btn-outline btn-full" onclick="whatsappKey('${c.key}','${esc(c.name)}','${fmtDate(c.expiry)}','${c.phone}')">📲 Send Key WhatsApp</button>
       <button class="btn btn-outline btn-full" onclick="closeModal('modal-view-client')">Close</button>
     </div>`;
@@ -1383,7 +1457,7 @@ function toast(msg, color) {
 }
 // Close modal on background click
 document.querySelectorAll('.modal-bg').forEach(m=>{
-  m.addEventListener('click',function(e){ if(e.target===m) m.classList.remove('open'); });
+  m.addEventListener('click',function(e){ if(e.target===m && !m.dataset.sticky) m.classList.remove('open'); });
 });
 
 // Enter to login
@@ -2171,6 +2245,757 @@ async function saveClientFeatures() {
     toast('Firebase error: '+e.message+'. Firestore rules check karein.','#FF6B35');
   }
 }
+
+// ═══════════════════════════════════════════════════
+// BILLING & INVOICES (admin-only) — GST-compliant invoices for BillBlitz
+// clients. Data: admin_billing/profile (seller details), admin_billing/
+// counter_<FY> (consecutive numbering), admin_invoices/<id> (each invoice,
+// with a frozen copy of seller + client details so later edits never change
+// an issued invoice). Falls back to this device's storage if the cloud
+// rejects the write (e.g. rules not yet published).
+// ═══════════════════════════════════════════════════
+var GST_STATES = [
+  ['01','Jammu & Kashmir'],['02','Himachal Pradesh'],['03','Punjab'],['04','Chandigarh'],['05','Uttarakhand'],
+  ['06','Haryana'],['07','Delhi'],['08','Rajasthan'],['09','Uttar Pradesh'],['10','Bihar'],['11','Sikkim'],
+  ['12','Arunachal Pradesh'],['13','Nagaland'],['14','Manipur'],['15','Mizoram'],['16','Tripura'],['17','Meghalaya'],
+  ['18','Assam'],['19','West Bengal'],['20','Jharkhand'],['21','Odisha'],['22','Chhattisgarh'],['23','Madhya Pradesh'],
+  ['24','Gujarat'],['26','Dadra & Nagar Haveli and Daman & Diu'],['27','Maharashtra'],['29','Karnataka'],['30','Goa'],
+  ['31','Lakshadweep'],['32','Kerala'],['33','Tamil Nadu'],['34','Puducherry'],['35','Andaman & Nicobar Islands'],
+  ['36','Telangana'],['37','Andhra Pradesh'],['38','Ladakh'],['97','Other Territory']
+];
+var GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+var PLAN_LABEL = { monthly:'Monthly Subscription', yearly:'Annual Subscription', lifetime:'Lifetime License', trial:'Subscription', custom:'Subscription' };
+var PLAN_SHORT = { monthly:'Monthly', yearly:'Annual', lifetime:'Lifetime', trial:'Trial', custom:'Custom' };
+var SUB_PRODUCT = 'BillBlitz — Restaurant POS Software';
+
+var invItems = [];        // line items of the invoice being drafted
+var invCloudWarned = false;
+
+function bProfile() { return adminData.billingProfile || null; }
+function stateName(code) { var s = GST_STATES.find(function(x){ return x[0] === code; }); return s ? s[1] : ''; }
+function stateOptions(sel) {
+  return '<option value="">-- State chunein --</option>' + GST_STATES.map(function(s){
+    return '<option value="'+s[0]+'"'+(s[0]===sel?' selected':'')+'>'+s[1]+' ('+s[0]+')</option>'; }).join('');
+}
+function r2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function money(n) { return '₹' + r2(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function isoDate(d) { var x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); }
+function addDays(dStr, n) { var d = new Date(dStr + 'T12:00:00'); d.setDate(d.getDate() + n); return isoDate(d); }
+function fyOf(dStr) {
+  var d = new Date(dStr + 'T12:00:00'); var y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+  return String(y).slice(2) + '-' + String(y + 1).slice(2);
+}
+var MON3 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtLong(dStr) { if (!dStr) return '—'; var d = new Date(String(dStr).slice(0,10) + 'T12:00:00'); if (isNaN(d)) return '—'; return String(d.getDate()).padStart(2,'0') + ' ' + MON3[d.getMonth()] + ' ' + d.getFullYear(); }
+
+// Indian-system amount in words: "Rupees Twelve Thousand Five Hundred and Fifty Paise Only"
+function amountInWords(amount) {
+  var a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  var b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  function two(n) { return n < 20 ? a[n] : b[Math.floor(n/10)] + (n%10 ? ' ' + a[n%10] : ''); }
+  function three(n) { var h = Math.floor(n/100), r = n%100; return (h ? a[h] + ' Hundred' + (r ? ' ' : '') : '') + (r ? two(r) : ''); }
+  function words(n) {
+    if (n === 0) return 'Zero';
+    var out = [], cr = Math.floor(n/10000000); n %= 10000000;
+    var lk = Math.floor(n/100000); n %= 100000;
+    var th = Math.floor(n/1000); n %= 1000;
+    if (cr) out.push(words(cr) + ' Crore');
+    if (lk) out.push(two(lk) + ' Lakh');
+    if (th) out.push(two(th) + ' Thousand');
+    if (n) out.push(three(n));
+    return out.join(' ');
+  }
+  amount = r2(amount);
+  var rupees = Math.floor(amount), paise = Math.round((amount - rupees) * 100);
+  return 'Rupees ' + words(rupees) + (paise ? ' and ' + two(paise) + ' Paise' : '') + ' Only';
+}
+
+// ── Totals: one place, used by the live form, the saved invoice and the PDF ──
+function computeInvoiceTotals(items, discount, inclusive, taxMode, rate) {
+  var gross = r2(items.reduce(function(s, it){ return s + r2((Number(it.qty)||0) * (Number(it.rate)||0)); }, 0));
+  discount = Math.min(r2(discount), gross);
+  var afterDisc = r2(gross - discount);
+  var taxable = (taxMode !== 'none' && inclusive) ? r2(afterDisc / (1 + rate/100)) : afterDisc;
+  var cgst = 0, sgst = 0, igst = 0;
+  if (taxMode === 'intra') { cgst = r2(taxable * rate / 200); sgst = r2(taxable * rate / 200); }
+  else if (taxMode === 'inter') { igst = r2(taxable * rate / 100); }
+  var exact = (taxMode !== 'none' && inclusive) ? afterDisc : r2(taxable + cgst + sgst + igst);
+  var total = Math.round(exact);
+  return { gross: gross, discount: discount, taxable: taxable, cgst: cgst, sgst: sgst, igst: igst, roundOff: r2(total - exact), total: total };
+}
+
+// ── Cloud sync ──
+async function syncBillingFromFirebase() {
+  try {
+    var p = await db_admin.collection('admin_billing').doc('profile').get();
+    if (p.exists) adminData.billingProfile = p.data();
+    var snap = await db_admin.collection('admin_invoices').get();
+    if (!snap.empty) {
+      var cloud = snap.docs.map(function(d){ return d.data(); });
+      // keep any invoice that only exists locally (cloud write had failed)
+      var ids = cloud.map(function(i){ return i.id; });
+      var localOnly = (adminData.invoices || []).filter(function(i){ return ids.indexOf(i.id) === -1; });
+      adminData.invoices = cloud.concat(localOnly);
+    }
+    save();
+  } catch (e) { console.log('Billing sync:', e); }
+  if (document.getElementById('sec-billing') && document.getElementById('sec-billing').style.display !== 'none') renderBilling();
+}
+async function cloudSet(col, id, data) {
+  try { await db_admin.collection(col).doc(id).set(data, { merge: true }); return true; }
+  catch (e) {
+    console.log('Billing cloud save failed:', e);
+    if (!invCloudWarned) { invCloudWarned = true; toast('⚠️ Cloud save nahi hua — Firestore rules update karein. Abhi is device par save hai.', '#FF6B35'); }
+    return false;
+  }
+}
+
+// ── Section render ──
+function renderBilling() {
+  if (!adminData.invoices) adminData.invoices = [];
+  var prof = bProfile();
+  var setupEl = document.getElementById('bill-setup-banner');
+  if (setupEl) setupEl.style.display = prof ? 'none' : 'block';
+  var fy = fyOf(isoDate(new Date()));
+  var live = adminData.invoices.filter(function(i){ return i.status !== 'cancelled'; });
+  var fyInv = live.filter(function(i){ return fyOf(i.date) === fy; });
+  var paid = fyInv.filter(function(i){ return i.status === 'paid'; }).reduce(function(s,i){ return s + i.totals.total; }, 0);
+  var outstanding = live.filter(function(i){ return i.status === 'unpaid'; }).reduce(function(s,i){ return s + i.totals.total; }, 0);
+  var overdue = live.filter(function(i){ return i.status === 'unpaid' && i.dueDate < isoDate(new Date()); }).length;
+  var statsEl = document.getElementById('bill-stats');
+  if (statsEl) statsEl.innerHTML = [
+    { val: money(fyInv.reduce(function(s,i){ return s + i.totals.total; }, 0)).replace('.00',''), lbl: 'Invoiced (FY ' + fy + ')', color: '#60A5FA' },
+    { val: money(paid).replace('.00',''), lbl: 'Received (FY ' + fy + ')', color: '#00C896' },
+    { val: money(outstanding).replace('.00',''), lbl: 'Outstanding', color: '#FFD700' },
+    { val: overdue, lbl: 'Overdue Invoices', color: '#FF6B35' }
+  ].map(function(s){ return '<div class="stat-box"><div class="stat-val" style="color:'+s.color+'">'+s.val+'</div><div class="stat-lbl">'+s.lbl+'</div></div>'; }).join('');
+
+  var q = (document.getElementById('bill-search') ? document.getElementById('bill-search').value : '').toLowerCase();
+  var list = adminData.invoices.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); })
+    .filter(function(i){ return !q || i.number.toLowerCase().indexOf(q) !== -1 || (i.client.name||'').toLowerCase().indexOf(q) !== -1; });
+  var tbody = document.getElementById('bill-tbody');
+  if (!tbody) return;
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.3);padding:20px">' + (adminData.invoices.length ? 'Koi invoice match nahi hua' : 'Abhi tak koi invoice nahi bana — "➕ New Invoice" dabayein') + '</td></tr>'; return; }
+  var today = isoDate(new Date());
+  tbody.innerHTML = list.map(function(i) {
+    var badge = i.status === 'paid' ? '<span class="badge-pill badge-green">Paid</span>'
+      : i.status === 'cancelled' ? '<span class="badge-pill badge-grey">Cancelled</span>'
+      : i.dueDate < today ? '<span class="badge-pill badge-red">Overdue</span>'
+      : '<span class="badge-pill badge-yellow">Unpaid</span>';
+    var id = esc(i.id);
+    return '<tr>'
+      + '<td><div style="font-weight:700;font-family:monospace">'+esc(i.number)+'</div><div style="font-size:0.72rem;color:rgba(255,255,255,0.4)">'+fmtLong(i.date)+'</div></td>'
+      + '<td><div style="font-weight:700">'+esc(i.client.name)+'</div><div style="font-size:0.72rem;color:rgba(255,255,255,0.4)">'+esc(i.client.phone||'')+'</div></td>'
+      + '<td style="font-weight:700;color:#00C896;white-space:nowrap">'+money(i.totals.total)+'</td>'
+      + '<td style="font-size:0.8rem;white-space:nowrap">'+fmtLong(i.dueDate)+'</td>'
+      + '<td>'+badge+'</td>'
+      + '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
+      + '<button class="btn btn-sm btn-gold" data-id="'+id+'" onclick="openInvoicePreview(this.dataset.id)">👁 View / Send</button>'
+      + (i.status === 'unpaid' ? '<button class="btn btn-sm btn-green" data-id="'+id+'" onclick="markInvoicePaid(this.dataset.id)">✅ Paid</button>' : '')
+      + (i.status === 'unpaid' ? '<button class="btn btn-sm btn-red" data-id="'+id+'" onclick="cancelInvoice(this.dataset.id)">✕</button>' : '')
+      + '</div></td></tr>';
+  }).join('');
+}
+
+// ── Invoice settings (seller profile) ──
+function showInvoiceSettings() {
+  var p = bProfile() || {};
+  var v = function(k, d){ return esc(p[k] !== undefined ? p[k] : (d || '')); };
+  document.getElementById('modal-inv-settings-body').innerHTML =
+    '<div class="modal-title">⚙️ Invoice Settings (Aapki Company)</div>'
+    + '<div style="font-size:0.75rem;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5">Ye details har invoice ke upar "From" me chhapti hain. Ek baar bharein — dono admins ke liye cloud me save hoti hain.</div>'
+    + '<div class="form-group"><label class="form-label">Legal Business Name *</label><input class="form-inp" id="bp-name" value="'+v('name', adminData.settings.bizName)+'" placeholder="e.g. BizzSathi"/></div>'
+    + '<div class="form-group"><label class="form-label">Address *</label><textarea class="form-inp" id="bp-address" rows="2" placeholder="Office / building, street, area">'+v('address')+'</textarea></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">City *</label><input class="form-inp" id="bp-city" value="'+v('city')+'"/></div>'
+    + '<div class="form-group"><label class="form-label">PIN Code</label><input class="form-inp" id="bp-pin" value="'+v('pincode')+'" inputmode="numeric" maxlength="6"/></div></div>'
+    + '<div class="form-group"><label class="form-label">State *</label><select class="form-select" id="bp-state">'+stateOptions(p.stateCode)+'</select></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Phone</label><input class="form-inp" id="bp-phone" value="'+v('phone', adminData.settings.bizWa)+'"/></div>'
+    + '<div class="form-group"><label class="form-label">Email</label><input class="form-inp" id="bp-email" type="email" value="'+v('email')+'"/></div></div>'
+    + '<div class="form-group"><label class="form-label">Website</label><input class="form-inp" id="bp-web" value="'+v('website')+'" placeholder="www.example.com"/></div>'
+    + '<div style="background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:12px;padding:12px;margin-bottom:12px">'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;font-weight:700;margin-bottom:10px;cursor:pointer"><input type="checkbox" id="bp-gst" '+(p.gstRegistered?'checked':'')+' onchange="document.getElementById(\'bp-gst-fields\').style.display=this.checked?\'block\':\'none\'" style="width:18px;height:18px"/> GST registered hoon (Tax Invoice banega)</label>'
+    + '<div id="bp-gst-fields" style="display:'+(p.gstRegistered?'block':'none')+'">'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">GSTIN</label><input class="form-inp" id="bp-gstin" value="'+v('gstin')+'" maxlength="15" style="text-transform:uppercase"/></div>'
+    + '<div class="form-group"><label class="form-label">GST Rate %</label><input class="form-inp" id="bp-rate" type="number" value="'+v('gstRate','18')+'"/></div></div>'
+    + '<div class="form-group"><label class="form-label">SAC Code (service)</label><input class="form-inp" id="bp-sac" value="'+v('sac','997331')+'"/><div style="font-size:0.68rem;color:rgba(255,255,255,0.4);margin-top:-6px">Software subscription ke liye aam taur par 997331 / 998315 — apne CA se confirm kar lein.</div></div>'
+    + '</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.45)">GST registered nahi hain to invoice bina GST ke banega (GST charge nahi kar sakte).</div></div>'
+    + '<div class="form-group"><label class="form-label">PAN</label><input class="form-inp" id="bp-pan" value="'+v('pan')+'" maxlength="10" style="text-transform:uppercase"/></div>'
+    + '<div class="modal-title" style="font-size:0.9rem;margin-top:6px">💳 Payment Details (invoice par chhapegi)</div>'
+    + '<div class="form-group"><label class="form-label">UPI ID</label><input class="form-inp" id="bp-upi" value="'+v('upi', adminData.settings.bizUpi)+'" placeholder="yourname@upi"/><div style="font-size:0.68rem;color:rgba(255,255,255,0.4);margin-top:-6px">UPI ID dene par invoice par "Scan to Pay" QR code bhi aayega.</div></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Bank Name</label><input class="form-inp" id="bp-bank" value="'+v('bankName')+'"/></div>'
+    + '<div class="form-group"><label class="form-label">Account Holder</label><input class="form-inp" id="bp-acname" value="'+v('accountName')+'"/></div></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Account Number</label><input class="form-inp" id="bp-acno" value="'+v('accountNo')+'"/></div>'
+    + '<div class="form-group"><label class="form-label">IFSC</label><input class="form-inp" id="bp-ifsc" value="'+v('ifsc')+'" style="text-transform:uppercase"/></div></div>'
+    + '<div class="modal-title" style="font-size:0.9rem;margin-top:6px">🧾 Invoice Defaults</div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Invoice No. Prefix</label><input class="form-inp" id="bp-prefix" value="'+v('invoicePrefix','INV')+'" maxlength="5" style="text-transform:uppercase"/></div>'
+    + '<div class="form-group"><label class="form-label">Payment Due (days)</label><input class="form-inp" id="bp-terms" type="number" value="'+v('termsDays','7')+'"/></div></div>'
+    + '<div style="font-size:0.68rem;color:rgba(255,255,255,0.4);margin:-6px 0 10px">Number aisa banega: <b id="bp-numprev"></b> (financial year ke hisaab se 0001 se shuru)</div>'
+    + '<div class="form-group"><label class="form-label">Authorised Signatory Name</label><input class="form-inp" id="bp-signer" value="'+v('signatory')+'"/></div>'
+    + '<div class="form-group"><label class="form-label">Terms & Conditions</label><textarea class="form-inp" id="bp-terms-text" rows="3">'+v('termsText','Payment is due by the due date mentioned on this invoice.\nSubscription fees are billed in advance for the billing period stated.\nFees once paid are non-refundable, except where required by law.\nPlease quote the invoice number as the payment reference.')+'</textarea></div>'
+    + '<div style="display:flex;gap:8px"><button class="btn btn-gold" style="flex:1" onclick="saveInvoiceSettings()">💾 Save Settings</button><button class="btn btn-outline" onclick="closeModal(\'modal-inv-settings\')">Cancel</button></div>';
+  var upd = function(){ document.getElementById('bp-numprev').textContent = ((document.getElementById('bp-prefix').value||'INV').toUpperCase()) + '/' + fyOf(isoDate(new Date())) + '/0001'; };
+  openModal('modal-inv-settings'); upd();
+  document.getElementById('bp-prefix').oninput = upd;
+}
+
+async function saveInvoiceSettings() {
+  var g = function(id){ return (document.getElementById(id).value || '').trim(); };
+  var p = {
+    name: g('bp-name'), address: g('bp-address'), city: g('bp-city'), pincode: g('bp-pin'), stateCode: g('bp-state'),
+    phone: g('bp-phone'), email: g('bp-email'), website: g('bp-web'), pan: g('bp-pan').toUpperCase(),
+    gstRegistered: document.getElementById('bp-gst').checked, gstin: g('bp-gstin').toUpperCase(),
+    gstRate: parseFloat(g('bp-rate')) || 18, sac: g('bp-sac'),
+    upi: g('bp-upi'), bankName: g('bp-bank'), accountName: g('bp-acname'), accountNo: g('bp-acno'), ifsc: g('bp-ifsc').toUpperCase(),
+    invoicePrefix: (g('bp-prefix') || 'INV').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0,5) || 'INV',
+    termsDays: Math.max(0, parseInt(g('bp-terms')) || 0), signatory: g('bp-signer'), termsText: g('bp-terms-text'),
+    updatedAt: new Date().toISOString()
+  };
+  if (!p.name || !p.address || !p.city || !p.stateCode) { toast('Name, Address, City aur State zaroori hain!', '#FF6B35'); return; }
+  if (p.gstRegistered) {
+    if (!GSTIN_RE.test(p.gstin)) { toast('GSTIN sahi format me nahi hai (15 characters)!', '#FF6B35'); return; }
+    if (p.gstin.slice(0,2) !== p.stateCode) { toast('GSTIN ke pehle 2 digit (' + p.gstin.slice(0,2) + ') aapke State code se match nahi karte!', '#FF6B35'); return; }
+  }
+  if (p.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(p.pan)) { toast('PAN sahi format me nahi hai!', '#FF6B35'); return; }
+  adminData.billingProfile = p; save();
+  await cloudSet('admin_billing', 'profile', p);
+  closeModal('modal-inv-settings'); renderBilling();
+  toast('✅ Invoice settings saved!', '#00C896');
+}
+
+// ── New invoice ──
+function showNewInvoice(presetClientId) {
+  if (!bProfile()) { toast('Pehle "⚙️ Invoice Settings" me apni company details bharein.', '#FF6B35'); showInvoiceSettings(); return; }
+  var p = bProfile();
+  var today = isoDate(new Date());
+  var clients = adminData.clients.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  document.getElementById('modal-new-inv-body').innerHTML =
+    '<div class="modal-title">🧾 New Invoice</div>'
+    + '<div class="form-group"><label class="form-label">Client Chunein *</label><select class="form-select" id="ni-client" onchange="onInvoiceClientChange()"><option value="">-- Client chunein --</option>'
+    + clients.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.name)+(c.city?' — '+esc(c.city):'')+'</option>'; }).join('') + '</select></div>'
+    + '<div id="ni-rest" style="display:none">'
+    + '<div class="inv-box"><div class="inv-box-title">👤 Bill To</div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Business Name *</label><input class="form-inp" id="ni-cname"/></div>'
+    + '<div class="form-group"><label class="form-label">Contact Person</label><input class="form-inp" id="ni-cowner"/></div></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Phone</label><input class="form-inp" id="ni-cphone"/></div>'
+    + '<div class="form-group"><label class="form-label">Email</label><input class="form-inp" id="ni-cemail" type="email"/></div></div>'
+    + '<div class="form-group"><label class="form-label">Address</label><textarea class="form-inp" id="ni-caddr" rows="2"></textarea></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">City</label><input class="form-inp" id="ni-ccity"/></div>'
+    + '<div class="form-group"><label class="form-label">PIN Code</label><input class="form-inp" id="ni-cpin" maxlength="6"/></div></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">State (Place of Supply) *</label><select class="form-select" id="ni-cstate" onchange="recalcInvoice()">'+stateOptions('')+'</select></div>'
+    + '<div class="form-group"><label class="form-label">Client GSTIN (optional)</label><input class="form-inp" id="ni-cgstin" maxlength="15" style="text-transform:uppercase" oninput="onClientGstinInput()"/></div></div>'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer"><input type="checkbox" id="ni-savecl" checked/> Ye details client record me save karein (agli baar khud bhar jayengi)</label></div>'
+    + '<div class="inv-box"><div class="inv-box-title">📦 Subscription</div>'
+    + '<div class="form-group"><label class="form-label">Product</label><input class="form-inp" id="ni-sprod" value="'+esc(SUB_PRODUCT)+'"/></div>'
+    + '<div class="form-group"><label class="form-label">Plan</label><input class="form-inp" id="ni-splan" placeholder="e.g. Annual / Monthly / Premium"/></div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Period From</label><input class="form-inp" id="ni-sfrom" type="date" onchange="onSubPeriodChange()"/></div>'
+    + '<div class="form-group"><label class="form-label">Period To</label><input class="form-inp" id="ni-sto" type="date" onchange="onSubPeriodChange()"/></div></div></div>'
+    + '<div class="inv-box"><div class="inv-box-title">📅 Invoice Details</div>'
+    + '<div class="form-row"><div class="form-group"><label class="form-label">Invoice Date</label><input class="form-inp" id="ni-date" type="date" value="'+today+'" onchange="document.getElementById(\'ni-due\').value=addDays(this.value,'+(p.termsDays||0)+')"/></div>'
+    + '<div class="form-group"><label class="form-label">Due Date</label><input class="form-inp" id="ni-due" type="date" value="'+addDays(today, p.termsDays||0)+'"/></div></div>'
+    + '<div style="font-size:0.7rem;color:rgba(255,255,255,0.45)">Invoice number save karte waqt apne-aap lagega (' + esc(p.invoicePrefix) + '/' + fyOf(today) + '/…)</div></div>'
+    + '<div class="inv-box"><div class="inv-box-title">📦 Items</div><div id="ni-items"></div>'
+    + '<button class="btn btn-sm btn-outline" onclick="addInvoiceItem()" style="margin-top:4px">➕ Add Line</button></div>'
+    + '<div class="inv-box"><div class="form-row"><div class="form-group"><label class="form-label">Discount (₹)</label><input class="form-inp" id="ni-disc" type="number" min="0" value="0" oninput="recalcInvoice()"/></div>'
+    + (p.gstRegistered ? '<div class="form-group" style="display:flex;align-items:flex-end"><label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;cursor:pointer;margin-bottom:14px"><input type="checkbox" id="ni-incl" onchange="recalcInvoice()" style="width:18px;height:18px"/> Rates me GST shamil hai</label></div>' : '<div></div>')
+    + '</div><div class="form-group"><label class="form-label">Note to client (optional)</label><input class="form-inp" id="ni-note" placeholder="e.g. Thank you for choosing BillBlitz!"/></div>'
+    + '<div id="ni-totals"></div></div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-gold" style="flex:1" id="ni-create" onclick="createInvoice()">✅ Create Invoice</button>'
+    + '<button class="btn btn-outline" onclick="previewDraftInvoice()">👁 Preview</button>'
+    + '<button class="btn btn-outline" onclick="closeModal(\'modal-new-inv\')">Cancel</button></div>'
+    + '</div>';
+  invItems = [];
+  openModal('modal-new-inv');
+  if (presetClientId) { document.getElementById('ni-client').value = presetClientId; onInvoiceClientChange(); }
+}
+
+function onInvoiceClientChange() {
+  var c = adminData.clients.find(function(x){ return x.id === document.getElementById('ni-client').value; });
+  document.getElementById('ni-rest').style.display = c ? 'block' : 'none';
+  if (!c) return;
+  var b = c.billing || {};
+  var set = function(id, v){ document.getElementById(id).value = v || ''; };
+  set('ni-cname', b.name || c.name); set('ni-cowner', b.contact || c.owner); set('ni-cphone', b.phone || c.phone);
+  set('ni-cemail', b.email); set('ni-caddr', b.address); set('ni-ccity', b.city || c.city); set('ni-cpin', b.pincode);
+  set('ni-cgstin', b.gstin);
+  document.getElementById('ni-cstate').value = b.stateCode || (bProfile().stateCode || '');
+  var p = bProfile(), today = document.getElementById('ni-date').value;
+  var to = c.expiry && c.expiry > today ? c.expiry : addDays(today, c.plan === 'yearly' ? 364 : 29);
+  var lifetime = c.plan === 'lifetime';
+  set('ni-splan', PLAN_SHORT[c.plan] || ''); set('ni-sfrom', today); set('ni-sto', lifetime ? '' : to);
+  invItems = [{
+    desc: 'BillBlitz Restaurant POS — ' + (PLAN_LABEL[c.plan] || 'Subscription'),
+    period: lifetime ? 'One-time license' : fmtLong(today) + ' to ' + fmtLong(to),
+    sac: p.sac || '', qty: 1, rate: Number(c.amount) || 0
+  }];
+  renderInvoiceItems(); recalcInvoice();
+}
+
+// Keeps the first line's detail text in step with the Subscription period
+function onSubPeriodChange() {
+  var f = document.getElementById('ni-sfrom').value, t = document.getElementById('ni-sto').value;
+  if (invItems[0] && f && t) { invItems[0].period = fmtLong(f) + ' to ' + fmtLong(t); renderInvoiceItems(); }
+}
+
+function onClientGstinInput() {
+  var el = document.getElementById('ni-cgstin'); var g = el.value.toUpperCase();
+  if (GSTIN_RE.test(g) && stateName(g.slice(0,2))) { document.getElementById('ni-cstate').value = g.slice(0,2); recalcInvoice(); }
+}
+
+function renderInvoiceItems() {
+  var el = document.getElementById('ni-items'); if (!el) return;
+  el.innerHTML = invItems.map(function(it, i) {
+    return '<div class="inv-line">'
+      + '<div style="display:flex;gap:6px;align-items:center"><input class="form-inp" style="margin:0;flex:1" placeholder="Description" value="'+esc(it.desc)+'" oninput="invItems['+i+'].desc=this.value"/>'
+      + (invItems.length > 1 ? '<button class="btn btn-sm btn-red" onclick="invItems.splice('+i+',1);renderInvoiceItems();recalcInvoice()">✕</button>' : '') + '</div>'
+      + '<input class="form-inp" style="margin:6px 0 0;font-size:0.78rem" placeholder="Detail line (e.g. service period) — optional" value="'+esc(it.period)+'" oninput="invItems['+i+'].period=this.value"/>'
+      + '<div class="inv-line-nums">'
+      + '<div><label class="form-label">SAC</label><input class="form-inp" style="margin:0" value="'+esc(it.sac)+'" oninput="invItems['+i+'].sac=this.value"/></div>'
+      + '<div><label class="form-label">Qty</label><input class="form-inp" style="margin:0" type="number" min="1" value="'+esc(it.qty)+'" oninput="invItems['+i+'].qty=parseFloat(this.value)||0;recalcInvoice()"/></div>'
+      + '<div><label class="form-label">Rate (₹)</label><input class="form-inp" style="margin:0" type="number" min="0" value="'+esc(it.rate)+'" oninput="invItems['+i+'].rate=parseFloat(this.value)||0;recalcInvoice()"/></div>'
+      + '</div></div>';
+  }).join('');
+}
+function addInvoiceItem() { invItems.push({ desc:'', period:'', sac:(bProfile().sac||''), qty:1, rate:0 }); renderInvoiceItems(); }
+
+function taxModeFor(p, clientState) {
+  if (!p.gstRegistered) return 'none';
+  return clientState && clientState === p.stateCode ? 'intra' : 'inter';
+}
+function recalcInvoice() {
+  var el = document.getElementById('ni-totals'); if (!el) return;
+  var p = bProfile();
+  var mode = taxModeFor(p, document.getElementById('ni-cstate').value);
+  var inclEl = document.getElementById('ni-incl');
+  var t = computeInvoiceTotals(invItems, parseFloat(document.getElementById('ni-disc').value) || 0, inclEl && inclEl.checked, mode, p.gstRate || 18);
+  var row = function(l, v, strong){ return '<div style="display:flex;justify-content:space-between;padding:3px 0;'+(strong?'font-weight:800;font-size:1rem;color:#FFD700;border-top:1px solid rgba(255,255,255,0.1);margin-top:4px;padding-top:8px':'font-size:0.82rem;color:rgba(255,255,255,0.7)')+'"><span>'+l+'</span><span>'+v+'</span></div>'; };
+  var rate = p.gstRate || 18;
+  el.innerHTML = '<div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:10px 12px">'
+    + row('Subtotal', money(t.gross)) + (t.discount ? row('Discount', '− ' + money(t.discount)) : '')
+    + (mode !== 'none' ? row('Taxable Value', money(t.taxable)) : '')
+    + (mode === 'intra' ? row('CGST @ ' + (rate/2) + '%', money(t.cgst)) + row('SGST @ ' + (rate/2) + '%', money(t.sgst)) : '')
+    + (mode === 'inter' ? row('IGST @ ' + rate + '%', money(t.igst)) : '')
+    + (t.roundOff ? row('Round Off', (t.roundOff > 0 ? '+ ' : '− ') + money(Math.abs(t.roundOff))) : '')
+    + row('Total', money(t.total), true)
+    + '<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:4px">' + (mode === 'intra' ? 'Same state → CGST + SGST' : mode === 'inter' ? 'Different state → IGST' : 'GST registered nahi — tax nahi lagega') + '</div></div>';
+}
+
+function collectDraftInvoice() {
+  var c = adminData.clients.find(function(x){ return x.id === document.getElementById('ni-client').value; });
+  if (!c) { toast('Client chunein!', '#FF6B35'); return null; }
+  var g = function(id){ return (document.getElementById(id).value || '').trim(); };
+  var client = { id: c.id, name: g('ni-cname'), contact: g('ni-cowner'), phone: g('ni-cphone'), email: g('ni-cemail'),
+    address: g('ni-caddr'), city: g('ni-ccity'), pincode: g('ni-cpin'), stateCode: g('ni-cstate'), gstin: g('ni-cgstin').toUpperCase() };
+  if (!client.name) { toast('Client ka business name daalein!', '#FF6B35'); return null; }
+  if (!client.stateCode) { toast('Client ka State (Place of Supply) chunein!', '#FF6B35'); return null; }
+  if (client.gstin && !GSTIN_RE.test(client.gstin)) { toast('Client GSTIN sahi format me nahi hai!', '#FF6B35'); return null; }
+  var items = invItems.map(function(it){ return { desc: (it.desc||'').trim(), period: (it.period||'').trim(), sac: (it.sac||'').trim(), qty: Number(it.qty)||0, rate: r2(it.rate) }; })
+    .filter(function(it){ return it.desc && it.qty > 0; });
+  if (!items.length) { toast('Kam se kam ek item (description + qty) daalein!', '#FF6B35'); return null; }
+  var date = g('ni-date'), due = g('ni-due') || date;
+  if (!date) { toast('Invoice date daalein!', '#FF6B35'); return null; }
+  if (due < date) { toast('Due date invoice date se pehle nahi ho sakti!', '#FF6B35'); return null; }
+  var sub = { product: g('ni-sprod'), plan: g('ni-splan'), from: g('ni-sfrom'), to: g('ni-sto') };
+  if (sub.from && sub.to && sub.to < sub.from) { toast('Subscription "Period To" date "From" se pehle nahi ho sakti!', '#FF6B35'); return null; }
+  var p = bProfile();
+  var mode = taxModeFor(p, client.stateCode);
+  var inclEl = document.getElementById('ni-incl');
+  var inclusive = !!(inclEl && inclEl.checked);
+  var totals = computeInvoiceTotals(items, parseFloat(g('ni-disc')) || 0, inclusive, mode, p.gstRate || 18);
+  if (totals.total <= 0) { toast('Invoice total 0 se zyada hona chahiye!', '#FF6B35'); return null; }
+  return { client: client, sub: sub, items: items, date: date, dueDate: due, taxMode: mode, gstRate: p.gstRate || 18, inclusive: inclusive,
+    totals: totals, note: g('ni-note'), seller: JSON.parse(JSON.stringify(p)), saveClient: document.getElementById('ni-savecl').checked };
+}
+
+function previewDraftInvoice() {
+  var d = collectDraftInvoice(); if (!d) return;
+  d.number = (d.seller.invoicePrefix || 'INV') + '/' + fyOf(d.date) + '/DRAFT'; d.status = 'draft'; d.id = 'draft';
+  showInvoiceDocument(d);
+}
+
+async function nextInvoiceNumber(prefix, date) {
+  var fy = fyOf(date);
+  var pad = function(n){ return String(n).padStart(4, '0'); };
+  var localMax = (adminData.invoices || []).filter(function(i){ return fyOf(i.date) === fy && i.number.indexOf(prefix + '/') === 0; })
+    .reduce(function(m, i){ return Math.max(m, i.seq || 0); }, 0);
+  var ref = db_admin.collection('admin_billing').doc('counter_' + fy.replace('-', ''));
+  try {
+    var seq = await db_admin.runTransaction(async function(tx) {
+      var d = await tx.get(ref);
+      var n = Math.max(d.exists ? (d.data().seq || 0) : 0, localMax) + 1;
+      tx.set(ref, { seq: n, fy: fy, updatedAt: new Date().toISOString() }, { merge: true });
+      return n;
+    });
+    return { number: prefix + '/' + fy + '/' + pad(seq), seq: seq };
+  } catch (e) {
+    console.log('Invoice counter (cloud) failed, using local:', e);
+    return { number: prefix + '/' + fy + '/' + pad(localMax + 1), seq: localMax + 1 };
+  }
+}
+
+async function createInvoice() {
+  var d = collectDraftInvoice(); if (!d) return;
+  var btn = document.getElementById('ni-create'); btn.disabled = true; btn.textContent = '⏳ Creating...';
+  try {
+    var num = await nextInvoiceNumber(d.seller.invoicePrefix || 'INV', d.date);
+    var saveCl = d.saveClient; delete d.saveClient;
+    var inv = Object.assign(d, { id: 'inv' + Date.now(), number: num.number, seq: num.seq, status: 'unpaid',
+      createdAt: new Date().toISOString(), createdBy: (firebase.auth().currentUser || {}).email || '' });
+    if (!adminData.invoices) adminData.invoices = [];
+    adminData.invoices.push(inv); save();
+    await cloudSet('admin_invoices', inv.id, inv);
+    if (saveCl) {
+      var c = adminData.clients.find(function(x){ return x.id === inv.client.id; });
+      if (c) {
+        c.billing = { name: inv.client.name, contact: inv.client.contact, phone: inv.client.phone, email: inv.client.email, address: inv.client.address,
+          city: inv.client.city, pincode: inv.client.pincode, stateCode: inv.client.stateCode, gstin: inv.client.gstin };
+        save(); pushToFirebase('admin_clients', c.id, { billing: c.billing });
+      }
+    }
+    logActivity('Invoice ' + inv.number + ' created for ' + inv.client.name);
+    closeModal('modal-new-inv'); renderBilling();
+    toast('✅ Invoice ' + inv.number + ' ban gaya!', '#00C896');
+    showInvoiceDocument(inv);
+  } finally { btn.disabled = false; btn.textContent = '✅ Create Invoice'; }
+}
+
+async function markInvoicePaid(id) {
+  var inv = (adminData.invoices || []).find(function(i){ return i.id === id; }); if (!inv) return;
+  if (!confirm(inv.number + ' (' + money(inv.totals.total) + ') ko PAID mark karein?')) return;
+  inv.status = 'paid'; inv.paidAt = new Date().toISOString(); save();
+  await cloudSet('admin_invoices', inv.id, { status: 'paid', paidAt: inv.paidAt });
+  logActivity('Invoice ' + inv.number + ' marked paid');
+  renderBilling(); toast('✅ Marked as paid', '#00C896');
+  if (document.getElementById('modal-inv-view').classList.contains('open')) showInvoiceDocument(inv);
+}
+async function cancelInvoice(id) {
+  var inv = (adminData.invoices || []).find(function(i){ return i.id === id; }); if (!inv) return;
+  if (!confirm(inv.number + ' ko CANCEL karein?\n\nGST niyam ke hisaab se invoice delete nahi hota — "Cancelled" mark hoga aur number skip nahi hoga.')) return;
+  inv.status = 'cancelled'; inv.cancelledAt = new Date().toISOString(); save();
+  await cloudSet('admin_invoices', inv.id, { status: 'cancelled', cancelledAt: inv.cancelledAt });
+  logActivity('Invoice ' + inv.number + ' cancelled');
+  renderBilling(); toast('Invoice cancelled', '#FF6B35');
+}
+
+// ═══ INVOICE DOCUMENT (A4, used for preview, PDF and print) ═══
+var INV_CSS = ''
+ + '.iv{width:794px;min-height:1123px;background:#fff;color:#1F2937;font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:12px;line-height:1.5;padding:0 0 34px;position:relative;box-sizing:border-box;}'
+ + '.iv *{box-sizing:border-box;margin:0;padding:0;}'
+ + '.iv .num{font-variant-numeric:tabular-nums;white-space:nowrap;}'
+ + '.iv-bar{height:7px;background:linear-gradient(90deg,#FF6B35,#F59E0B);}'
+ + '.iv-in{padding:30px 46px 0;}'
+ + '.iv-top{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;}'
+ + '.iv-seller-name{font-size:26px;font-weight:800;color:#111827;letter-spacing:-0.3px;margin-bottom:8px;}'
+ + '.iv-muted{color:#6B7280;}'
+ + '.iv-small{font-size:11px;}'
+ + '.iv-title{text-align:right;min-width:270px;}'
+ + '.iv-title h1{font-size:25px;font-weight:900;letter-spacing:3px;color:#111827;}'
+ + '.iv-title .iv-copy{font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;color:#6B7280;margin:2px 0 10px;}'
+ + '.iv-meta{border-collapse:collapse;margin-left:auto;}'
+ + '.iv-meta td{padding:2px 0 2px 18px;font-size:11.5px;}'
+ + '.iv-meta td:first-child{color:#6B7280;text-align:right;}'
+ + '.iv-meta td:last-child{font-weight:700;text-align:right;color:#111827;}'
+ + '.iv-pill{display:inline-block;margin-top:10px;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:1px;}'
+ + '.iv-pill.due{background:#FEF3C7;color:#B45309;}'
+ + '.iv-pill.overdue{background:#FEE2E2;color:#B91C1C;}'
+ + '.iv-pill.paid{background:#D1FAE5;color:#047857;}'
+ + '.iv-pill.cancelled{background:#F3F4F6;color:#6B7280;}'
+ + '.iv-pill.draft{background:#E5E7EB;color:#4B5563;}'
+ + '.iv-rule{height:3px;background:linear-gradient(90deg,#111827 0%,#1E3A8A 60%,#3B82F6 100%);margin:18px 0 18px;border-radius:2px;}'
+ + '.iv-cards{display:flex;gap:16px;margin-bottom:18px;}'
+ + '.iv-card{flex:1;border:1px solid #E5E7EB;border-radius:8px;padding:14px 16px;}'
+ + '.iv-label{font-size:10px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#374151;margin-bottom:8px;}'
+ + '.iv-strong{font-weight:800;color:#111827;}'
+ + '.iv-table{width:100%;border-collapse:collapse;}'
+ + '.iv-table th{background:#111827;color:#fff;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:10px 12px;text-align:left;}'
+ + '.iv-table th.r,.iv-table td.r{text-align:right;}'
+ + '.iv-table th.c,.iv-table td.c{text-align:center;}'
+ + '.iv-table td{padding:10px 12px;border-bottom:1px solid #E5E7EB;vertical-align:top;}'
+ + '.iv-desc{font-weight:700;color:#111827;}'
+ + '.iv-bottom{display:flex;gap:26px;align-items:flex-start;margin-top:16px;}'
+ + '.iv-left{flex:1;display:flex;flex-direction:column;gap:10px;}'
+ + '.iv-box{border:1px solid #E5E7EB;border-radius:8px;padding:12px 14px;}'
+ + '.iv-pay{display:flex;gap:14px;align-items:flex-start;}'
+ + '.iv-pay-grid{flex:1;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:11.5px;}'
+ + '.iv-pay-grid span:nth-child(odd){color:#6B7280;}'
+ + '.iv-pay-grid span:nth-child(even){font-weight:700;color:#111827;}'
+ + '.iv-qr{text-align:center;font-size:9.5px;color:#6B7280;}'
+ + '.iv-qr img{width:100px;height:100px;display:block;margin:0 auto 3px;}'
+ + '.iv-totals{width:300px;border-collapse:collapse;}'
+ + '.iv-totals td{padding:6px 0;font-size:12px;}'
+ + '.iv-totals td:first-child{color:#6B7280;}'
+ + '.iv-totals td:last-child{text-align:right;}'
+ + '.iv-totals tr.iv-grand td{border-top:2px solid #111827;padding-top:10px;font-size:16px;font-weight:800;color:#111827;}'
+ + '.iv-totals tr.iv-bal td{font-weight:800;color:#C2410C;font-size:12.5px;}'
+ + '.iv-totals tr.iv-bal.zero td{color:#047857;}'
+ + '.iv-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:30px;margin-top:22px;}'
+ + '.iv-terms{flex:1;font-size:10.5px;color:#4B5563;}'
+ + '.iv-terms b{color:#111827;font-size:11px;}'
+ + '.iv-terms ol{margin:4px 0 0 16px;}'
+ + '.iv-sign{flex-shrink:0;}'
+ + '.iv-sign-in{text-align:center;min-width:230px;}'
+ + '.iv-sign-line{border-top:1px solid #9CA3AF;margin-top:46px;padding-top:5px;font-size:10.5px;color:#6B7280;}'
+ + '.iv-wm{position:absolute;top:470px;left:50%;transform:translateX(-50%) rotate(-24deg);font-size:84px;font-weight:900;letter-spacing:6px;opacity:0.1;white-space:nowrap;pointer-events:none;}'
+ + '.iv-wm.cancelled{color:#DC2626;}'
+ + '.iv-wm.draft{color:#6B7280;}';
+
+function stateLine(code) { return code ? stateName(code) + ' — State Code ' + code : ''; }
+
+function invoiceDocHtml(inv, qrDataUrl) {
+  var s = inv.seller, c = inv.client, t = inv.totals, rate = inv.gstRate;
+  var gst = inv.taxMode !== 'none';
+  var e = esc;
+  var today = isoDate(new Date());
+  var pill = inv.status === 'paid' ? '<span class="iv-pill paid">PAID</span>'
+    : inv.status === 'cancelled' ? '<span class="iv-pill cancelled">CANCELLED</span>'
+    : inv.status === 'draft' ? '<span class="iv-pill draft">DRAFT</span>'
+    : inv.dueDate < today ? '<span class="iv-pill overdue">OVERDUE</span>' : '<span class="iv-pill due">DUE</span>';
+  var wm = inv.status === 'cancelled' ? '<div class="iv-wm cancelled">CANCELLED</div>' : inv.status === 'draft' ? '<div class="iv-wm draft">DRAFT</div>' : '';
+  var paid = inv.status === 'paid' ? t.total : 0;
+  var balance = inv.status === 'cancelled' ? 0 : r2(t.total - paid);
+  var addrLine = function(o) {
+    var a = (o.address || '').split('\n').map(function(x){ return x.trim(); }).filter(Boolean).join(', ');
+    var cityPin = [o.city, o.pincode].filter(Boolean).join(' - ');
+    return [a, cityPin].filter(Boolean).join(' ');
+  };
+  var contactLine = [s.email ? e(s.email) : '', s.phone ? e(s.phone) : '', s.website ? e(s.website) : ''].filter(Boolean).join(' &nbsp;·&nbsp; ');
+  // Subscription card — explicit fields on new invoices, derived from the first line on older ones
+  var sub = inv.sub || { product: (inv.items[0] || {}).desc || '', plan: '', period: (inv.items[0] || {}).period || '' };
+  var periodTxt = sub.from && sub.to ? fmtLong(sub.from) + ' to ' + fmtLong(sub.to) : (sub.period || '').replace(/^Service period:\s*/i, '');
+  var rows = inv.items.map(function(it, i) {
+    return '<tr><td class="iv-muted">' + (i+1) + '</td>'
+      + '<td><div class="iv-desc">' + e(it.desc) + '</div>' + (it.period ? '<div class="iv-muted iv-small">' + e(it.period) + '</div>' : '') + '</td>'
+      + '<td class="iv-muted">' + e(it.sac || '—') + '</td>'
+      + '<td class="c num">' + it.qty + '</td><td class="r num">' + money(it.rate) + '</td><td class="r num" style="font-weight:600">' + money(r2(it.qty * it.rate)) + '</td></tr>';
+  }).join('');
+  var tot = function(l, v, cls){ return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + l + '</td><td class="num">' + v + '</td></tr>'; };
+  var payRows = [];
+  if (s.upi) payRows.push('<span>UPI</span><span>' + e(s.upi) + '</span>');
+  if (s.accountNo) {
+    if (s.accountName) payRows.push('<span>A/c Name</span><span>' + e(s.accountName) + '</span>');
+    if (s.bankName) payRows.push('<span>Bank</span><span>' + e(s.bankName) + '</span>');
+    payRows.push('<span>A/c No.</span><span>' + e(s.accountNo) + '</span>');
+    if (s.ifsc) payRows.push('<span>IFSC</span><span>' + e(s.ifsc) + '</span>');
+  }
+  var terms = (s.termsText || '').split('\n').map(function(x){ return x.trim().replace(/^\d+[.)]\s*/, ''); }).filter(Boolean);
+
+  return '<div class="iv">' + wm + '<div class="iv-bar"></div><div class="iv-in">'
+    // ── header
+    + '<div class="iv-top"><div style="max-width:420px">'
+    + '<div class="iv-seller-name">' + e(s.name) + '</div>'
+    + (addrLine(s) && addrLine(s) !== stateName(s.stateCode) ? '<div class="iv-muted">' + e(addrLine(s)) + '</div>' : '')
+    + (s.stateCode ? '<div class="iv-muted">' + e(stateLine(s.stateCode)) + '</div>' : '')
+    + (gst && s.gstin ? '<div style="margin-top:2px"><b>GSTIN:</b> ' + e(s.gstin) + '</div>' : '')
+    + (s.pan ? '<div><b>PAN:</b> ' + e(s.pan) + '</div>' : '')
+    + (contactLine ? '<div class="iv-muted" style="margin-top:2px">' + contactLine + '</div>' : '')
+    + '</div><div class="iv-title"><h1>' + (gst ? 'TAX INVOICE' : 'INVOICE') + '</h1><div class="iv-copy">Original for Recipient</div>'
+    + '<table class="iv-meta"><tr><td>Invoice No.</td><td>' + e(inv.number) + '</td></tr>'
+    + '<tr><td>Invoice Date</td><td>' + fmtLong(inv.date) + '</td></tr>'
+    + '<tr><td>Due Date</td><td>' + fmtLong(inv.dueDate) + '</td></tr>'
+    + '<tr><td>Place of Supply</td><td>' + e(stateName(c.stateCode)) + ' (' + e(c.stateCode) + ')</td></tr>'
+    + '<tr><td>Reverse Charge</td><td>No</td></tr>'
+    + '</table>' + pill + '</div></div>'
+    + '<div class="iv-rule"></div>'
+    // ── billed to / subscription
+    + '<div class="iv-cards"><div class="iv-card"><div class="iv-label">Billed To</div>'
+    + '<div class="iv-strong" style="text-transform:uppercase;margin-bottom:3px">' + e(c.name) + '</div>'
+    + (c.contact ? '<div>Attn: ' + e(c.contact) + '</div>' : '')
+    + (addrLine(c) && addrLine(c) !== stateName(c.stateCode) ? '<div>' + e(addrLine(c)) + '</div>' : '')
+    + (c.stateCode ? '<div>' + e(stateLine(c.stateCode)) + '</div>' : '')
+    + '<div>GSTIN: ' + (c.gstin ? e(c.gstin) : 'Unregistered') + '</div>'
+    + [c.phone, c.email].filter(Boolean).map(function(x){ return '<div>' + e(x) + '</div>'; }).join('')
+    + '</div><div class="iv-card"><div class="iv-label">Subscription</div>'
+    + '<div class="iv-strong" style="margin-bottom:3px">' + e(sub.product) + '</div>'
+    + (sub.plan ? '<div><b>Plan:</b> ' + e(sub.plan) + '</div>' : '')
+    + (periodTxt ? '<div><b>Period:</b> ' + e(periodTxt) + '</div>' : '')
+    + '</div></div>'
+    // ── items
+    + '<table class="iv-table"><thead><tr><th style="width:34px">#</th><th>Description</th><th style="width:76px">SAC</th>'
+    + '<th class="c" style="width:50px">Qty</th><th class="r" style="width:104px">Rate</th><th class="r" style="width:112px">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    // ── left boxes + totals
+    + '<div class="iv-bottom"><div class="iv-left">'
+    + '<div class="iv-box"><div class="iv-label">Amount in Words</div><div class="iv-strong">' + amountInWords(t.total) + '</div>'
+    + (gst ? (inv.inclusive ? '<div class="iv-muted iv-small" style="margin-top:4px">Item rates are inclusive of GST.</div>' : '')
+           : '<div class="iv-muted iv-small" style="margin-top:4px">Supplier is not registered under GST; no GST has been charged on this invoice.</div>')
+    + '</div>'
+    + (payRows.length || qrDataUrl ? '<div class="iv-box"><div class="iv-label">Payment Details</div><div class="iv-pay"><div class="iv-pay-grid">' + payRows.join('') + '</div>'
+      + (qrDataUrl ? '<div class="iv-qr"><img src="' + qrDataUrl + '" alt="UPI QR"/>Scan to pay ' + money(balance) + '</div>' : '') + '</div></div>' : '')
+    + (inv.note ? '<div class="iv-box"><div class="iv-label">Note</div><div>' + e(inv.note) + '</div></div>' : '')
+    + '</div><table class="iv-totals">'
+    + tot('Sub Total', money(t.gross))
+    + (t.discount ? tot('Discount', '-' + money(t.discount)) : '')
+    + tot('Taxable Value', money(t.taxable))
+    + (inv.taxMode === 'intra' ? tot('CGST @ ' + (rate/2) + '%', money(t.cgst)) + tot('SGST @ ' + (rate/2) + '%', money(t.sgst)) : '')
+    + (inv.taxMode === 'inter' ? tot('IGST @ ' + rate + '%', money(t.igst)) : '')
+    + (t.roundOff ? tot('Round Off', (t.roundOff > 0 ? '+' : '-') + money(Math.abs(t.roundOff))) : '')
+    + tot('Total', money(t.total), 'iv-grand')
+    + (paid ? tot('Paid' + (inv.paidAt ? ' (' + fmtLong(isoDate(inv.paidAt)) + ')' : ''), '-' + money(paid)) : '')
+    + (inv.status !== 'cancelled' ? tot('Balance Due', money(balance), 'iv-bal' + (balance ? '' : ' zero')) : '')
+    + '</table></div>'
+    // ── terms + signature
+    + '<div class="iv-foot"><div class="iv-terms">' + (terms.length ? '<b>Terms &amp; Conditions</b><ol>' + terms.map(function(x){ return '<li>' + e(x) + '</li>'; }).join('') + '</ol>' : '') + '</div>'
+    + '<div class="iv-sign"><div class="iv-sign-in"><div class="iv-strong">For ' + e(s.name) + '</div>'
+    + '<div class="iv-sign-line">' + (s.signatory ? e(s.signatory) + ' · ' : '') + 'Authorised Signatory</div></div></div></div>'
+    + '</div></div>';
+}
+
+// ── Lazy-loaded libraries (only when an invoice is opened) ──
+function loadLib(src, ready) {
+  return new Promise(function(res, rej) {
+    if (ready()) return res();
+    var s = document.createElement('script'); s.src = src; s.onload = function(){ res(); }; s.onerror = function(){ rej(new Error('Load failed: ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+function ensureQRLib() { return loadLib('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', function(){ return typeof QRCode !== 'undefined'; }); }
+function ensurePdfLibs() {
+  return Promise.all([
+    loadLib('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', function(){ return typeof html2canvas !== 'undefined'; }),
+    loadLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', function(){ return window.jspdf && window.jspdf.jsPDF; })
+  ]);
+}
+async function invoiceQrDataUrl(inv) {
+  if (inv.status !== 'unpaid' || !inv.seller.upi) return '';
+  try {
+    await ensureQRLib();
+    var tmp = document.createElement('div'); tmp.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(tmp);
+    var upi = 'upi://pay?pa=' + encodeURIComponent(inv.seller.upi) + '&pn=' + encodeURIComponent(inv.seller.name) + '&am=' + inv.totals.total.toFixed(2) + '&cu=INR&tn=' + encodeURIComponent('Invoice ' + inv.number);
+    new QRCode(tmp, { text: upi, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+    var cv = tmp.querySelector('canvas'); var url = cv ? cv.toDataURL('image/png') : '';
+    document.body.removeChild(tmp);
+    return url;
+  } catch (e) { console.log('QR:', e); return ''; }
+}
+
+var currentViewInvoice = null;
+async function showInvoiceDocument(inv) {
+  currentViewInvoice = inv;
+  var holder = document.getElementById('inv-view-doc');
+  holder.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280">Loading…</div>';
+  openModal('modal-inv-view');
+  var isDraft = inv.status === 'draft';
+  document.getElementById('inv-view-title').textContent = isDraft ? 'Preview (abhi save nahi hua)' : inv.number + ' · ' + inv.client.name;
+  document.getElementById('inv-view-actions').style.display = isDraft ? 'none' : 'flex';
+  var qr = await invoiceQrDataUrl(inv);
+  holder.innerHTML = '<style>' + INV_CSS + '</style><div id="inv-scale">' + invoiceDocHtml(inv, qr) + '</div>';
+  fitInvoicePreview();
+}
+function fitInvoicePreview() {
+  var holder = document.getElementById('inv-view-doc'), sc = document.getElementById('inv-scale');
+  if (!holder || !sc) return;
+  var w = holder.clientWidth - 2; var k = Math.min(1, w / 794);
+  sc.style.transform = 'scale(' + k + ')'; sc.style.transformOrigin = 'top left';
+  sc.style.width = '794px'; holder.style.height = Math.ceil(sc.firstElementChild.offsetHeight * k + 4) + 'px';
+}
+window.addEventListener('resize', function(){ if (document.getElementById('modal-inv-view') && document.getElementById('modal-inv-view').classList.contains('open')) fitInvoicePreview(); });
+
+function openInvoicePreview(id) {
+  var inv = (adminData.invoices || []).find(function(i){ return i.id === id; });
+  if (inv) showInvoiceDocument(inv);
+}
+
+function invoiceFileName(inv) {
+  return 'Invoice_' + inv.number.replace(/[\/\\]/g, '-') + '_' + (inv.client.name || 'client').replace(/[^A-Za-z0-9]+/g, '_').slice(0, 30) + '.pdf';
+}
+async function makeInvoicePdf(inv) {
+  await ensurePdfLibs();
+  var qr = await invoiceQrDataUrl(inv);
+  var host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;z-index:-1';
+  host.innerHTML = '<style>' + INV_CSS + '</style>' + invoiceDocHtml(inv, qr);
+  document.body.appendChild(host);
+  try {
+    var canvas = await html2canvas(host.querySelector('.iv'), { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    var pageHpx = Math.floor(canvas.width * 297 / 210);
+    for (var y = 0, page = 0; y < canvas.height; y += pageHpx, page++) {
+      var h = Math.min(pageHpx, canvas.height - y);
+      if (page > 0 && h < 40) break; // rounding sliver (a few px of blank page edge) — not a real page
+      var slice = document.createElement('canvas'); slice.width = canvas.width; slice.height = h;
+      var ctx = slice.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, slice.width, h);
+      ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+      if (page > 0) pdf.addPage();
+      pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, h * 210 / canvas.width);
+    }
+    pdf.setProperties({ title: 'Invoice ' + inv.number, author: inv.seller.name, subject: 'Invoice for ' + inv.client.name });
+    return pdf.output('blob');
+  } finally { document.body.removeChild(host); }
+}
+function downloadBlob(blob, name) {
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+}
+function invoiceMessage(inv) {
+  var s = inv.seller, paid = inv.status === 'paid';
+  return 'Dear ' + (inv.client.contact || inv.client.name) + ',\n\n'
+    + 'Please find attached ' + (inv.taxMode !== 'none' ? 'Tax Invoice' : 'Invoice') + ' *' + inv.number + '* dated ' + fmtLong(inv.date) + ' for your BillBlitz subscription.\n\n'
+    + (paid ? 'Amount: *' + money(inv.totals.total) + '* — received with thanks.\n'
+            : 'Amount Due: *' + money(inv.totals.total) + '*\nDue Date: ' + fmtLong(inv.dueDate) + '\n' + (s.upi ? 'Pay via UPI: ' + s.upi + '\n' : ''))
+    + '\nThank you for your business!\n\nRegards,\n' + s.name + (s.phone ? '\n' + s.phone : '');
+}
+async function withBusy(btnId, fn) {
+  var b = document.getElementById(btnId); var t = b ? b.textContent : '';
+  if (b) { b.disabled = true; b.textContent = '⏳ PDF ban raha hai...'; }
+  try { await fn(); } catch (e) { if (e && e.name !== 'AbortError') { console.log(e); toast('❌ ' + (e.message || 'Error'), '#FF6B35'); } }
+  finally { if (b) { b.disabled = false; b.textContent = t; } }
+}
+function shareInvoice() {
+  var inv = currentViewInvoice; if (!inv) return;
+  withBusy('iv-btn-share', async function() {
+    var blob = await makeInvoicePdf(inv);
+    var file = new File([blob], invoiceFileName(inv), { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Invoice ' + inv.number, text: invoiceMessage(inv) });
+      markInvoiceSent(inv);
+    } else {
+      downloadBlob(blob, file.name);
+      toast('⬇️ PDF download ho gaya — is device par direct share support nahi hai. WhatsApp/Email button use karein.', '#FFD700');
+    }
+  });
+}
+function whatsappInvoice() {
+  var inv = currentViewInvoice; if (!inv) return;
+  withBusy('iv-btn-wa', async function() {
+    var blob = await makeInvoicePdf(inv);
+    downloadBlob(blob, invoiceFileName(inv));
+    var ph = (inv.client.phone || '').replace(/[^0-9]/g, '');
+    if (ph.length === 10) ph = '91' + ph;
+    window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(invoiceMessage(inv)), '_blank');
+    markInvoiceSent(inv);
+    toast('📎 PDF download ho gaya — WhatsApp chat me attach karke bhejein.', '#00C896');
+  });
+}
+function emailInvoice() {
+  var inv = currentViewInvoice; if (!inv) return;
+  withBusy('iv-btn-mail', async function() {
+    var blob = await makeInvoicePdf(inv);
+    downloadBlob(blob, invoiceFileName(inv));
+    var subj = 'Invoice ' + inv.number + ' from ' + inv.seller.name;
+    window.location.href = 'mailto:' + encodeURIComponent(inv.client.email || '') + '?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(invoiceMessage(inv).replace(/\*/g, ''));
+    markInvoiceSent(inv);
+    toast('📎 PDF download ho gaya — email me attach karke bhejein.', '#00C896');
+  });
+}
+function downloadInvoicePdf() {
+  var inv = currentViewInvoice; if (!inv) return;
+  withBusy('iv-btn-dl', async function() { downloadBlob(await makeInvoicePdf(inv), invoiceFileName(inv)); toast('⬇️ PDF downloaded', '#00C896'); });
+}
+async function printInvoice() {
+  var inv = currentViewInvoice; if (!inv) return;
+  var qr = await invoiceQrDataUrl(inv);
+  var f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(f);
+  var d = f.contentWindow.document;
+  d.open(); d.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(inv.number) + '</title><style>@page{size:A4;margin:0}html,body{margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}' + INV_CSS + '.iv{min-height:0}</style></head><body>' + invoiceDocHtml(inv, qr) + '</body></html>'); d.close();
+  setTimeout(function(){ f.contentWindow.focus(); f.contentWindow.print(); setTimeout(function(){ document.body.removeChild(f); }, 1500); }, 400);
+}
+function markInvoiceSent(inv) {
+  if (!inv || inv.status === 'draft') return;
+  inv.sentAt = new Date().toISOString(); save();
+  cloudSet('admin_invoices', inv.id, { sentAt: inv.sentAt });
+}
+function newInvoiceForClient(clientId) { closeModal('modal-view-client'); showSection('billing'); showNewInvoice(clientId); }
 
 load();
 </script>
