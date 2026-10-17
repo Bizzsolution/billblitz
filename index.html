@@ -11144,34 +11144,90 @@ function listenToQROrders() {
     snap.forEach(function(doc) {
       incoming.push(Object.assign({ id: doc.id }, doc.data()));
     });
-    // Detect brand new orders for sound/toast alert
+    // Detect brand new orders for the toast alert
     var prevIds = (db.qrOrders || []).map(function(o){ return o.id; });
     var newOnes = incoming.filter(function(o){ return prevIds.indexOf(o.id) === -1; });
     db.qrOrders = incoming;
     renderQRBadge();
-    if (newOnes.length > 0 && prevIds.length >= 0) {
+    if (newOnes.length > 0) {
       newOnes.forEach(function(o) {
         toast('🔔 New order from ' + (o.tableName || 'Customer') + '!', '#7C3AED');
       });
-      playQRAlertSound();
     }
+    // Keep ringing while ANY QR order is still pending; stop the moment the
+    // last one is accepted/declined (which drops it from this pending query).
+    var anyPending = hasFeature('qr_menu') && incoming.filter(function(o) {
+      return o.locationType === 'room' ? hasFeature('room_service') : true;
+    }).length > 0;
+    if (anyPending) startQRRinger(); else stopQRRinger();
   }, function(err) {
     console.log('QR order listener error:', err);
   });
   cloudListeners.push(unsub);
 }
 
+// New-QR-order alert. A warm bell-like "sparkle" motif that plays twice so
+// the manager notices it over kitchen noise — deliberately different from the
+// Swiggy/Zomato jingle (this is a bright rising 3-note chime with a shimmer).
+// Pure Web Audio, no sound file, so it works offline in this single-file PWA.
 function playQRAlertSound() {
   try {
-    var ctx = new (window.AudioContext || window.webkitAudioContext)();
-    var osc = ctx.createOscillator();
-    var gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-    osc.start(); osc.stop(ctx.currentTime + 0.4);
-  } catch(e) {}
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    var ctx = new AC();
+    try { if (ctx.resume) ctx.resume(); } catch (e) {}
+    var t0 = ctx.currentTime + 0.02;
+
+    // One soft bell = fundamental + a quieter octave partial, fast decay.
+    function bell(freq, start, dur, vol) {
+      [1, 2].forEach(function (mult, i) {
+        var osc = ctx.createOscillator();
+        var g = ctx.createGain();
+        osc.type = i === 0 ? 'triangle' : 'sine';
+        osc.frequency.value = freq * mult;
+        osc.connect(g); g.connect(ctx.destination);
+        var peak = vol * (i === 0 ? 1 : 0.35);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(peak, start + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        osc.start(start);
+        osc.stop(start + dur + 0.02);
+      });
+    }
+
+    // Rising major-triad sparkle: G5 -> C6 -> E6, then a quick high echo.
+    function motif(base, vol) {
+      bell(784.0, base + 0.00, 0.28, vol);        // G5
+      bell(1046.5, base + 0.14, 0.30, vol);       // C6
+      bell(1318.5, base + 0.28, 0.42, vol * 1.05);// E6 (shimmer tail)
+      bell(1568.0, base + 0.40, 0.55, vol * 0.6); // G6 sparkle
+    }
+
+    motif(t0, 0.33);          // first ring (louder)
+    motif(t0 + 0.95, 0.33);   // attention echo
+
+    // Free the audio context once the sound is done (browsers cap how many
+    // can be open at once, and a new one is created on every alert).
+    setTimeout(function () { try { ctx.close(); } catch (e) {} }, 2200);
+  } catch (e) {}
+}
+
+// ── CONTINUOUS QR RINGER ─────────────────────────────────────
+// Rings the alert repeatedly while a QR order is waiting, and stops as soon
+// as the order is accepted/declined. Driven by the pending-orders listener
+// (startQRRinger/stopQRRinger are called there and from accept/decline).
+var _qrRingerTimer = null;
+function startQRRinger() {
+  if (_qrRingerTimer) return;      // already ringing — don't stack timers
+  playQRAlertSound();              // ring immediately
+  _qrRingerTimer = setInterval(function() {
+    // Safety: if the browser tab is hidden for long, keep trying anyway —
+    // managers often leave the POS open on a side screen.
+    playQRAlertSound();
+  }, 3500);                        // repeat every 3.5s until accepted
+}
+function stopQRRinger() {
+  if (_qrRingerTimer) { clearInterval(_qrRingerTimer); _qrRingerTimer = null; }
 }
 
 // ── BADGE RENDERING (shows on Home + Tables page) ───────────
@@ -11329,6 +11385,7 @@ async function acceptQROrder(orderId) {
 
   // Remove from local pending list & refresh modal/badge
   db.qrOrders = (db.qrOrders || []).filter(function(x){ return x.id !== orderId; });
+  if (!(db.qrOrders || []).length) stopQRRinger(); // last pending cleared → silence
   renderQRBadge();
 }
 
@@ -11354,6 +11411,7 @@ async function declineQROrder(orderId) {
     }
   } catch(e) {}
   db.qrOrders = (db.qrOrders || []).filter(function(x){ return x.id !== orderId; });
+  if (!(db.qrOrders || []).length) stopQRRinger(); // last pending cleared → silence
   renderQRBadge();
   showQROrdersModal();
   toast('Order declined', '#FF6B35');
