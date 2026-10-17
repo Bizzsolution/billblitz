@@ -3713,8 +3713,8 @@ function printBill(orderId){
     + '<hr class="s">'
     + '<table>'
     + '<tr><td>Subtotal</td><td style="text-align:right">Rs.'+(Number(o.subtotal)||0).toFixed(2)+'</td></tr>'
+    + (o.discount?'<tr><td>Discount</td><td style="text-align:right">-Rs.'+(Number(o.discount)||0).toFixed(2)+'</td></tr><tr><td>Taxable Value</td><td style="text-align:right">Rs.'+(((Number(o.subtotal)||0)-(Number(o.discount)||0))).toFixed(2)+'</td></tr>':'')
     + (o.tax?getGSTBreakdown(o).map(function(g){return '<tr><td>'+g.name+' ('+g.pct.toFixed(1).replace(/\.0$/,'')+'%)</td><td style="text-align:right">Rs.'+g.amt.toFixed(2)+'</td></tr>';}).join(''):'')
-    + (o.discount?'<tr><td>Discount</td><td style="text-align:right">-Rs.'+(Number(o.discount)||0).toFixed(2)+'</td></tr>':'')
     + '<tr style="font-weight:700;font-size:14px"><td>TOTAL</td><td style="text-align:right">Rs.'+(Number(o.total)||0).toFixed(2)+'</td></tr>'
     + '</table>'
     + '<hr>'
@@ -3843,8 +3843,8 @@ function generateBillPDFBlob(o) {
   y += 1; doc.line(4, y, 76, y); y += 4;
 
   doc.text('Subtotal', 4, y); doc.text(fmtPDF(o.subtotal), 76, y, { align: 'right' }); y += 4;
+  if (o.discount) { doc.text('Discount', 4, y); doc.text('-' + fmtPDF(o.discount), 76, y, { align: 'right' }); y += 4; doc.text('Taxable Value', 4, y); doc.text(fmtPDF((o.subtotal||0)-(o.discount||0)), 76, y, { align: 'right' }); y += 4; }
   if (o.tax) { getGSTBreakdown(o).forEach(function(g){ doc.text(g.name+' ('+g.pct.toFixed(1).replace(/\.0$/,'')+'%)', 4, y); doc.text(fmtPDF(g.amt), 76, y, { align: 'right' }); y += 4; }); }
-  if (o.discount) { doc.text('Discount', 4, y); doc.text('-' + fmtPDF(o.discount), 76, y, { align: 'right' }); y += 4; }
   y += 1; doc.setLineWidth(0.4); doc.line(4, y, 76, y); y += 5;
 
   doc.setFontSize(10); doc.setFont(undefined, 'bold');
@@ -3995,8 +3995,10 @@ function buildBillWhatsAppText(o, custName) {
   msg += '*Items:*\n';
   o.items.forEach(function(i){ msg += '• ' + i.qty + '× ' + i.name + ' — ₹' + (i.price*i.qty).toFixed(2) + '\n'; });
   msg += '\n';
+  msg += 'Subtotal: ₹' + (Number(o.subtotal)||0).toFixed(2) + '\n';
+  if (o.discount) msg += 'Discount: -₹' + (Number(o.discount)||0).toFixed(2) + '\n';
+  if (o.discount) msg += 'Taxable Value: ₹' + (((Number(o.subtotal)||0)-(Number(o.discount)||0))).toFixed(2) + '\n';
   if (o.tax) getGSTBreakdown(o).forEach(function(g){ msg += g.name + ' (' + g.pct.toFixed(1).replace(/\.0$/,'') + '%): ₹' + g.amt.toFixed(2) + '\n'; });
-  if (o.discount) msg += 'Discount: -₹' + o.discount.toFixed(2) + '\n';
   msg += '*TOTAL: ₹' + o.total.toFixed(2) + '*\n\n';
   msg += info.msg || 'Thank you for dining with us! 🙏';
   return msg;
@@ -5700,13 +5702,21 @@ function processReturn(orderId, snapshot, reason) {
   if (!o.returns) o.returns = [];
   o.returns = o.returns.concat(returns);
 
-  // Recompute totals — proportionally reduce subtotal, keep tax% and discount as originally set
-  var newSubtotal = o.subtotal - returnAmt;
-  var taxRate = o.subtotal > 0 ? (o.tax || 0) / o.subtotal : 0;
-  var newTax = Math.max(0, newSubtotal * taxRate);
-  var newTotal = Math.max(0, newSubtotal + newTax - (o.discount || 0));
+  // Recompute totals after the return, keeping the SAME GST% and discount%
+  // and applying them the correct way (discount off first, GST on the
+  // post-discount taxable value — matches completeBill()).
+  var newSubtotal = Math.max(0, o.subtotal - returnAmt);
+  var retDiscPct = o.discountPct !== undefined ? o.discountPct
+                   : (o.subtotal > 0 ? (o.discount || 0) / o.subtotal * 100 : 0);
+  var retTaxPct = o.taxPct !== undefined ? o.taxPct
+                  : (o.subtotal > 0 ? (o.tax || 0) / o.subtotal * 100 : 0);
+  var newDisc = newSubtotal * retDiscPct / 100;
+  var newTaxable = Math.max(0, newSubtotal - newDisc);
+  var newTax = newTaxable * retTaxPct / 100;
+  var newTotal = newTaxable + newTax;
 
-  o.subtotal = Math.max(0, newSubtotal);
+  o.subtotal = newSubtotal;
+  o.discount = newDisc;
   o.tax = newTax;
   o.total = newTotal;
   o.returnedAmount = (o.returnedAmount || 0) + returnAmt;
@@ -5750,8 +5760,13 @@ function recalcBill(){
     }
   }
   const disc=sub*discPct/100;
-  const tax=sub*taxPct/100;
-  const total=Math.max(0,sub+tax-disc);
+  // GST is charged on the value AFTER discount (CGST Act §15(3): a discount
+  // shown on the invoice at the time of supply is excluded from the taxable
+  // value). Taxing the full subtotal overcharged both the customer and the
+  // reported output tax.
+  const taxable=Math.max(0,sub-disc);
+  const tax=taxable*taxPct/100;
+  const total=taxable+tax;
   document.getElementById('bill-subtotal').textContent=fmt(sub);
   document.getElementById('bill-tax-amt').textContent=fmt(tax);
   var discAmtEl=document.getElementById('bill-discount-amt');
@@ -6370,8 +6385,13 @@ async function completeBill(payment){
     if (discPct > maxDiscCB) discPct = maxDiscCB;
   }
   const disc=sub*discPct/100;
-  const tax=sub*taxPct/100;
-  const total=Math.max(0,sub+tax-disc);
+  // GST is charged on the value AFTER discount (CGST Act §15(3): a discount
+  // shown on the invoice at the time of supply is excluded from the taxable
+  // value). Taxing the full subtotal overcharged both the customer and the
+  // reported output tax.
+  const taxable=Math.max(0,sub-disc);
+  const tax=taxable*taxPct/100;
+  const total=taxable+tax;
   const orderId=uid();
   const billNo = await getNextBillNumber();
   const gstCfg = getGSTConfig();
@@ -6419,8 +6439,8 @@ function showBillReceipt(o){
         ${o.items.map(i=>`<div class="bill-row"><span>${esc(i.name)} ×${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
         <div class="divider"></div>
         <div class="bill-row"><span>Subtotal</span><span>${fmt(o.subtotal)}</span></div>
+        ${o.discount?`<div class="bill-row"><span>Discount</span><span>-${fmt(o.discount)}</span></div><div class="bill-row"><span>Taxable Value</span><span>${fmt((o.subtotal||0)-(o.discount||0))}</span></div>`:''}
         ${o.tax?getGSTBreakdownHtml(o):''}
-        ${o.discount?`<div class="bill-row"><span>Discount</span><span>-${fmt(o.discount)}</span></div>`:''}
         <div class="bill-total"><span>TOTAL</span><span>${fmt(o.total)}</span></div>
       </div>
     </div>
@@ -8973,8 +8993,11 @@ function showQuickBillPaymentModal() {
     if (discPctQB > maxDiscQB) { discPctQB = maxDiscQB; if (discInp) discInp.value = maxDiscQB; }
   }
   var disc = sub * discPctQB / 100;
-  var tax = sub * taxPct / 100;
-  var total = Math.max(0, sub + tax - disc);
+  // GST on the post-discount (taxable) value — matches completeBill() and
+  // Indian GST rules (discount excluded from taxable value).
+  var taxableQB = Math.max(0, sub - disc);
+  var tax = taxableQB * taxPct / 100;
+  var total = taxableQB + tax;
 
   // Payment mode is NOT chosen here — bill generation is now separate from
   // payment collection. Cashier chooses Cash/Card/UPI later, when marking
