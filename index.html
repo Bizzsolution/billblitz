@@ -1483,6 +1483,18 @@ tr:nth-child(even) td{background:#FFFFFF;}
       </div>
     </div>
 
+    <!-- QR Order Alert Routing -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header"><div class="card-title">🔔 QR Order Ring Kiske Paas</div></div>
+      <div class="card-body">
+        <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Ek baar tick karke decide karein ki jab customer QR se order kare to ring <b>kis-kis role</b> ke device par baje. Jinke saamne tick hoga, unka device login hone par ring bajegi. Order <b>accept</b> hote hi ring band. Uske baad jab staff "Send to Kitchen" kare, <b>Kitchen</b> device par alag ring bajegi jab tak kitchen "Banana Shuru Karo" na dabaye.</div>
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:0.9rem"><input type="checkbox" id="qr-ring-owner" style="width:18px;height:18px" onchange="saveQrAcceptRole()"> 👑 Owner</label>
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:0.9rem"><input type="checkbox" id="qr-ring-cashier" style="width:18px;height:18px" onchange="saveQrAcceptRole()"> 🧾 Cashier</label>
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:0.9rem"><input type="checkbox" id="qr-ring-order_manager" style="width:18px;height:18px" onchange="saveQrAcceptRole()"> 📝 Order Manager</label>
+        <div style="font-size:0.72rem;color:#9CA3AF;margin-top:6px">Tip: kam se kam ek zaroor rakhein, warna QR order ki ring kahin nahi bajegi.</div>
+      </div>
+    </div>
+
     <!-- Weekly Off Settings -->
     <div class="card" style="margin-bottom:10px">
       <div class="card-header"><div class="card-title">📅 Weekly Off Days</div></div>
@@ -3538,6 +3550,8 @@ function checkPin(){
     upgradeRolePinIfLegacy(selectedLoginRole, pinBuffer);
     currentRole = selectedLoginRole;
     document.getElementById('login-screen').style.display = 'none';
+    // This device just got a role — re-evaluate who should be ringing.
+    try { refreshQrRinger(); refreshKitchenRinger(); } catch (e) {}
     // Mobile header badge
     var ROLE_LABEL = {owner:'👑 Owner', cashier:'🧾 Cashier', kitchen:'🍳 Kitchen', order_manager:'📝 Order Mgr'};
     var ROLE_ICON  = {owner:'👑', cashier:'🧾', kitchen:'🍳', order_manager:'📝'};
@@ -4184,6 +4198,11 @@ function renderSettingsPage(){
   if(bqHallAddrInp) bqHallAddrInp.value = bqCfg.hallAddress || '';
   var maxDiscInp = document.getElementById('set-max-discount-pct');
   if(maxDiscInp) maxDiscInp.value = (db.settings && db.settings.maxDiscountPct) || '';
+  var qrRoles = getQrAcceptRoles();
+  ['owner','cashier','order_manager'].forEach(function(r){
+    var cb = document.getElementById('qr-ring-' + r);
+    if (cb) cb.checked = qrRoles.indexOf(r) !== -1;
+  });
   var bsPrefixInp = document.getElementById('set-bill-prefix');
   var bsNextInp = document.getElementById('set-bill-next');
   var bsCurrent = (db.settings && db.settings.billSeries) || { prefix: '', nextNumber: 1 };
@@ -5037,6 +5056,7 @@ function listenToKitchenOrdersSync() {
     persistLocalOnly();
     refreshIfActive('kitchen', renderKitchenPage);
     renderKitchenBadge();
+    refreshKitchenRinger(); // Stage 2: ring the kitchen device on every new KOT
   }, function(err) { console.log('Kitchen sync error:', err); });
   cloudListeners.push(unsub);
 }
@@ -5092,6 +5112,7 @@ function advanceKitchenTicket(ticketId, newStatus) {
       .set(t, { merge: true }).catch(function(){});
   }
   renderKitchenPage();
+  refreshKitchenRinger(); // acknowledged (pending -> preparing) → stop if no NAYA tickets left
   if (newStatus === 'ready') toast('✅ ' + t.tableName + ' ka order ready hai!', '#00A878');
 }
 
@@ -11182,7 +11203,8 @@ function listenToQROrders() {
     var anyPending = hasFeature('qr_menu') && incoming.filter(function(o) {
       return o.locationType === 'room' ? hasFeature('room_service') : true;
     }).length > 0;
-    if (anyPending) startQRRinger(); else stopQRRinger();
+    // Stage 1: only the owner-designated acceptance role (and owner) rings.
+    if (anyPending && roleCanHearQrAccept()) startQRRinger(); else stopQRRinger();
   }, function(err) {
     console.log('QR order listener error:', err);
   });
@@ -11239,6 +11261,38 @@ function playQRAlertSound() {
 // Rings the alert repeatedly while a QR order is waiting, and stops as soon
 // as the order is accepted/declined. Driven by the pending-orders listener
 // (startQRRinger/stopQRRinger are called there and from accept/decline).
+// Owner-configurable (one-time): the list of roles whose device rings when a
+// QR order comes in (the "acceptance" people). Stored as an array so the owner
+// can tick any combination once and never touch it again.
+function getQrAcceptRoles() {
+  var s = db.settings || {};
+  if (Array.isArray(s.qrAcceptRoles)) return s.qrAcceptRoles;
+  // Migrate the earlier single-value setting, if present.
+  if (s.qrAcceptRole === 'cashier') return ['owner', 'cashier'];
+  if (s.qrAcceptRole === 'order_manager') return ['owner', 'order_manager'];
+  // Default (and old 'both'): owner + both counter roles.
+  return ['owner', 'cashier', 'order_manager'];
+}
+function saveQrAcceptRole() {
+  if (!db.settings) db.settings = {};
+  var roles = [];
+  ['owner', 'cashier', 'order_manager'].forEach(function(r) {
+    var cb = document.getElementById('qr-ring-' + r);
+    if (cb && cb.checked) roles.push(r);
+  });
+  db.settings.qrAcceptRoles = roles;
+  delete db.settings.qrAcceptRole; // drop the old single-value key
+  save();
+  var lbl = { owner: 'Owner', cashier: 'Cashier', order_manager: 'Order Manager' };
+  toast(roles.length
+    ? '✅ QR ring ab inke paas jayegi: ' + roles.map(function(r){ return lbl[r]; }).join(', ')
+    : '⚠️ Kisi ko tick nahi kiya — QR ring kahin nahi bajegi!', roles.length ? '#00A878' : '#FF6B35');
+}
+// Does THIS device (by its logged-in role) ring for a new QR order?
+function roleCanHearQrAccept() {
+  return getQrAcceptRoles().indexOf(currentRole) !== -1;
+}
+
 var _qrRingerTimer = null;
 function startQRRinger() {
   if (_qrRingerTimer) return;      // already ringing — don't stack timers
@@ -11251,6 +11305,34 @@ function startQRRinger() {
 }
 function stopQRRinger() {
   if (_qrRingerTimer) { clearInterval(_qrRingerTimer); _qrRingerTimer = null; }
+}
+// Re-evaluate the acceptance ring (e.g. right after someone logs in, when a
+// QR order may already be pending) without waiting for the next cloud change.
+function refreshQrRinger() {
+  var anyPending = hasFeature('qr_menu') && (db.qrOrders || []).filter(function(o) {
+    return o.locationType === 'room' ? hasFeature('room_service') : true;
+  }).length > 0;
+  if (anyPending && roleCanHearQrAccept()) startQRRinger(); else stopQRRinger();
+}
+
+// ── STAGE 2: KITCHEN RINGER ──────────────────────────────────
+// Rings on the KITCHEN device every time a new KOT (kitchen ticket) is sent,
+// and keeps ringing until the kitchen taps "Banana Shuru Karo" (pending ->
+// preparing) on every new ticket. Independent of the acceptance ring above.
+var _kitchenRingerTimer = null;
+function startKitchenRinger() {
+  if (_kitchenRingerTimer) return;
+  playQRAlertSound();
+  _kitchenRingerTimer = setInterval(playQRAlertSound, 3500);
+}
+function stopKitchenRinger() {
+  if (_kitchenRingerTimer) { clearInterval(_kitchenRingerTimer); _kitchenRingerTimer = null; }
+}
+// Only the kitchen device rings, and only while an un-started (NAYA) KOT exists.
+function refreshKitchenRinger() {
+  var anyNew = currentRole === 'kitchen'
+    && (db.kitchenOrders || []).some(function(t){ return t.status === 'pending'; });
+  if (anyNew) startKitchenRinger(); else stopKitchenRinger();
 }
 
 // ── BADGE RENDERING (shows on Home + Tables page) ───────────
