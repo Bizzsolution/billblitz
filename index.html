@@ -123,6 +123,8 @@ body{font-family:'Segoe UI',sans-serif;background:linear-gradient(160deg,#EEF2FF
 .modal-tabs{display:flex;gap:3px;background:#EEF2FF;border-radius:8px;padding:3px;margin-bottom:13px;}
 .mtab{flex:1;border:none;background:none;padding:9px 6px;border-radius:8px;font-weight:700;font-size:0.82rem;cursor:pointer;color:#6B7A99;}
 .mtab.active{background:#FF6B35;color:#fff;}
+.chip{border:1.5px solid #E2E8F5;background:#F7F9FF;padding:7px 14px;border-radius:20px;font-weight:700;font-size:0.78rem;cursor:pointer;color:#6B7A99;}
+.chip.active{background:#7C3AED;color:#fff;border-color:#7C3AED;}
 
 /* ── SEARCH ── */
 .search-inp{width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid #A5B4FC;background:#fff;font-size:1rem;color:#1A2B3C;margin-bottom:14px;box-shadow:0 2px 8px rgba(165,180,252,0.15);}
@@ -1550,6 +1552,9 @@ tr:nth-child(even) td{background:#FFFFFF;}
         <div style="display:flex;gap:8px">
           <div class="form-group" style="flex:1"><label class="form-label">Phone</label><input class="form-inp" id="set-rest-phone" type="tel" placeholder="Contact number"/></div>
           <div class="form-group" style="flex:1"><label class="form-label">GST Number</label><input class="form-inp" id="set-rest-gst" placeholder="e.g. 07AAAAA0000A1Z5"/></div>
+        </div>
+        <div class="form-group"><label class="form-label">UPI ID (QR Payment ke liye)</label><input class="form-inp" id="set-rest-upi" placeholder="e.g. yourname@okhdfcbank"/>
+          <div style="font-size:0.72rem;color:#9CA3AF;margin-top:4px">Jab "QR Pay" feature on ho, customer isi UPI par payment karega. Khaali chhodne par online payment off rahega.</div>
         </div>
         <div style="display:flex;gap:8px">
           <div class="form-group" style="flex:1"><label class="form-label">FSSAI Number</label><input class="form-inp" id="set-rest-fssai" placeholder="FSSAI License No."/></div>
@@ -4243,6 +4248,7 @@ function renderSettingsPage(){
   if(document.getElementById('set-rest-addr')) document.getElementById('set-rest-addr').value = info.addr||'';
   if(document.getElementById('set-rest-phone')) document.getElementById('set-rest-phone').value = info.phone||'';
   if(document.getElementById('set-rest-gst')) document.getElementById('set-rest-gst').value = info.gst||'';
+  if(document.getElementById('set-rest-upi')) document.getElementById('set-rest-upi').value = info.upi||'';
   if(document.getElementById('set-rest-fssai')) document.getElementById('set-rest-fssai').value = info.fssai||'';
   if(document.getElementById('set-rest-city')) document.getElementById('set-rest-city').value = info.city||'';
   if(document.getElementById('set-rest-msg')) document.getElementById('set-rest-msg').value = info.msg||'';
@@ -4263,9 +4269,18 @@ function pushRestaurantInfo(){
   // full sync cycle.
   if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
   var info = (db.settings && db.settings.restInfo) || {};
+  // QR payment is live only when the feature is ON for this client AND the
+  // owner has saved a UPI ID. order.html reads these to decide the flow.
+  var payOn = hasFeature('qr_payment') && !!(info.upi && info.upi.trim());
   firestoreDb.collection('restaurants').doc(restaurantId)
     .collection('meta').doc('info')
-    .set({ restaurantName: info.name || '', phone: info.phone || '' }, { merge: true })
+    .set({
+      restaurantName: info.name || '',
+      phone: info.phone || '',
+      upi: payOn ? info.upi.trim() : '',
+      payeeName: info.name || 'Restaurant',
+      qrPayEnabled: payOn
+    }, { merge: true })
     .catch(function(){});
 }
 
@@ -4339,6 +4354,7 @@ function saveRestInfo(){
     addr:  document.getElementById('set-rest-addr').value.trim(),
     phone: document.getElementById('set-rest-phone').value.trim(),
     gst:   document.getElementById('set-rest-gst')?.value.trim()||'',
+    upi:   document.getElementById('set-rest-upi')?.value.trim()||'',
     fssai: document.getElementById('set-rest-fssai')?.value.trim()||'',
     city:  document.getElementById('set-rest-city')?.value.trim()||'',
     msg:   document.getElementById('set-rest-msg').value.trim(),
@@ -7061,6 +7077,15 @@ function renderPurchaseForm(){
     +'<div class="form-group" style="flex:1"><label class="form-label">Payment</label>'
     +'<select class="form-inp" id="pur-status"><option value="paid">Paid</option><option value="pending">Pending/Credit</option></select></div>'
     +'</div>'
+    // GST on purchase (only when GST Reports feature is on) — powers GSTR-2 / input tax credit
+    +(hasFeature('gst_reports')
+       ? '<div style="display:flex;gap:8px">'
+         +'<div class="form-group" style="flex:1"><label class="form-label">GST % (input tax)</label>'
+         +'<input class="form-inp" id="pur-gst" type="number" min="0" step="0.01" placeholder="e.g. 5 (khaali=0)"/></div>'
+         +'<div class="form-group" style="flex:1"><label class="form-label">Supplier GSTIN</label>'
+         +'<input class="form-inp" id="pur-gstin" placeholder="optional"/></div>'
+         +'</div>'
+       : '')
     // Items
     +'<div style="font-size:0.72rem;font-weight:700;color:#6B7A99;margin-bottom:6px;letter-spacing:0.05em">ITEMS PURCHASED</div>'
     +'<div id="pur-items">'+purchaseItems.map(function(item,i){return purchaseItemRow(item,i);}).join('')+'</div>'
@@ -7288,9 +7313,12 @@ function savePurchase(){
   });
 
   // ── Save purchase ──────────────────────────────────────
+  var purGstPct = parseFloat((document.getElementById('pur-gst')||{}).value) || 0;
+  var purGstin  = ((document.getElementById('pur-gstin')||{}).value || '').trim();
   db.purchases.unshift({
     id: purchaseId, date: new Date(date).toISOString(),
     supplier, items, total, status, notes,
+    gstPct: purGstPct, supplierGstin: purGstin, // for GSTR-2 / input tax credit
     paidAmount: status === 'paid' ? total : 0,
     paymentHistory: status === 'paid' ? [{ date: todayLocalDateStr(), amount: total, note: 'Full payment at purchase' }] : []
   });
@@ -8031,7 +8059,170 @@ function exportPurchasePDF(){
 }
 
 // ── 4. GST REPORT ─────────────────────────────────────────────
+// Dispatcher: advanced GSTR-1/2/3B suite for clients with the gst_reports
+// feature; otherwise the original basic GST summary (unchanged).
+var gstReportView = 'summary';
+function setGstView(v){
+  gstReportView = v;
+  ['summary','gstr1','gstr2','gstr3b'].forEach(function(x){
+    var el = document.getElementById('gstv-'+x);
+    if(el) el.classList.toggle('active', x===v);
+  });
+  renderGSTReportView();
+}
+// Taxable value of a sale = subtotal − discount (GST is charged on this).
+function orderTaxable(o){ return Math.max(0, (Number(o.subtotal)||0) - (Number(o.discount)||0)); }
+function orderRate(o){ var t=orderTaxable(o); return t>0 ? Math.round((Number(o.tax)||0)/t*100) : 0; }
+
+// Aggregate outward (sales) + inward (purchases) GST for the period.
+function computeGstData(){
+  var orders = getPeriodOrders();
+  var out = { taxable:0, tax:0, cgst:0, sgst:0, igst:0, count:orders.length, slabs:{} };
+  orders.forEach(function(o){
+    var tx = orderTaxable(o), rate = orderRate(o);
+    out.taxable += tx; out.tax += (Number(o.tax)||0);
+    getGSTBreakdown(o).forEach(function(g){
+      if(g.name==='CGST') out.cgst+=g.amt; else if(g.name==='SGST') out.sgst+=g.amt; else if(g.name==='IGST') out.igst+=g.amt;
+    });
+    if(!out.slabs[rate]) out.slabs[rate]={taxable:0,tax:0,count:0};
+    out.slabs[rate].taxable+=tx; out.slabs[rate].tax+=(Number(o.tax)||0); out.slabs[rate].count++;
+  });
+  var purch = getPeriodPurchases();
+  var inp = { taxable:0, tax:0, cgst:0, sgst:0, igst:0, count:purch.length, slabs:{} };
+  purch.forEach(function(p){
+    var rate = Number(p.gstPct)||0;
+    var tx = Number(p.total)||0; // purchase cost treated as taxable base
+    var tax = tx*rate/100;
+    inp.taxable+=tx; inp.tax+=tax;
+    // Assume intra-state input (CGST+SGST). Owner can read the split per slab.
+    inp.cgst+=tax/2; inp.sgst+=tax/2;
+    if(!inp.slabs[rate]) inp.slabs[rate]={taxable:0,tax:0,count:0};
+    inp.slabs[rate].taxable+=tx; inp.slabs[rate].tax+=tax; inp.slabs[rate].count++;
+  });
+  return { out:out, inp:inp };
+}
+function gstSlabRows(slabs){
+  var keys = Object.keys(slabs).map(Number).sort(function(a,b){return a-b;});
+  if(!keys.length) return '<div class="empty" style="padding:1rem">Is period mein koi entry nahi.</div>';
+  return keys.map(function(r){
+    var s=slabs[r];
+    return '<div class="bill-row"><span>'+r+'% ('+s.count+')</span><span>Taxable '+fmt(s.taxable)+' · GST '+fmt(s.tax)+'</span></div>';
+  }).join('');
+}
 function renderGSTReportView(){
+  if(!hasFeature('gst_reports')) return renderGSTBasicView();
+  var d = computeGstData();
+  var tabs = '<div class="rep-tabs" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">'
+    +'<button class="chip active" id="gstv-summary" onclick="setGstView(\'summary\')">Summary</button>'
+    +'<button class="chip" id="gstv-gstr1" onclick="setGstView(\'gstr1\')">GSTR-1</button>'
+    +'<button class="chip" id="gstv-gstr2" onclick="setGstView(\'gstr2\')">GSTR-2</button>'
+    +'<button class="chip" id="gstv-gstr3b" onclick="setGstView(\'gstr3b\')">GSTR-3B</button>'
+    +'</div>';
+  var body = '';
+  if(gstReportView==='gstr1') body = gstr1Html(d);
+  else if(gstReportView==='gstr2') body = gstr2Html(d);
+  else if(gstReportView==='gstr3b') body = gstr3bHtml(d);
+  else body = gstSummaryHtml(d);
+  document.getElementById('report-content').innerHTML =
+    '<div style="font-size:0.75rem;color:#6B7A99;margin-bottom:8px">📅 '+getPeriodLabel()+'</div>'
+    + tabs + body
+    + '<div style="background:#EFF6FF;border-radius:10px;padding:10px;font-size:0.72rem;color:#1D4ED8;margin:10px 0">ℹ️ Ye report aapke BillBlitz bills aur purchases se bani hai. Filing se pehle apne CA/accountant se verify karein. GSTR-2 asli portal par auto-aata hai (GSTR-2B).</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-outline" onclick="exportGSTRCsv()">⬇️ CSV Export</button><button class="btn btn-outline" onclick="setGstView(gstReportView)">🔄 Refresh</button></div>';
+}
+function gstSummaryHtml(d){
+  var netCgst=d.out.cgst-d.inp.cgst, netSgst=d.out.sgst-d.inp.sgst, netIgst=d.out.igst-d.inp.igst;
+  var netTotal=d.out.tax-d.inp.tax;
+  return '<div class="stats-grid">'
+    +'<div class="stat-card"><div class="stat-icon">🧾</div><div class="stat-val" style="color:#7C3AED">'+fmt(d.out.tax)+'</div><div class="stat-lbl">Output GST (Sales)</div></div>'
+    +'<div class="stat-card"><div class="stat-icon">📥</div><div class="stat-val" style="color:#2563EB">'+fmt(d.inp.tax)+'</div><div class="stat-lbl">Input GST (Purchases)</div></div>'
+    +'</div>'
+    +'<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">💰 Net GST Payable (3B)</div></div><div class="card-body">'
+    +'<div class="bill-row"><span>Output Tax (sales)</span><span>'+fmt(d.out.tax)+'</span></div>'
+    +'<div class="bill-row"><span>Input Tax Credit (purchases)</span><span>- '+fmt(d.inp.tax)+'</span></div>'
+    +'<div class="divider"></div>'
+    +'<div class="bill-total"><span>Net Payable</span><span>'+fmt(Math.max(0,netTotal))+'</span></div>'
+    +(netTotal<0?'<div style="font-size:0.74rem;color:#16A34A;margin-top:4px">Credit carry-forward: '+fmt(-netTotal)+'</div>':'')
+    +'</div></div>'
+    +'<div class="card"><div class="card-header"><div class="card-title">📑 Net CGST / SGST / IGST</div></div><div class="card-body">'
+    +'<div class="bill-row"><span>Net CGST</span><span>'+fmt(netCgst)+'</span></div>'
+    +'<div class="bill-row"><span>Net SGST</span><span>'+fmt(netSgst)+'</span></div>'
+    +'<div class="bill-row"><span>Net IGST</span><span>'+fmt(netIgst)+'</span></div>'
+    +'</div></div>';
+}
+function gstr1Html(d){
+  return '<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">GSTR-1 · Outward Supplies (Sales)</div></div><div class="card-body">'
+    +'<div class="bill-row"><span>Total Taxable Value</span><span>'+fmt(d.out.taxable)+'</span></div>'
+    +'<div class="bill-row"><span>Total Bills</span><span>'+d.out.count+'</span></div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:0.74rem;font-weight:700;color:#6B7A99;margin-bottom:6px">RATE-WISE (B2C)</div>'
+    + gstSlabRows(d.out.slabs)
+    +'<div class="divider"></div>'
+    +'<div class="bill-row"><span>CGST</span><span>'+fmt(d.out.cgst)+'</span></div>'
+    +'<div class="bill-row"><span>SGST</span><span>'+fmt(d.out.sgst)+'</span></div>'
+    +'<div class="bill-row"><span>IGST</span><span>'+fmt(d.out.igst)+'</span></div>'
+    +'<div class="bill-total"><span>Total Output GST</span><span>'+fmt(d.out.tax)+'</span></div>'
+    +'</div></div>';
+}
+function gstr2Html(d){
+  return '<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">GSTR-2 · Inward Supplies (Purchases)</div></div><div class="card-body">'
+    +(d.inp.count===0?'<div class="empty" style="padding:1rem">Is period mein GST wali purchase nahi mili. Purchase add karte waqt GST% daalein.</div>'
+      :'<div class="bill-row"><span>Total Taxable Value</span><span>'+fmt(d.inp.taxable)+'</span></div>'
+       +'<div class="bill-row"><span>Total Purchases</span><span>'+d.inp.count+'</span></div>'
+       +'<div class="divider"></div>'
+       +'<div style="font-size:0.74rem;font-weight:700;color:#6B7A99;margin-bottom:6px">RATE-WISE</div>'
+       + gstSlabRows(d.inp.slabs)
+       +'<div class="divider"></div>'
+       +'<div class="bill-row"><span>Input CGST</span><span>'+fmt(d.inp.cgst)+'</span></div>'
+       +'<div class="bill-row"><span>Input SGST</span><span>'+fmt(d.inp.sgst)+'</span></div>'
+       +'<div class="bill-total"><span>Total Input Tax Credit</span><span>'+fmt(d.inp.tax)+'</span></div>')
+    +'</div></div>';
+}
+function gstr3bHtml(d){
+  var net=d.out.tax-d.inp.tax;
+  return '<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title">GSTR-3B · Monthly Summary</div></div><div class="card-body">'
+    +'<div style="font-size:0.74rem;font-weight:700;color:#6B7A99;margin:2px 0 6px">3.1 OUTWARD (Tax on sales)</div>'
+    +'<div class="bill-row"><span>Taxable Value</span><span>'+fmt(d.out.taxable)+'</span></div>'
+    +'<div class="bill-row"><span>CGST</span><span>'+fmt(d.out.cgst)+'</span></div>'
+    +'<div class="bill-row"><span>SGST</span><span>'+fmt(d.out.sgst)+'</span></div>'
+    +'<div class="bill-row"><span>IGST</span><span>'+fmt(d.out.igst)+'</span></div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:0.74rem;font-weight:700;color:#6B7A99;margin:2px 0 6px">4. INPUT TAX CREDIT</div>'
+    +'<div class="bill-row"><span>ITC (CGST)</span><span>'+fmt(d.inp.cgst)+'</span></div>'
+    +'<div class="bill-row"><span>ITC (SGST)</span><span>'+fmt(d.inp.sgst)+'</span></div>'
+    +'<div class="divider"></div>'
+    +'<div class="bill-total"><span>Net Tax Payable</span><span>'+fmt(Math.max(0,net))+'</span></div>'
+    +(net<0?'<div style="font-size:0.74rem;color:#16A34A;margin-top:4px">ITC carry-forward: '+fmt(-net)+'</div>':'')
+    +'</div></div>';
+}
+function exportGSTRCsv(){
+  var d = computeGstData();
+  var L = [];
+  L.push(['BillBlitz GST Report', getPeriodLabel()]);
+  L.push([]);
+  L.push(['GSTR-1 OUTWARD (SALES) — rate-wise']);
+  L.push(['Rate %','Count','Taxable','GST']);
+  Object.keys(d.out.slabs).map(Number).sort(function(a,b){return a-b;}).forEach(function(r){var s=d.out.slabs[r];L.push([r,s.count,s.taxable.toFixed(2),s.tax.toFixed(2)]);});
+  L.push(['','','CGST',d.out.cgst.toFixed(2)]); L.push(['','','SGST',d.out.sgst.toFixed(2)]); L.push(['','','IGST',d.out.igst.toFixed(2)]);
+  L.push(['','','Total Output GST',d.out.tax.toFixed(2)]);
+  L.push([]);
+  L.push(['GSTR-2 INWARD (PURCHASES) — rate-wise']);
+  L.push(['Rate %','Count','Taxable','GST']);
+  Object.keys(d.inp.slabs).map(Number).sort(function(a,b){return a-b;}).forEach(function(r){var s=d.inp.slabs[r];L.push([r,s.count,s.taxable.toFixed(2),s.tax.toFixed(2)]);});
+  L.push(['','','Total Input ITC',d.inp.tax.toFixed(2)]);
+  L.push([]);
+  L.push(['GSTR-3B SUMMARY']);
+  L.push(['Output GST',d.out.tax.toFixed(2)]);
+  L.push(['Input Tax Credit',d.inp.tax.toFixed(2)]);
+  L.push(['Net Payable',Math.max(0,d.out.tax-d.inp.tax).toFixed(2)]);
+  var csv = L.map(function(row){return row.map(function(c){var v=String(c==null?'':c);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',');}).join('\n');
+  var blob = new Blob([csv], {type:'text/csv'});
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'GST_Report_'+getPeriodLabel().replace(/\s/g,'_')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  toast('✅ GST CSV download ho gaya', '#00A878');
+}
+
+function renderGSTBasicView(){
   var orders = getPeriodOrders();
   var taxable = orders.reduce(function(s,o){return s+o.subtotal;},0);
   var totalGST = orders.reduce(function(s,o){return s+o.tax;},0);
@@ -11384,6 +11575,9 @@ function showQROrdersModal() {
         + '<div class="qr-order-hdr"><span class="qr-order-table">' + (isRoom?'🛏️ ':'🪑 ') + esc(o.tableName || 'Takeaway') + (isRoom?' <span style="font-size:0.62rem;color:#7C3AED;font-weight:700">ROOM SERVICE</span>':'') + '</span><span class="qr-order-time">' + fmtTime(o.date) + '</span></div>'
         + itemsHtml
         + (o.note ? '<div class="qr-order-note">📝 ' + esc(o.note) + '</div>' : '')
+        + (o.paymentStatus === 'paid_unverified'
+            ? '<div style="background:#DCFCE7;color:#16A34A;border-radius:8px;padding:6px 10px;margin-top:8px;font-size:0.78rem;font-weight:700">💳 ONLINE PAID (UPI)' + (o.paymentRef ? ' · Ref: ' + esc(o.paymentRef) : '') + '<div style="font-weight:500;color:#15803D;font-size:0.68rem">Apni UPI app me confirm kar lein</div></div>'
+            : '')
         + '<div class="qr-order-total"><span>Total</span><span>' + fmt(qrTrustedTotal) + '</span></div>'
         + '<div class="qr-order-actions">'
         + '<button class="btn btn-green" style="flex:1" data-oid="' + esc(o.id) + '" onclick="acceptQROrder(this.dataset.oid)">✅ Accept</button>'

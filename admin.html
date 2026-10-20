@@ -781,6 +781,9 @@ function adminLogout() {
 // state instead of a client-side flag.
 firebase.auth().onAuthStateChanged(function(user) {
   if (user) {
+    // The Firestore rules are the real gate (email allow-list). Just show the
+    // panel on a successful login — if the email isn't on the allow-list, the
+    // data reads below simply return nothing and the panel stays empty.
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('admin-wrap').style.display = 'block';
     var emailInp = document.getElementById('admin-pass');
@@ -1489,6 +1492,8 @@ var ALL_FEATURES = [
   {id:'smart_order', name:'Smart Order (Type + Voice)', tier:'premium', always:false, desc:'The Smart Order box on the billing screen — type or speak items in natural language and they get added to the order automatically'},
   {id:'offline_mode', name:'Offline Mode', tier:'premium', always:false, desc:'App keeps working with no internet — billing, tables, orders stay usable, syncing automatically once back online. OFF removes this from the client\'s device (not just hidden).'},
   {id:'banquet', name:'Banquet Module', tier:'premium', always:false, desc:'Separate Banquet tab for per-plate event billing — customer name/address/GST captured per booking, own bill format with advance & balance due.'},
+  {id:'qr_payment', name:'QR Pay (UPI)', tier:'premium', always:false, desc:'Customer QR ordering me online UPI payment — customer order ke saath UPI QR se pay karta hai, phir hi order staff ko jata hai (PAID tag ke saath). Owner apni UPI ID Settings me daalta hai. Requires QR Table Ordering.'},
+  {id:'gst_reports', name:'GST Reports (GSTR-1/2/3B)', tier:'premium', always:false, desc:'Reports me GST filing summary — GSTR-1 (sales/outward), GSTR-2 (purchase/inward), GSTR-3B summary, rate-wise breakup, CSV export. Requires Basic Reports.'},
 ];
 
 var TIER_FEATURES = {

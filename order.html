@@ -162,6 +162,26 @@ body{font-family:'Poppins',sans-serif;background:#F5F7FB;color:#1A2B3C;padding-b
   </div>
 </div>
 
+<div class="overlay" id="pay-overlay" onclick="if(event.target===this)closePay()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hdr">
+      <div class="sheet-title">UPI Payment</div>
+      <div class="sheet-close" onclick="closePay()">✕</div>
+    </div>
+    <div class="sheet-body" style="text-align:center">
+      <div style="font-size:0.9rem;color:#6B7A99;margin-bottom:6px">Pay karein taaki order place ho</div>
+      <div style="font-size:1.8rem;font-weight:800;color:#1A2B3C;margin-bottom:12px" id="pay-amount">Rs.0</div>
+      <div id="pay-qr" style="display:flex;justify-content:center;margin-bottom:10px"></div>
+      <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px" id="pay-upi-lbl"></div>
+      <a id="pay-upi-link" href="#" class="place-btn" style="display:block;text-decoration:none;background:#5B3DF5;margin-bottom:10px">📲 UPI App me Pay karein</a>
+      <input class="note-inp" id="pay-ref" placeholder="UPI Reference / UTR No. (optional)" style="text-align:center"/>
+      <button class="place-btn" id="pay-done-btn" onclick="confirmPayment()" style="background:#00A878">✅ Payment ho gaya — Order bhejo</button>
+      <div style="font-size:0.72rem;color:#9CA3AF;margin-top:10px">Payment karne ke baad hi "Payment ho gaya" dabayein. Staff aapka payment confirm karega.</div>
+    </div>
+  </div>
+</div>
+
 <div class="confirm-screen" id="confirm-screen">
   <div class="confirm-ic">✅</div>
   <div class="confirm-title">Order Sent!</div>
@@ -191,6 +211,9 @@ var restaurantId = getParam('r');
 var tableId       = getParam('t') || '';
 var tableName     = getParam('tn') || 'Takeaway';
 var locationType  = getParam('loc') === 'room' ? 'room' : 'table';
+// QR payment config, filled from meta/info in loadRestaurantData().
+var payInfo = { enabled:false, upi:'', payeeName:'Restaurant' };
+var pendingOrder = null; // {items,total,note} held while the customer pays
 
 // ── STATE ───────────────────────────────────────────────────
 var menu = [];
@@ -249,6 +272,9 @@ async function loadRestaurantData() {
     var info = infoDoc.exists ? infoDoc.data() : {};
     document.getElementById('rest-name').textContent = info.restaurantName || info.name || 'Restaurant';
     document.getElementById('rest-sub').textContent  = locationType==='room' ? 'Room Service' : 'Digital Menu & Ordering';
+    payInfo.enabled = !!info.qrPayEnabled && !!info.upi;
+    payInfo.upi = info.upi || '';
+    payInfo.payeeName = info.payeeName || info.restaurantName || 'Restaurant';
     document.getElementById('table-pill').textContent = (locationType==='room'?'🛏️ ':'🪑 ') + (tableId ? tableName : 'Takeaway');
 
     var menuDoc = await firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('menu').get();
@@ -397,42 +423,101 @@ async function placeOrder() {
   });
   if(!items.length) { alert('Kuch items add karein!'); return; }
 
+  var note = (document.getElementById('order-note').value || '').trim();
+  pendingOrder = { items: items, total: total, note: note };
+
+  // Payment-first flow: when QR Pay is on, the customer must pay before the
+  // order is sent. Otherwise, place the order straight away (pay at counter).
+  if (payInfo.enabled) { openPay(); return; }
+  await submitOrder(null);
+}
+
+// Actually writes the order to Firestore. payFields is null for no-online-pay,
+// or { paymentStatus, paymentMethod, paymentRef } after a UPI payment.
+async function submitOrder(payFields) {
+  if(!pendingOrder) return;
   var btn = document.getElementById('place-btn');
-  btn.disabled = true; btn.textContent = 'Sending...';
+  var payBtn = document.getElementById('pay-done-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+  if (payBtn) { payBtn.disabled = true; payBtn.textContent = 'Bhej raha hai...'; }
 
   try {
     var orderId = uid();
-    var note = (document.getElementById('order-note').value || '').trim();
+    var doc = {
+      tableId: tableId,
+      tableName: tableName,
+      locationType: locationType,
+      items: pendingOrder.items,
+      total: pendingOrder.total,
+      note: pendingOrder.note,
+      status: 'pending',
+      date: new Date().toISOString(),
+      // Lets the rules allow THIS customer to read back only their own
+      // order's status — without being able to read anyone else's.
+      customerUid: (fbAuth.currentUser && fbAuth.currentUser.uid) || ''
+    };
+    if (payFields) {
+      doc.paymentStatus = payFields.paymentStatus; // 'paid_unverified'
+      doc.paymentMethod = payFields.paymentMethod; // 'upi_qr'
+      doc.paymentRef    = payFields.paymentRef || '';
+    }
     await firestoreDb.collection('restaurants').doc(restaurantId)
-      .collection('qrOrders').doc(orderId)
-      .set({
-        tableId: tableId,
-        tableName: tableName,
-        locationType: locationType,
-        items: items,
-        total: total,
-        note: note,
-        status: 'pending',
-        date: new Date().toISOString(),
-        // Lets the rules allow THIS customer to read back only their own
-        // order's status — without being able to read anyone else's.
-        customerUid: (fbAuth.currentUser && fbAuth.currentUser.uid) || ''
-      });
+      .collection('qrOrders').doc(orderId).set(doc);
 
     currentOrderId = orderId;
     cart = {};
     updateCartBar();
     closeCart();
-    // Reset the button BEFORE showing confirmation. Previously it was left
-    // disabled with the text "Sending..." forever on success (only the catch
-    // block reset it), so the SECOND order could never be placed — the button
-    // stayed stuck showing "Sending...".
-    btn.disabled = false; btn.textContent = 'Place Order';
+    closePay();
+    if (btn) { btn.disabled = false; btn.textContent = 'Place Order'; }
+    if (payBtn) { payBtn.disabled = false; payBtn.textContent = '✅ Payment ho gaya — Order bhejo'; }
+    pendingOrder = null;
     showConfirmation(orderId);
   } catch(e) {
     alert('Order bhejne mein error: ' + e.message);
-    btn.disabled = false; btn.textContent = 'Place Order';
+    if (btn) { btn.disabled = false; btn.textContent = 'Place Order'; }
+    if (payBtn) { payBtn.disabled = false; payBtn.textContent = '✅ Payment ho gaya — Order bhejo'; }
   }
+}
+
+// ── UPI PAYMENT UI ──────────────────────────────────────────
+function ensureQRLib(cb){
+  if (window.QRCode) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = cb; s.onerror = function(){ cb(); };
+  document.head.appendChild(s);
+}
+function buildUpiUri(amount){
+  return 'upi://pay?pa=' + encodeURIComponent(payInfo.upi)
+    + '&pn=' + encodeURIComponent(payInfo.payeeName)
+    + '&am=' + encodeURIComponent(Number(amount||0).toFixed(2))
+    + '&cu=INR&tn=' + encodeURIComponent('Order ' + (tableName||''));
+}
+function openPay(){
+  if(!pendingOrder) return;
+  var uri = buildUpiUri(pendingOrder.total);
+  document.getElementById('pay-amount').textContent = fmt(pendingOrder.total);
+  document.getElementById('pay-upi-lbl').textContent = 'UPI: ' + payInfo.upi;
+  document.getElementById('pay-upi-link').href = uri;
+  document.getElementById('pay-ref').value = '';
+  var box = document.getElementById('pay-qr');
+  box.innerHTML = '';
+  ensureQRLib(function(){
+    box.innerHTML = '';
+    if (window.QRCode) {
+      try { new QRCode(box, { text: uri, width: 190, height: 190, correctLevel: QRCode.CorrectLevel.M }); }
+      catch(e){ box.innerHTML = '<div style="font-size:0.8rem;color:#6B7A99">QR nahi bana — upar "UPI App me Pay karein" dabayein.</div>'; }
+    } else {
+      box.innerHTML = '<div style="font-size:0.8rem;color:#6B7A99">QR nahi bana — upar "UPI App me Pay karein" dabayein.</div>';
+    }
+  });
+  document.getElementById('pay-overlay').classList.add('show');
+}
+function closePay(){ document.getElementById('pay-overlay').classList.remove('show'); }
+async function confirmPayment(){
+  var ref = (document.getElementById('pay-ref').value || '').trim().slice(0, 40);
+  await submitOrder({ paymentStatus: 'paid_unverified', paymentMethod: 'upi_qr', paymentRef: ref });
 }
 
 // Tracks EVERY order placed this visit — not just the latest one — so
