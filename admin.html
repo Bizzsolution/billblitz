@@ -223,6 +223,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <div class="sb-link" id="nav-features" onclick="showSection('features');closeMobileSidebar()"><span>🎛️</span> Features</div>
       <div class="sb-link" id="nav-menuup" onclick="showSection('menuup');closeMobileSidebar()"><span>🍜</span> Menu Updater</div>
       <div class="sb-link" id="nav-qrtables" onclick="showSection('qrtables');closeMobileSidebar()"><span>🪑</span> QR Tables</div>
+      <div class="sb-link" id="nav-recipes" onclick="showSection('recipes');closeMobileSidebar()"><span>🧾</span> Recipe Upload</div>
       <div class="sb-link" id="nav-revenue" onclick="showSection('revenue');closeMobileSidebar()"><span>💰</span> Revenue</div>
       <div class="sb-link" id="nav-billing" onclick="showSection('billing');closeMobileSidebar()"><span>🧾</span> Billing</div>
       <div class="sb-link" id="nav-danger" onclick="showSection('danger');closeMobileSidebar()"><span>⚠️</span> Danger Zone</div>
@@ -400,6 +401,32 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
     </div>
 
     <!-- CLIENTS -->
+    <!-- RECIPE UPLOAD (Excel / CSV / PDF bulk import) -->
+    <div id="sec-recipes" style="display:none">
+      <div class="topbar"><div class="topbar-title">🧾 Recipe Upload</div></div>
+      <div style="background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.15);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:0.8rem;color:#FFD700;line-height:1.6">
+        Client chunein → Excel template download karein (usme client ke menu aur inventory ke naam pehle se milte hain) → recipe bharke upload karein (Excel / CSV / PDF) → preview check karke ek click me poori recipe push. Client ke liye <b>Auto Stock Deduction</b> feature ON hona chahiye.
+      </div>
+      <div class="card" style="margin-bottom:14px"><div class="card-body">
+        <div class="form-group"><label class="form-label">Client</label>
+          <select class="form-select" id="rcp-client" onchange="rcpLoad()"><option value="">-- Client chunein --</option></select></div>
+        <div id="rcp-info" style="font-size:0.76rem;color:#93C5FD;line-height:1.6"></div>
+      </div></div>
+      <div id="rcp-body" style="display:none">
+        <div class="card" style="margin-bottom:14px"><div class="card-body">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-sm btn-outline" onclick="rcpTemplate()">⬇️ Excel template</button>
+            <input type="file" id="rcp-file" accept=".xlsx,.xls,.csv,.pdf" style="display:none" onchange="rcpPick(event)"/>
+            <button class="btn btn-sm btn-gold" onclick="document.getElementById('rcp-file').click()">📤 Excel / CSV / PDF upload</button>
+          </div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:8px;line-height:1.6">
+            Columns: <b>Dish | Type | Ingredient | Qty | Unit</b>. Type khali = recipe; <b>direct</b> = Pepsi jaisa seedha bikne wala item (1 row: Dish, Ingredient, Qty per sale). Dish khali ho to upar wali dish maani jaati hai. Unit g/kg/ml/l/pcs — inventory ki unit me apne aap convert hota hai.
+          </div>
+        </div></div>
+        <div id="rcp-preview"></div>
+      </div>
+    </div>
+
     <div id="sec-qrtables" style="display:none">
       <div class="topbar"><div class="topbar-title">🪑 QR Tables</div></div>
       <div style="background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.15);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:0.8rem;color:#FFD700">
@@ -897,7 +924,7 @@ function closeMobileSidebar() {
 }
 
 function showSection(id) {
-  ['dashboard','clients','keys','announce','revenue','billing','asettings','features','menuup','qrtables','danger'].forEach(s => {
+  ['dashboard','clients','keys','announce','revenue','billing','asettings','features','menuup','qrtables','recipes','danger'].forEach(s => {
     const el = document.getElementById('sec-'+s);
     const nav = document.getElementById('nav-'+s);
     if(el) el.style.display = s===id ? 'block' : 'none';
@@ -907,6 +934,7 @@ function showSection(id) {
   if(id==='features') showFeaturesSection();
   if(id==='menuup') showMenuUpdaterSection();
   if(id==='qrtables') showQRTablesSection();
+  if(id==='recipes') showRecipeSection();
   if(id==='danger') showDangerZoneSection();
   if(id==='clients') renderClients();
   if(id==='keys') renderKeys();
@@ -1551,6 +1579,7 @@ var ALL_FEATURES = [
   {id:'banquet', name:'Banquet Module', tier:'premium', always:false, desc:'Separate Banquet tab for per-plate event billing — customer name/address/GST captured per booking, own bill format with advance & balance due.'},
   {id:'qr_payment', name:'QR Pay (UPI)', tier:'premium', always:false, desc:'Customer QR ordering me online UPI payment — customer order ke saath UPI QR se pay karta hai, phir hi order staff ko jata hai (PAID tag ke saath). Owner apni UPI ID Settings me daalta hai. Requires QR Table Ordering.'},
   {id:'qr_logo', name:'QR Logo (Branded QR)', tier:'premium', always:false, desc:'Table QR ke beech me restaurant ka logo (Settings me upload kiya hua) lag jata hai — print/download QR card par. Requires QR Table Ordering.'},
+  {id:'inventory_auto', name:'Auto Stock Deduction (Recipe/Direct)', tier:'premium', always:false, desc:'Bill banne par inventory apne aap kat'+'ti hai — dish ke recipe (ingredients) ke hisaab se, aur Pepsi/ice-cream jaise seedhe bikne wale items seedha. Consumption report + food-cost. Requires Inventory.'},
   {id:'gst_reports', name:'GST Reports (GSTR-1/2/3B)', tier:'premium', always:false, desc:'Reports me GST filing summary — GSTR-1 (sales/outward), GSTR-2 (purchase/inward), GSTR-3B summary, rate-wise breakup, CSV export. Requires Basic Reports.'},
 ];
 
@@ -3411,6 +3440,264 @@ async function qrtPrint() {
     w.document.close();
   } catch (e) { w.document.body.innerHTML = '<p style="font-family:Arial;padding:20px">Error: ' + esc(e.message) + '</p>'; }
 }
+
+// ══ RECIPE BULK UPLOAD (Excel / CSV / PDF) ═══════════════════════
+var rcpState = { rid: '', client: null, menu: [], inv: [], recipes: [], parsed: [], fileName: '' };
+function rcpNorm(s) { return String(s == null ? '' : s).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9\u0900-\u097f]+/g, ' ').trim(); }
+var RCP_UNITS = { mg:['m',0.001], g:['m',1], gm:['m',1], gram:['m',1], grams:['m',1], kg:['m',1000], kgs:['m',1000], kilo:['m',1000],
+  ml:['v',1], l:['v',1000], ltr:['v',1000], lt:['v',1000], litre:['v',1000], liter:['v',1000], litres:['v',1000],
+  pcs:['c',1], pc:['c',1], piece:['c',1], pieces:['c',1], nos:['c',1], no:['c',1], unit:['c',1], units:['c',1], each:['c',1], plate:['c',1], pkt:['c',1], packet:['c',1], bottle:['c',1], can:['c',1] };
+function rcpUnit(u) { return RCP_UNITS[String(u || '').trim().toLowerCase().replace(/\./g, '')] || null; }
+function rcpConvert(qty, fileUnit, invUnit) {
+  var f = rcpUnit(fileUnit), t = rcpUnit(invUnit);
+  if (f && t && f[0] === t[0]) return Math.round(qty * f[1] / t[1] * 100000) / 100000;
+  return qty;
+}
+function rcpFind(list, name) {
+  var n = rcpNorm(name); if (!n) return null;
+  var ex = list.filter(function(x){ return rcpNorm(x.name) === n; });
+  if (ex.length) return ex[0];
+  var part = list.filter(function(x){ var m = rcpNorm(x.name); return m && (m.indexOf(n) >= 0 || n.indexOf(m) >= 0); });
+  return part.length === 1 ? part[0] : null;
+}
+function showRecipeSection() {
+  var sel = document.getElementById('rcp-client');
+  if (sel && sel.options.length <= 1) {
+    var opts = '<option value="">-- Client chunein --</option>';
+    adminData.clients.forEach(function(c){ opts += '<option value="' + c.id + '">' + esc(c.name) + (c.key ? ' (' + c.key + ')' : ' (No key yet)') + '</option>'; });
+    sel.innerHTML = opts;
+  }
+}
+async function rcpResolveRid(c) {
+  var keys = [c.key, String(c.key).toUpperCase()].filter(function(k, i, arr){ return arr.indexOf(k) === i; });
+  for (var i = 0; i < keys.length; i++) {
+    var ld = await db_admin.collection('licenses').doc(keys[i]).get();
+    if (ld.exists && ld.data() && ld.data().restaurantId) return ld.data().restaurantId;
+  }
+  return computeRestaurantId(c.key);
+}
+async function rcpLoad() {
+  var id = document.getElementById('rcp-client').value, body = document.getElementById('rcp-body');
+  rcpState.parsed = []; document.getElementById('rcp-preview').innerHTML = '';
+  if (!id) { body.style.display = 'none'; return; }
+  var c = adminData.clients.find(function(x){ return x.id === id; });
+  if (!c || !c.key) { toast('Is client ki license key nahi bani', '#FF6B35'); body.style.display = 'none'; return; }
+  try {
+    var rid = await rcpResolveRid(c);
+    var meta = db_admin.collection('restaurants').doc(rid).collection('meta');
+    var res = await Promise.all([meta.doc('menu').get(), meta.doc('inventory').get(), meta.doc('recipes').get()]);
+    rcpState.rid = rid; rcpState.client = c;
+    rcpState.menu = (res[0].exists && res[0].data().items) || [];
+    rcpState.inv = (res[1].exists && res[1].data().items) || [];
+    rcpState.recipes = (res[2].exists && res[2].data().items) || [];
+    var on = true; try { var f = c.features || c.clientFeatures; if (f && typeof f === 'object' && !Array.isArray(f)) on = f.inventory_auto === true; else if (Array.isArray(f)) on = f.indexOf('inventory_auto') >= 0; } catch (e) {}
+    document.getElementById('rcp-info').innerHTML = 'Menu items: <b>' + rcpState.menu.length + '</b> · Inventory items: <b>' + rcpState.inv.length + '</b> · Existing recipes: <b>' + rcpState.recipes.length + '</b>'
+      + (on ? '' : '<br><span style="color:#FFD700">⚠️ Is client ke liye "Auto Stock Deduction" feature ON nahi dikh raha — Features section me ON karein, warna app me recipe kaam nahi karegi.</span>')
+      + (rcpState.menu.length ? '' : '<br><span style="color:#FF9B7A">⚠️ Client ka menu cloud me abhi nahi hai — pehle menu add/sync karwayein.</span>');
+    body.style.display = 'block';
+  } catch (e) { toast('Load nahi hua: ' + e.message, '#FF6B35'); }
+}
+function rcpLoadXLSX() { return loadLib('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', function(){ return typeof XLSX !== 'undefined'; }); }
+async function rcpTemplate() {
+  try {
+    await rcpLoadXLSX();
+    var wb = XLSX.utils.book_new();
+    var rows = [['Dish', 'Type', 'Ingredient', 'Qty', 'Unit']];
+    var m0 = rcpState.menu[0] ? rcpState.menu[0].name : 'Paneer Butter Masala';
+    var i1 = rcpState.inv[0], i2 = rcpState.inv[1];
+    rows.push([m0, '', i1 ? i1.name : 'Paneer', 150, 'g']);
+    rows.push(['', '', i2 ? i2.name : 'Butter', 20, 'g']);
+    rows.push(['', '', 'Cream', 30, 'ml']);
+    rows.push(['Pepsi 250ml', 'direct', 'Pepsi 250ml', 1, 'pcs']);
+    var ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{wch:28},{wch:10},{wch:26},{wch:8},{wch:8}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Recipes');
+    var mw = XLSX.utils.aoa_to_sheet([['Menu items (Dish naam yahin se copy karein)', 'Price']].concat(rcpState.menu.map(function(m){ return [m.name, m.price]; })));
+    mw['!cols'] = [{wch:40},{wch:10}]; XLSX.utils.book_append_sheet(wb, mw, 'Menu items');
+    var iw = XLSX.utils.aoa_to_sheet([['Inventory items (Ingredient naam yahin se copy karein)', 'Unit']].concat(rcpState.inv.map(function(i){ return [i.name, i.unit]; })));
+    iw['!cols'] = [{wch:40},{wch:10}]; XLSX.utils.book_append_sheet(wb, iw, 'Inventory items');
+    XLSX.writeFile(wb, 'recipe-template-' + String(rcpState.client.name || 'client').replace(/[^a-z0-9]+/gi, '-') + '.xlsx');
+  } catch (e) { toast('Template nahi bana: ' + e.message, '#FF6B35'); }
+}
+function rcpNum(v) { var n = parseFloat(String(v == null ? '' : v).replace(/,/g, '.').replace(/[^\d.]/g, '')); return isNaN(n) ? 0 : n; }
+function rcpRowsFromTable(aoa) {
+  var hi = -1, col = { dish: 0, type: -1, ing: 1, qty: 2, unit: 3 };
+  for (var i = 0; i < Math.min(aoa.length, 10); i++) {
+    var cells = (aoa[i] || []).map(function(x){ return rcpNorm(x); });
+    if (cells.some(function(c){ return /^(dish|menu item|item name|recipe)/.test(c); }) && cells.some(function(c){ return /^(ingredient|raw|material|inventory)/.test(c); })) {
+      hi = i;
+      cells.forEach(function(c, k) {
+        if (/^(dish|menu item|item name|recipe)/.test(c)) col.dish = k;
+        else if (/^type|^mode/.test(c)) col.type = k;
+        else if (/^(ingredient|raw|material|inventory)/.test(c)) col.ing = k;
+        else if (/^(qty|quantity|amount)/.test(c)) col.qty = k;
+        else if (/^unit|^uom/.test(c)) col.unit = k;
+      });
+      break;
+    }
+  }
+  if (hi < 0 && aoa[0] && aoa[0].length >= 5) { col = { dish: 0, type: 1, ing: 2, qty: 3, unit: 4 }; }
+  var out = [], cur = '';
+  for (var r = hi + 1; r < aoa.length; r++) {
+    var row = aoa[r] || [];
+    var dish = String(row[col.dish] == null ? '' : row[col.dish]).trim(), ing = String(row[col.ing] == null ? '' : row[col.ing]).trim();
+    if (!dish && !ing) continue;
+    if (dish) cur = dish;
+    if (!ing) continue;
+    var qraw = row[col.qty], unit = String(row[col.unit] == null ? '' : row[col.unit]).trim();
+    var qs = String(qraw == null ? '' : qraw).trim();
+    var mm = qs.match(/^([\d.,]+)\s*([a-zA-Z]+)$/); if (mm) { qs = mm[1]; if (!unit) unit = mm[2]; }
+    var type = col.type >= 0 ? rcpNorm(row[col.type]) : '';
+    out.push({ dish: cur, type: /direct|seedha|sale/.test(type) ? 'direct' : 'recipe', ing: ing, qty: rcpNum(qs), unit: unit });
+  }
+  return out;
+}
+function rcpRowsFromPdfLines(lines) {
+  var out = [], cur = '', numRe = /^([\d.,]+)\s*([a-zA-Z]*)$/;
+  lines.forEach(function(line) {
+    var cells = line.split(' | ').map(function(x){ return x.trim(); }).filter(Boolean);
+    if (!cells.length) return;
+    var low = rcpNorm(cells.join(' '));
+    if (/dish/.test(low) && /ingredient/.test(low)) return;
+    if (/^page \d+/.test(low)) return;
+    var type = 'recipe';
+    cells = cells.filter(function(c){ if (/^(direct|seedha)$/i.test(c)) { type = 'direct'; return false; } if (/^recipe$/i.test(c)) return false; return true; });
+    var k = -1;
+    for (var i = 1; i < cells.length; i++) { if (numRe.test(cells[i])) { k = i; break; } }
+    if (k > 0) {
+      var m = cells[k].match(numRe), unit = m[2] || cells[k + 1] || '';
+      var dish = cells.slice(0, k - 1).join(' ').trim();
+      if (dish) cur = dish;
+      out.push({ dish: cur, type: type, ing: cells[k - 1], qty: rcpNum(m[1]), unit: unit });
+      return;
+    }
+    var txt = cells.join(' ');
+    var m2 = txt.match(/^(.*?)[\s:\-–]+([\d.,]+)\s*([a-zA-Z]+)?$/);
+    if (m2 && cur && m2[1].trim()) { out.push({ dish: cur, type: type, ing: m2[1].trim(), qty: rcpNum(m2[2]), unit: m2[3] || '' }); return; }
+    if (!/\d/.test(txt)) { cur = txt.replace(/[:\-–]+$/, '').trim(); }
+  });
+  return out;
+}
+async function rcpPdfLines(file) {
+  await loadLib('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', function(){ return window.pdfjsLib; });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  var pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  var lines = [];
+  for (var p = 1; p <= pdf.numPages; p++) {
+    var tc = await (await pdf.getPage(p)).getTextContent();
+    var items = tc.items.filter(function(it){ return it.str && it.str.trim(); }).map(function(it){ return { s: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0 }; });
+    items.sort(function(a, b){ return Math.abs(a.y - b.y) > 3 ? b.y - a.y : a.x - b.x; });
+    var rows = [];
+    items.forEach(function(it) { var last = rows[rows.length - 1]; if (last && Math.abs(last.y - it.y) <= 3) last.items.push(it); else rows.push({ y: it.y, items: [it] }); });
+    rows.forEach(function(r) {
+      r.items.sort(function(a, b){ return a.x - b.x; });
+      var s = '', prevEnd = null;
+      r.items.forEach(function(it) { if (prevEnd !== null) s += (it.x - prevEnd > 10) ? ' | ' : ' '; s += it.s.trim(); prevEnd = it.x + it.w; });
+      lines.push(s);
+    });
+  }
+  return lines;
+}
+async function rcpPick(ev) {
+  var f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+  if (!f) return;
+  var pv = document.getElementById('rcp-preview'); pv.innerHTML = '<div style="padding:12px;font-size:0.85rem">File padh raha hoon…</div>';
+  try {
+    var rows;
+    if (/\.pdf$/i.test(f.name)) rows = rcpRowsFromPdfLines(await rcpPdfLines(f));
+    else { await rcpLoadXLSX(); var wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }); var sn = wb.SheetNames.find(function(n){ return /recipe/i.test(n); }) || wb.SheetNames[0]; rows = rcpRowsFromTable(XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' })); }
+    if (!rows.length) { pv.innerHTML = '<div style="padding:12px;color:#FF9B7A;font-size:0.85rem">Koi recipe row nahi mili. Columns Dish | Ingredient | Qty | Unit hone chahiye (template use karein). Scanned/photo wali PDF nahi padhi ja sakti.</div>'; return; }
+    rcpState.fileName = f.name; rcpBuild(rows); rcpRender();
+  } catch (e) { pv.innerHTML = '<div style="padding:12px;color:#FF9B7A;font-size:0.85rem">File nahi padhi gayi: ' + esc(e.message) + '</div>'; }
+}
+function rcpBuild(rows) {
+  var map = {}, order = [];
+  rows.forEach(function(r) { var k = rcpNorm(r.dish); if (!k) return; if (!map[k]) { map[k] = { dishName: r.dish, type: r.type, rows: [] }; order.push(k); } if (r.type === 'direct') map[k].type = 'direct'; map[k].rows.push(r); });
+  rcpState.parsed = order.map(function(k) {
+    var d = map[k], m = rcpFind(rcpState.menu, d.dishName);
+    d.menu = m;
+    d.rows.forEach(function(r) {
+      r.inv = rcpFind(rcpState.inv, r.ing);
+      r.cqty = r.inv ? rcpConvert(r.qty, r.unit, r.inv.unit) : r.qty;
+      r.bad = !(r.qty > 0);
+    });
+    return d;
+  });
+}
+function rcpRender() {
+  var P = rcpState.parsed, nOk = 0, nMissInv = {}, nNoDish = 0;
+  P.forEach(function(d){ if (d.menu) nOk++; else nNoDish++; d.rows.forEach(function(r){ if (!r.inv) nMissInv[rcpNorm(r.ing)] = r.ing; }); });
+  var miss = Object.keys(nMissInv).length;
+  var h = '<div class="card"><div class="card-body"><div style="font-weight:800;margin-bottom:6px">Preview — ' + esc(rcpState.fileName) + '</div>'
+    + '<div style="font-size:0.8rem;margin-bottom:10px;line-height:1.7">✅ Dishes match: <b>' + nOk + '</b> &nbsp; ❌ Menu me nahi mili: <b>' + nNoDish + '</b> &nbsp; ⚠️ Inventory me nahi mile ingredients: <b>' + miss + '</b></div>';
+  if (miss) h += '<label style="display:flex;gap:8px;align-items:center;font-size:0.8rem;margin-bottom:8px;cursor:pointer"><input type="checkbox" id="rcp-create" checked/> Missing ingredients inventory me add kar do (qty 0, baad me stock/ cost client bhar lega)</label>';
+  h += '<label style="display:flex;gap:8px;align-items:center;font-size:0.8rem;margin-bottom:10px;cursor:pointer"><input type="checkbox" id="rcp-replace"/> Purani saari recipes hata kar sirf is file wali rakho (default: sirf file ki dishes update hongi)</label>';
+  h += P.map(function(d) {
+    var ok = !!d.menu;
+    return '<div style="border:1px solid ' + (ok ? 'rgba(52,211,153,0.35)' : 'rgba(255,107,53,0.45)') + ';border-radius:10px;padding:8px 10px;margin-bottom:8px">'
+      + '<div style="font-weight:700;font-size:0.85rem">' + (ok ? '✅ ' : '❌ ') + esc(d.dishName) + (ok && rcpNorm(d.menu.name) !== rcpNorm(d.dishName) ? ' <span style="color:#93C5FD;font-weight:400">→ ' + esc(d.menu.name) + '</span>' : '')
+      + ' <span style="font-size:0.68rem;padding:2px 7px;border-radius:8px;background:rgba(255,255,255,0.08)">' + (d.type === 'direct' ? 'direct' : 'recipe') + '</span>'
+      + (ok ? '' : ' <span style="color:#FF9B7A;font-weight:400;font-size:0.74rem">menu me is naam ka item nahi — skip hoga</span>') + '</div>'
+      + d.rows.map(function(r) {
+        var st = r.bad ? '<span style="color:#FF9B7A">qty galat</span>' : (r.inv ? '<span style="color:#34D399">→ ' + esc(r.inv.name) + ' (' + r.cqty + ' ' + esc(r.inv.unit || '') + ')</span>' : '<span style="color:#FFD700">inventory me nahi</span>');
+        return '<div style="font-size:0.76rem;color:rgba(255,255,255,0.75);padding:2px 0 0 14px">' + esc(r.ing) + ' — ' + r.qty + ' ' + esc(r.unit) + ' &nbsp; ' + st + '</div>';
+      }).join('') + '</div>';
+  }).join('');
+  h += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-gold" onclick="rcpApply()">✅ Client ko push karein</button><button class="btn btn-outline" onclick="document.getElementById(\'rcp-preview\').innerHTML=\'\';rcpState.parsed=[]">Cancel</button></div></div></div>';
+  document.getElementById('rcp-preview').innerHTML = h;
+}
+async function rcpApply() {
+  var P = rcpState.parsed; if (!P.length || !rcpState.rid) return;
+  var create = !!(document.getElementById('rcp-create') || {}).checked, replaceAll = !!document.getElementById('rcp-replace').checked;
+  var meta = db_admin.collection('restaurants').doc(rcpState.rid).collection('meta');
+  try {
+    // 1) add missing inventory items (append-only, inside a transaction so we never overwrite the client's live stock)
+    var added = 0;
+    if (create) {
+      var need = {};
+      P.forEach(function(d){ if (!d.menu) return; d.rows.forEach(function(r){ if (!r.inv && !r.bad) { var k = rcpNorm(r.ing); if (!need[k]) { var u = rcpUnit(r.unit); need[k] = { name: r.ing, unit: u ? (u[0] === 'm' ? 'kg' : u[0] === 'v' ? 'l' : 'pcs') : (r.unit || 'pcs'), from: r.unit }; } } }); });
+      var needKeys = Object.keys(need);
+      if (needKeys.length) {
+        await db_admin.runTransaction(async function(tx) {
+          var snap = await tx.get(meta.doc('inventory')); var items = (snap.exists && snap.data().items) || []; var cnt = 0;
+          needKeys.forEach(function(k) {
+            if (items.some(function(i){ return rcpNorm(i.name) === k; })) return;
+            items.push({ id: qrtUid(), name: need[k].name, qty: 0, unit: need[k].unit, minQty: 0, costPrice: 0 }); cnt++;
+          });
+          tx.set(meta.doc('inventory'), { items: items }, { merge: true }); added = cnt;
+        });
+      }
+    }
+    var invSnap = await meta.doc('inventory').get();
+    var inv = (invSnap.exists && invSnap.data().items) || [];
+    rcpState.inv = inv;
+    // 2) build recipe entries against fresh inventory ids
+    var entries = [], skipped = 0;
+    P.forEach(function(d) {
+      if (!d.menu) { skipped++; return; }
+      var ings = [];
+      d.rows.forEach(function(r) {
+        if (r.bad) return;
+        var iv = rcpFind(inv, r.ing); if (!iv) return;
+        ings.push({ invId: iv.id, qty: rcpConvert(r.qty, r.unit, iv.unit) });
+      });
+      if (!ings.length) { skipped++; return; }
+      if (d.type === 'direct') entries.push({ menuId: d.menu.id, mode: 'direct', direct: { invId: ings[0].invId, qty: ings[0].qty } });
+      else entries.push({ menuId: d.menu.id, mode: 'recipe', ingredients: ings });
+    });
+    if (!entries.length) { toast('Koi valid recipe nahi bani — preview check karein', '#FF6B35'); return; }
+    // 3) merge into meta/recipes
+    await db_admin.runTransaction(async function(tx) {
+      var snap = await tx.get(meta.doc('recipes')); var cur = replaceAll ? [] : ((snap.exists && snap.data().items) || []);
+      var ids = {}; entries.forEach(function(e){ ids[e.menuId] = 1; });
+      var merged = cur.filter(function(r){ return !ids[r.menuId]; }).concat(entries);
+      tx.set(meta.doc('recipes'), { items: merged }, { merge: true });
+    });
+    toast('✅ ' + entries.length + ' recipes push ho gayi' + (added ? ' · ' + added + ' naye inventory items bane' : '') + (skipped ? ' · ' + skipped + ' skip' : ''));
+    document.getElementById('rcp-preview').innerHTML = '<div style="padding:14px;font-size:0.88rem;line-height:1.7">✅ <b>' + entries.length + '</b> recipes client ke app me push ho gayi' + (added ? ', <b>' + added + '</b> naye inventory items (qty 0) bane — client ko unka stock/cost bharna hoga' : '') + (skipped ? '. <b>' + skipped + '</b> skip hui (menu me naam nahi mila ya valid ingredient nahi)' : '') + '.<br>Client ka app agle sync par apne aap update ho jaayega.</div>';
+    rcpState.parsed = []; rcpLoad();
+  } catch (e) { toast('Push nahi hua: ' + e.message, '#FF6B35'); }
+}
+
 
 load();
 </script>

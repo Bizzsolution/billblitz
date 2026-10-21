@@ -1079,7 +1079,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="page-title" style="margin:0">📦 Inventory</div>
-      <button class="btn btn-primary btn-sm" onclick="openInventoryModal()">+ Add Item</button>
+      <div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" id="inv-report-btn" style="display:none" onclick="showStockReport('today')">📊 Consumption</button>
+      <button class="btn btn-primary btn-sm" onclick="openInventoryModal()">+ Add Item</button></div>
     </div>
     <input class="search-inp" id="inv-search" placeholder="🔍 Search inventory…" oninput="renderInventoryPage()"/>
     <div id="inv-alerts"></div>
@@ -1732,6 +1733,7 @@ let db = {
   purchases: [],   // {id,date,supplier,items:[{name,qty,unit,cost}],total,status}
   orders: [],      // {id,date,items:[],subtotal,tax,discount,total,payment,customerId}
   customers: [],   // loyalty customers
+  recipes: [],     // [{menuId, mode:'direct'|'recipe', direct:{invId,qty}, ingredients:[{invId,qty}]}] — stock link per menu item
 };
 
 function save(){ try{ localStorage.setItem('bb-db-v1', JSON.stringify(db)); }catch(e){} if(typeof scheduleSharedDataPush==='function') scheduleSharedDataPush(); }
@@ -2493,7 +2495,8 @@ async function pushSharedDataToCloud() {
     var collections = {
       tables: db.tables||[], rooms: db.rooms||[], expenses: db.expenses||[],
       purchases: db.purchases||[], inventory: db.inventory||[], staff: db.staff||[],
-      banquetBookings: db.banquetBookings||[]
+      banquetBookings: db.banquetBookings||[],
+      recipes: db.recipes||[]
     };
     var pushPromises = [];
     Object.keys(collections).forEach(function(key) {
@@ -2578,6 +2581,15 @@ function listenToPurchasesSync() {
     db.purchases = items;
     persistLocalOnly();
     refreshIfActive('purchases', renderPurchasesPage);
+  });
+}
+
+function listenToRecipesSync() {
+  listenToSharedMeta('recipes', function(items) {
+    if (JSON.stringify(items) === JSON.stringify(db.recipes)) return;
+    db.recipes = items;
+    persistLocalOnly();
+    refreshIfActive('menu', renderMenuPage);
   });
 }
 
@@ -2687,7 +2699,7 @@ function listenToCustomersSync() {
 async function hydrateAllFromCloud() {
   if (!isFirebaseReady || !firestoreDb || !restaurantId) { hasHydratedFromCloud = true; return; }
   var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
-  var metaKeys = ['tables','rooms','expenses','purchases','inventory','staff','menu','banquetBookings','banquetMenu'];
+  var metaKeys = ['tables','rooms','expenses','purchases','inventory','staff','menu','banquetBookings','banquetMenu','recipes'];
   var maxAttempts = 3;
 
   for (var attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -2711,6 +2723,7 @@ async function hydrateAllFromCloud() {
             else if (key === 'menu') db.menu = data.items;
             else if (key === 'banquetBookings') db.banquetBookings = data.items;
             else if (key === 'banquetMenu') db.banquetMenu = data.items;
+            else if (key === 'recipes') db.recipes = data.items;
             if (key !== 'menu' && key !== 'banquetMenu') _lastPushedSnapshot[key] = JSON.stringify(data.items);
           }
         }
@@ -2788,6 +2801,7 @@ function startAllRealtimeSync() {
   listenToExpensesSync();
   listenToPurchasesSync();
   listenToInventorySync();
+  listenToRecipesSync();
   listenToStaffSync();
   listenToOrdersSync();
   listenToCustomersSync();
@@ -3229,7 +3243,7 @@ function hasFeature(f) {
   }
   // Paid add-ons: only for clients the admin has explicitly switched ON
   // (the "default to allowed" rule below is for core tabs, not add-ons).
-  if(['qr_payment','gst_reports','qr_logo'].indexOf(f) !== -1) return clientFeatures[f] === true;
+  if(['qr_payment','gst_reports','qr_logo','inventory_auto'].indexOf(f) !== -1) return clientFeatures[f] === true;
   if(Object.keys(clientFeatures).length === 0) return true;
   // If this specific feature key was never explicitly configured by admin
   // (e.g. a newer feature added after this client's last Feature save, or
@@ -5783,6 +5797,10 @@ function processReturn(orderId, snapshot, reason) {
   o.total = newTotal;
   o.returnedAmount = (o.returnedAmount || 0) + returnAmt;
 
+  // Direct-sale stock (Pepsi, ice-cream…) goes back on the shelf; recipe
+  // dishes are NOT restocked (the food was already prepared).
+  restoreStockForReturns(o, returns);
+
   save();
   cloudSave('orders', orderId, o);
 
@@ -6458,6 +6476,10 @@ async function completeBill(payment){
   const billNo = await getNextBillNumber();
   const gstCfg = getGSTConfig();
   const o={id:orderId,billNo:billNo,date:new Date().toISOString(),items:[...order.items],subtotal:sub,tax,taxPct,discount:disc,discountPct:discPct,gstType:gstCfg.type,total,payment,customerId:order.customerId,tableId:order.tableId,tableName:order.tableName};
+  // Inventory: deduct what this sale consumed (recipe ingredients, or the
+  // direct-sale stock item). Stored on the bill so a return can reverse it
+  // and reports can show consumption.
+  if (autoStockOn()) { var _su = deductStockForItems(o.items); if (_su.length) o.stockUsed = _su; }
   db.orders.unshift(o);
   // ☁️ Cloud sync
   cloudSave('orders', orderId, o);
@@ -6542,7 +6564,7 @@ function renderMenuPage(){
       <div class="list-icon" style="background:#F7F9FF;font-size:1.4rem">${esc(m.icon||'🍽️')}</div>
       <div class="list-main">
         <div class="list-title">${esc(m.name)}</div>
-        <div class="list-sub"><span class="badge badge-blue">${esc(m.category)}</span> ${esc(m.description||'')}</div>
+        <div class="list-sub"><span class="badge badge-blue">${esc(m.category)}</span> ${esc(m.description||'')} ${stockBadgeHtml(m.id)}</div>
       </div>
       <div class="list-right">
         <div style="font-weight:800;color:#FF6B35;font-size:0.95rem">${fmt(m.price)}</div>
@@ -6595,6 +6617,7 @@ function openMenuModal(id){
   const m = id ? db.menu.find(x=>x.id===id) : null;
   const curIcon = m?.icon || '🍽️';
   const curIsImg = curIcon.startsWith('data:');
+  stockLinkInit(m);
 
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-title">'+(m?'✏️ Edit':'➕ Add')+' Menu Item</div>'
@@ -6602,7 +6625,7 @@ function openMenuModal(id){
     + '<input class="form-inp" id="mi-name" value="'+esc(m?.name||'')+'" placeholder="e.g. Butter Chicken" oninput="autoSuggestIcon(this.value)"/></div>'
     + '<div class="form-row">'
     + '<div class="form-group"><label class="form-label">Price (Rs.) *</label>'
-    + '<input class="form-inp" id="mi-price" type="number" step="0.01" value="'+(m?.price||'')+'" placeholder="0.00"/></div>'
+    + '<input class="form-inp" id="mi-price" type="number" step="0.01" value="'+(m?.price||'')+'" placeholder="0.00" oninput="stkCostUpdate()"/></div>'
     + '<div class="form-group"><label class="form-label">Category</label>'
     + '<select class="form-select" id="mi-cat" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#fff">'
     + ['Food','Beverage','Dessert','Snacks','Special'].map(function(c){return '<option'+(m?.category===c?' selected':'')+'>'+c+'</option>';}).join('')
@@ -6635,6 +6658,7 @@ function openMenuModal(id){
     + '</div></div>'
     + '<div class="form-group"><label class="form-label">Description</label>'
     + '<input class="form-inp" id="mi-desc" value="'+esc(m?.description||'')+'" placeholder="Short description..."/></div>'
+    + stockLinkSectionHtml()
     + '<div class="btn-row">'
     + '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'
     + '<button class="btn btn-primary" onclick="saveMenu(\''+(id||'')+'\')">Save Item</button>'
@@ -6731,8 +6755,15 @@ function saveMenu(id){
   if(!name||isNaN(price)){ toast('Name and price are required','#FF6B35'); return; }
   const icon = document.getElementById('mi-icon')?.value || '🍽️';
   const data={name,price,category:document.getElementById('mi-cat').value,icon,description:document.getElementById('mi-desc').value.trim()};
+  var linkEntry = null;
+  if (autoStockOn()) {
+    linkEntry = stockLinkCollect();
+    if (linkEntry === false) return; // validation message already shown
+  }
+  var savedId = id;
   if(id){ Object.assign(db.menu.find(x=>x.id===id),data); toast('Menu item updated!'); }
-  else{ db.menu.push({id:uid(),...data}); toast('Menu item added!'); }
+  else{ savedId = uid(); db.menu.push({id:savedId,...data}); toast('Menu item added!'); }
+  if (autoStockOn()) saveRecipeFor(savedId, linkEntry);
   save(); cloudSave('meta','menu',{items:db.menu}); closeModal(); renderMenuPage();
 }
 
@@ -6740,6 +6771,7 @@ function saveMenu(id){
 function deleteMenu(id){
   if(!confirm('Delete this menu item?')) return;
   db.menu=db.menu.filter(m=>m.id!==id);
+  if (db.recipes) db.recipes = db.recipes.filter(function(r){ return r.menuId !== id; });
   save(); renderMenuPage(); toast('Deleted.','#FF6B35');
 }
 
@@ -6747,6 +6779,7 @@ function deleteMenu(id){
 // ║                   INVENTORY                          ║
 // ╚══════════════════════════════════════════════════════╝
 function renderInventoryPage(){
+  var rb = document.getElementById('inv-report-btn'); if (rb) rb.style.display = autoStockOn() ? '' : 'none';
   const q=(document.getElementById('inv-search')||{}).value||'';
   const items=db.inventory.filter(i=>i.name.toLowerCase().includes(q.toLowerCase()));
   const lowStock=db.inventory.filter(i=>i.qty<=i.minQty);
@@ -6817,9 +6850,11 @@ function openStockUpdate(id){
   document.getElementById('modal-body').innerHTML=`
     <div class="modal-title">Update Stock — ${esc(item.name)}</div>
     <div style="font-size:0.88rem;color:#6B7A99;margin-bottom:12px">Current: <strong>${item.qty} ${esc(item.unit)}</strong></div>
-    <div class="form-group"><label class="form-label">Add Quantity</label><input class="form-inp" id="stock-add" type="number" step="0.1" placeholder="Enter amount to add"/></div>
+    <div class="form-group"><label class="form-label">Quantity</label><input class="form-inp" id="stock-add" type="number" step="0.1" placeholder="Enter quantity"/></div>
+    <div class="form-group"><label class="form-label">Wastage / kharab maal ke liye reason (optional)</label><input class="form-inp" id="stock-reason" placeholder="e.g. kharab ho gaya, gir gaya"/></div>
     <div class="btn-row">
       <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-red" onclick="reduceStock('${id}')">− Wastage</button>
       <button class="btn btn-green" onclick="updateStock('${id}')">+ Add Stock</button>
     </div>`;
   openModal();
@@ -6834,10 +6869,261 @@ function updateStock(id){
   toast(`${item.name} updated to ${item.qty} ${item.unit}!`);
 }
 
+// Manual reduction (spoilage / spill / correction). Consumption from sales is
+// handled automatically at billing; this is only for stock that left WITHOUT a sale.
+function reduceStock(id){
+  const sub=parseFloat(document.getElementById('stock-add').value);
+  if(isNaN(sub)||sub<=0){ toast('Enter a valid quantity','#FF6B35'); return; }
+  const item=db.inventory.find(x=>x.id===id); if(!item) return;
+  const reason=(document.getElementById('stock-reason')||{}).value||'';
+  item.qty=Math.round((item.qty-sub)*1000)/1000;
+  item.wastage=(item.wastage||[]).concat([{date:new Date().toISOString(),qty:sub,reason:reason.trim().slice(0,80)}]).slice(-50);
+  save(); cloudSave('meta','inventory',{items:db.inventory}); closeModal(); renderInventoryPage(); renderDashboard();
+  toast(`${item.name}: ${sub} ${item.unit} kam kiya. Ab ${item.qty} ${item.unit}.`,'#FF6B35');
+}
+
 function deleteInventory(id){
   if(!confirm('Delete this inventory item?')) return;
   db.inventory=db.inventory.filter(i=>i.id!==id);
   save(); renderInventoryPage(); toast('Deleted.','#FF6B35');
+}
+
+
+// ╔══════════════════════════════════════════════════════╗
+// ║        AUTO STOCK DEDUCTION (recipe / direct)        ║
+// ╚══════════════════════════════════════════════════════╝
+// Per menu item the owner links either:
+//   • "direct"  – sold as-is (Pepsi, ice-cream): 1 sale cuts N of ONE stock item
+//   • "recipe"  – a dish: 1 portion cuts several ingredients
+// Links live in db.recipes (synced as meta/recipes — members only, NOT in the
+// public menu document, so customers can never read recipes).
+function autoStockOn() { return hasFeature('inventory') && hasFeature('inventory_auto'); }
+function r3(n) { return Math.round((Number(n) || 0) * 1000) / 1000; }
+function findInv(id) { return (db.inventory || []).find(function(x){ return x.id === id; }); }
+function smallUnitOf(inv) {
+  var u = String((inv && inv.unit) || '').trim().toLowerCase();
+  if (u === 'kg') return 'g';
+  if (u === 'l' || u === 'ltr' || u === 'litre' || u === 'liter') return 'ml';
+  return null;
+}
+function getRecipeFor(menuId) { return (db.recipes || []).find(function(r){ return r.menuId === menuId; }) || null; }
+
+function stockBadgeHtml(menuId) {
+  if (!autoStockOn()) return '';
+  var r = getRecipeFor(menuId);
+  if (!r) return '<span class="badge" style="background:#FEF3C7;color:#B45309">⚠ stock link nahi</span>';
+  if (r.mode === 'direct') return '<span class="badge" style="background:#DCFCE7;color:#16A34A">📦 direct</span>';
+  return '<span class="badge" style="background:#EDE9FE;color:#6D28D9">🧾 recipe (' + ((r.ingredients || []).length) + ')</span>';
+}
+
+function stockUsageFor(menuId, qty) {
+  var r = getRecipeFor(menuId);
+  if (!r) return [];
+  if (r.mode === 'direct' && r.direct && r.direct.invId) return [{ invId: r.direct.invId, qty: (Number(r.direct.qty) || 1) * qty }];
+  if (r.mode === 'recipe') return (r.ingredients || []).filter(function(i){ return i.invId && Number(i.qty) > 0; })
+    .map(function(i){ return { invId: i.invId, qty: Number(i.qty) * qty }; });
+  return [];
+}
+
+// Cuts stock for a finished bill. Stock may go below 0 (we never block a
+// sale) — that shows up as a shortfall to fix. Returns what was used.
+function deductStockForItems(items) {
+  var agg = {};
+  (items || []).forEach(function(it) {
+    if (!it.menuId) return;
+    stockUsageFor(it.menuId, Number(it.qty) || 0).forEach(function(u){ agg[u.invId] = (agg[u.invId] || 0) + u.qty; });
+  });
+  var used = [], low = [];
+  Object.keys(agg).forEach(function(id) {
+    var inv = findInv(id); if (!inv) return;
+    var q = r3(agg[id]);
+    inv.qty = r3((Number(inv.qty) || 0) - q);
+    used.push({ invId: id, name: inv.name, unit: inv.unit || '', qty: q, cost: Math.round(q * (Number(inv.costPrice) || 0) * 100) / 100 });
+    if (inv.qty <= (Number(inv.minQty) || 0)) low.push(inv.name + ' (' + inv.qty + ' ' + (inv.unit || '') + ')');
+  });
+  if (used.length) { save(); cloudSave('meta', 'inventory', { items: db.inventory }); }
+  if (low.length) toast('⚠️ Low stock: ' + low.slice(0, 3).join(', ') + (low.length > 3 ? ' +' + (low.length - 3) + ' aur' : ''), '#FF6B35');
+  return used;
+}
+
+function restoreStockForReturns(o, returns) {
+  if (!autoStockOn() || !o || !o.stockUsed || !o.stockUsed.length) return;
+  var usedIds = {}; o.stockUsed.forEach(function(u){ usedIds[u.invId] = 1; });
+  var back = [];
+  (returns || []).forEach(function(r) {
+    var rc = getRecipeFor(r.menuId);
+    if (!rc || rc.mode !== 'direct' || !rc.direct || !usedIds[rc.direct.invId]) return;
+    var inv = findInv(rc.direct.invId); if (!inv) return;
+    var q = r3((Number(rc.direct.qty) || 1) * (Number(r.qty) || 0));
+    inv.qty = r3((Number(inv.qty) || 0) + q);
+    o.stockRestored = (o.stockRestored || []).concat([{ invId: inv.id, qty: q, date: new Date().toISOString() }]);
+    back.push(q + ' ' + (inv.unit || '') + ' ' + inv.name);
+  });
+  if (back.length) { save(); cloudSave('meta', 'inventory', { items: db.inventory }); toast('📦 Stock wapas jod diya: ' + back.join(', '), '#00A878'); }
+}
+
+// ── menu-item editor: the "Stock link" block ──
+var _stk = { mode: 'none', directInvId: '', directQty: 1, rows: [] };
+
+function stockLinkInit(m) {
+  var r = m ? getRecipeFor(m.id) : null;
+  _stk = { mode: r ? r.mode : 'none', directInvId: (r && r.direct && r.direct.invId) || '', directQty: (r && r.direct && r.direct.qty) || 1,
+           rows: ((r && r.ingredients) || []).map(function(i){ return { invId: i.invId, qty: Number(i.qty) || 0, small: false }; }) };
+  _stk.rows.forEach(function(row){ var iv = findInv(row.invId); if (iv && smallUnitOf(iv) && row.qty > 0 && row.qty < 1) row.small = true; });
+}
+function stockLinkSectionHtml() {
+  if (!autoStockOn()) return '';
+  return '<div class="form-group" id="stk-box" style="background:#F7F9FF;border:1.5px solid #E2E8F5;border-radius:12px;padding:12px">' + stkInner() + '</div>';
+}
+function stkOptions(selId) {
+  var inv = db.inventory || [];
+  return '<option value="">-- Inventory item chunein --</option>' + inv.map(function(i){
+    return '<option value="' + esc(i.id) + '"' + (i.id === selId ? ' selected' : '') + '>' + esc(i.name) + ' (' + esc(i.unit || 'unit') + ')</option>';
+  }).join('');
+}
+function stkInner() {
+  var h = '<label class="form-label">📦 Stock link — bikne par inventory se kitna kate?</label>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px">' + [['none', 'Koi nahi'], ['direct', 'Seedha (Pepsi etc.)'], ['recipe', 'Recipe']].map(function(x) {
+    var on = _stk.mode === x[0];
+    return '<button type="button" onclick="stkMode(\'' + x[0] + '\')" style="flex:1;padding:9px 4px;border-radius:10px;border:2px solid ' + (on ? '#7C3AED' : '#E2E8F5') + ';background:' + (on ? '#EDE9FE' : '#fff') + ';color:#1A2B3C;font-size:0.74rem;font-weight:700;cursor:pointer">' + x[1] + '</button>';
+  }).join('') + '</div>';
+  if (!(db.inventory || []).length && _stk.mode !== 'none') return h + '<div style="font-size:0.78rem;color:#B45309">Pehle Inventory me items add karein.</div>';
+  if (_stk.mode === 'none') {
+    h += '<div style="font-size:0.74rem;color:#6B7A99">Is item par bikri ke baad stock nahi katega.</div>';
+  } else if (_stk.mode === 'direct') {
+    var iv = findInv(_stk.directInvId);
+    h += '<select class="form-select" style="font-size:0.88rem;padding:10px" onchange="_stk.directInvId=this.value;stkRender()">' + stkOptions(_stk.directInvId) + '</select>'
+      + '<div style="font-size:0.74rem;color:#6B7A99;margin:8px 0 4px">1 item bikne par kitna kate' + (iv ? ' (' + esc(iv.unit || 'unit') + ')' : '') + '</div>'
+      + '<input class="form-inp" type="number" step="0.01" min="0" value="' + (_stk.directQty || 1) + '" oninput="_stk.directQty=parseFloat(this.value)||0"/>'
+      + (iv ? '<div style="font-size:0.7rem;color:#6B7A99;margin-top:4px">Abhi stock: ' + iv.qty + ' ' + esc(iv.unit || '') + '</div>' : '');
+  } else {
+    _stk.rows.forEach(function(r, i) {
+      var iv = findInv(r.invId), su = iv ? smallUnitOf(iv) : null;
+      var shown = (r.small && su) ? r3(r.qty * 1000) : r.qty;
+      h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'
+        + '<select class="form-select" style="flex:1.6;font-size:0.82rem;padding:9px" onchange="stkRowInv(' + i + ',this.value)">' + stkOptions(r.invId) + '</select>'
+        + '<input class="form-inp" style="flex:0.8;padding:9px;font-size:0.85rem" type="number" step="any" min="0" value="' + (shown || '') + '" placeholder="qty" oninput="stkRowQty(' + i + ',this.value)"/>'
+        + (su ? '<select class="form-select" style="flex:0.55;padding:9px;font-size:0.8rem" onchange="stkRowUnit(' + i + ',this.value)"><option value="base"' + (r.small ? '' : ' selected') + '>' + esc(iv.unit) + '</option><option value="small"' + (r.small ? ' selected' : '') + '>' + su + '</option></select>'
+               : '<span style="font-size:0.78rem;color:#6B7A99;min-width:34px">' + esc((iv && iv.unit) || '') + '</span>')
+        + '<button type="button" class="btn btn-sm btn-red" onclick="stkRowDel(' + i + ')">✕</button></div>';
+    });
+    h += '<button type="button" class="btn btn-sm btn-outline" onclick="stkRowAdd()">+ Ingredient</button>'
+      + '<div id="stk-cost" style="font-size:0.74rem;color:#6B7A99;margin-top:8px"></div>'
+      + '<div style="font-size:0.7rem;color:#9CA3AF;margin-top:4px">1 portion me jitna lagta hai wahi likhein (jaise Chicken 150 g, Oil 20 ml).</div>';
+  }
+  return h;
+}
+function stkRender() { var b = document.getElementById('stk-box'); if (b) { b.innerHTML = stkInner(); stkCostUpdate(); } }
+function stkMode(m) {
+  _stk.mode = m;
+  if (m === 'recipe' && !_stk.rows.length) _stk.rows.push({ invId: '', qty: 0, small: false });
+  if (m === 'direct' && !_stk.directInvId) {
+    // convenience: pre-pick the inventory item with the same name as the menu item
+    var nm = ((document.getElementById('mi-name') || {}).value || '').trim().toLowerCase();
+    var hit = (db.inventory || []).find(function(i){ return String(i.name || '').trim().toLowerCase() === nm; });
+    if (hit) _stk.directInvId = hit.id;
+  }
+  stkRender();
+}
+function stkRowAdd() { _stk.rows.push({ invId: '', qty: 0, small: false }); stkRender(); }
+function stkRowDel(i) { _stk.rows.splice(i, 1); stkRender(); }
+function stkRowInv(i, id) { _stk.rows[i].invId = id; _stk.rows[i].small = false; stkRender(); }
+function stkRowUnit(i, u) { _stk.rows[i].small = (u === 'small'); stkRender(); }
+function stkRowQty(i, v) {
+  var r = _stk.rows[i], iv = findInv(r.invId), su = iv ? smallUnitOf(iv) : null;
+  var n = parseFloat(v) || 0;
+  r.qty = (r.small && su) ? n / 1000 : n;
+  stkCostUpdate();
+}
+function stkCostUpdate() {
+  var el = document.getElementById('stk-cost'); if (!el || _stk.mode !== 'recipe') return;
+  var cost = 0;
+  _stk.rows.forEach(function(r){ var iv = findInv(r.invId); if (iv) cost += (Number(r.qty) || 0) * (Number(iv.costPrice) || 0); });
+  var price = parseFloat((document.getElementById('mi-price') || {}).value) || 0;
+  var txt = 'Recipe cost ≈ ' + fmt(cost) + ' / item';
+  if (price > 0) txt += ' · Margin ' + fmt(price - cost) + ' (' + Math.round((price - cost) / price * 100) + '%)';
+  el.textContent = txt;
+}
+// Returns the link entry to store, null for "no link", or false when invalid.
+function stockLinkCollect() {
+  if (_stk.mode === 'direct') {
+    if (!_stk.directInvId) { toast('Inventory item chunein (ya "Koi nahi" rakhein)', '#FF6B35'); return false; }
+    return { mode: 'direct', direct: { invId: _stk.directInvId, qty: (Number(_stk.directQty) > 0 ? Number(_stk.directQty) : 1) } };
+  }
+  if (_stk.mode === 'recipe') {
+    var rows = _stk.rows.filter(function(r){ return r.invId && Number(r.qty) > 0; });
+    if (!rows.length) { toast('Kam se kam 1 ingredient (item + qty) daalein', '#FF6B35'); return false; }
+    return { mode: 'recipe', ingredients: rows.map(function(r){ return { invId: r.invId, qty: r3(r.qty) }; }) };
+  }
+  return null;
+}
+function saveRecipeFor(menuId, entry) {
+  if (!db.recipes) db.recipes = [];
+  db.recipes = db.recipes.filter(function(r){ return r.menuId !== menuId; });
+  if (entry) db.recipes.push(Object.assign({ menuId: menuId }, entry));
+}
+
+// ── Consumption report ──
+function showStockReport(range) {
+  range = range || 'today';
+  var now = new Date(), start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === '7') start = new Date(start.getTime() - 6 * 86400000);
+  else if (range === '30') start = new Date(start.getTime() - 29 * 86400000);
+  else if (range === 'month') start = new Date(now.getFullYear(), now.getMonth(), 1);
+  var use = {}, unlinked = {}, nOrders = 0;
+  (db.orders || []).forEach(function(o) {
+    if (new Date(o.date) < start) return;
+    nOrders++;
+    (o.stockUsed || []).forEach(function(u) {
+      var a = use[u.invId] || (use[u.invId] = { name: u.name, unit: u.unit, qty: 0, cost: 0 });
+      a.qty += u.qty; a.cost += u.cost || 0;
+    });
+    (o.stockRestored || []).forEach(function(rs) {
+      var a = use[rs.invId]; if (!a) return;
+      var unitCost = a.qty > 0 ? a.cost / a.qty : 0;
+      a.qty -= rs.qty; a.cost -= rs.qty * unitCost;
+    });
+    (o.items || []).forEach(function(it) {
+      if (!it.menuId || getRecipeFor(it.menuId)) return;
+      unlinked[it.name] = (unlinked[it.name] || 0) + (Number(it.qty) || 0);
+    });
+  });
+  var rows = Object.keys(use).map(function(k){ var inv = findInv(k); return Object.assign({ id: k, left: inv ? inv.qty : null }, use[k]); })
+    .sort(function(a, b){ return b.cost - a.cost; });
+  var total = rows.reduce(function(s, r){ return s + r.cost; }, 0);
+  var chip = function(k, l) { return '<button type="button" onclick="showStockReport(\'' + k + '\')" style="padding:6px 12px;border-radius:16px;border:1.5px solid ' + (range === k ? '#7C3AED' : '#E2E8F5') + ';background:' + (range === k ? '#EDE9FE' : '#fff') + ';font-size:0.74rem;font-weight:700;cursor:pointer;color:#1A2B3C">' + l + '</button>'; };
+  var h = '<div class="modal-handle"></div><div class="modal-title">📊 Inventory Consumption</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' + chip('today', 'Aaj') + chip('7', '7 din') + chip('30', '30 din') + chip('month', 'Is mahine') + '</div>';
+  if (!rows.length) {
+    h += '<div class="empty">Is period me koi stock consumption nahi mila. (Menu items ko recipe / direct stock se link karein.)</div>';
+  } else {
+    h += '<div style="display:grid;grid-template-columns:1.6fr 1fr 0.9fr 1fr;gap:6px;font-size:0.68rem;font-weight:800;color:#6B7A99;padding:4px 2px;border-bottom:2px solid #E2E8F5"><span>Item</span><span>Used</span><span>Cost</span><span>Bacha</span></div>'
+      + rows.map(function(r) {
+        return '<div style="display:grid;grid-template-columns:1.6fr 1fr 0.9fr 1fr;gap:6px;font-size:0.8rem;padding:7px 2px;border-bottom:1px solid #F1F5F9"><span style="font-weight:700">' + esc(r.name) + '</span><span>' + r3(r.qty) + ' ' + esc(r.unit) + '</span><span>' + fmt(r.cost) + '</span><span style="color:' + (r.left !== null && r.left <= 0 ? '#DC2626' : '#1A2B3C') + '">' + (r.left === null ? '—' : r.left + ' ' + esc(r.unit)) + '</span></div>';
+      }).join('')
+      + '<div style="display:flex;justify-content:space-between;font-weight:800;padding:10px 2px;font-size:0.9rem"><span>Total consumption cost</span><span>' + fmt(total) + '</span></div>';
+  }
+  var ul = Object.keys(unlinked);
+  if (ul.length) {
+    h += '<div style="background:#FEF3C7;border-radius:10px;padding:10px;margin-top:8px;font-size:0.76rem;color:#92400E"><b>⚠️ In items ka stock nahi kata (link nahi hai):</b><br>'
+      + ul.slice(0, 12).map(function(n){ return esc(n) + ' ×' + unlinked[n]; }).join(' · ') + (ul.length > 12 ? ' …' : '') + '</div>';
+  }
+  // Food cost per linked recipe
+  var fc = (db.menu || []).map(function(m) {
+    var r = getRecipeFor(m.id); if (!r || r.mode !== 'recipe') return null;
+    var c = 0; (r.ingredients || []).forEach(function(i){ var iv = findInv(i.invId); if (iv) c += i.qty * (Number(iv.costPrice) || 0); });
+    return { name: m.name, price: Number(m.price) || 0, cost: c };
+  }).filter(Boolean);
+  if (fc.length) {
+    h += '<div style="font-weight:800;font-size:0.85rem;margin:14px 0 6px">🍽️ Dish food-cost</div>'
+      + fc.map(function(x) {
+        var pct = x.price > 0 ? Math.round(x.cost / x.price * 100) : 0;
+        return '<div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:5px 2px;border-bottom:1px solid #F1F5F9"><span>' + esc(x.name) + '</span><span>' + fmt(x.cost) + ' / ' + fmt(x.price) + ' · <b style="color:' + (pct > 45 ? '#DC2626' : '#16A34A') + '">' + pct + '%</b></span></div>';
+      }).join('');
+  }
+  h += '<button class="btn btn-outline btn-full" style="margin-top:12px" onclick="closeModal()">Close</button>';
+  document.getElementById('modal-body').innerHTML = h;
+  openModal();
 }
 
 // ╔══════════════════════════════════════════════════════╗
