@@ -2214,6 +2214,7 @@ async function authenticateClient(licKey, retryCount) {
     await new Promise(function(r){ setTimeout(r, 100); });
     startAllRealtimeSync();
     pushAllDataToCloud();
+    pushRestaurantLogoOnly();
   } catch(e) {
     if (isFirestoreGlitch(e) && retryCount < 2) {
       // Known, well-documented Firestore SDK flakiness (not our app's fault) —
@@ -4282,8 +4283,24 @@ function pushRestaurantInfo(){
       phone: info.phone || '',
       upi: payOn ? info.upi.trim() : '',
       payeeName: info.name || 'Restaurant',
-      qrPayEnabled: payOn
+      qrPayEnabled: payOn,
+      // Small (≤200px, round) logo — shown in the header of the customer's QR menu.
+      logo: safeImgSrc(info.logo) || ''
     }, { merge: true })
+    .catch(function(){});
+}
+
+// Logo-only refresh on login, so clients who uploaded a logo earlier show it
+// on the QR menu without having to re-save Settings. Deliberately does NOT
+// touch the payment fields (features may not have loaded yet at login).
+function pushRestaurantLogoOnly(){
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var info = (db.settings && db.settings.restInfo) || {};
+  var logo = safeImgSrc(info.logo) || '';
+  if (!logo && !info.name) return;
+  firestoreDb.collection('restaurants').doc(restaurantId)
+    .collection('meta').doc('info')
+    .set({ restaurantName: info.name || '', logo: logo }, { merge: true })
     .catch(function(){});
 }
 

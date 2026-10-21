@@ -436,6 +436,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
               <button class="btn btn-sm btn-outline" onclick="qrtSelectAll(true)">Sab chuno</button>
               <button class="btn btn-sm btn-outline" onclick="qrtSelectAll(false)">Sab hatao</button>
               <select class="form-select" id="qrt-layout" style="width:auto;padding:5px 8px"><option value="a5">A5 — 1 card/page</option><option value="a4">A4 — 4 card/page</option></select>
+              <button class="btn btn-sm btn-red" onclick="qrtDeleteSelected()">🗑️ Delete selected</button>
               <button class="btn btn-sm btn-gold" onclick="qrtPrint()">🖨️ Print selected</button>
             </div>
           </div>
@@ -3139,7 +3140,10 @@ function qrtRender() {
       + '<input type="checkbox" class="qrt-chk" data-i="' + i + '" checked/>'
       + '<span style="width:22px">' + (r.kind === 'room' ? '🛏️' : '🪑') + '</span>'
       + '<span style="flex:1;font-weight:600">' + esc(r.item.name) + '</span>'
-      + '<span style="color:rgba(255,255,255,0.45);font-size:0.74rem">' + esc(r.item.section || r.item.type || '') + '</span></label>';
+      + '<span style="color:rgba(255,255,255,0.45);font-size:0.74rem">' + esc(r.item.section || r.item.type || '') + (r.kind === 'room' ? '' : ' · 👥' + (parseInt(r.item.capacity, 10) || 4)) + '</span>'
+      + '<button type="button" class="btn btn-sm btn-outline" title="Edit" onclick="event.preventDefault();qrtEditRow(' + i + ')">✏️</button>'
+      + '<button type="button" class="btn btn-sm btn-red" title="Delete" onclick="event.preventDefault();qrtDelete([' + i + '])">🗑️</button></label>'
+      + '<div id="qrt-edit-' + i + '"></div>';
   }).join('');
   qrtState.rows = rows;
 }
@@ -3179,6 +3183,94 @@ async function qrtAdd() {
     qrtRender();
     toast('✅ ' + added + ' add hue — cloud me ab ' + n + ' hain' + (skipped ? ' (' + skipped + ' naam pehle se the, skip)' : ''), '#00C896');
   } catch (e) { toast('Add nahi hua: ' + e.message, '#FF6B35'); }
+}
+
+// ── Edit / delete (by id, inside a transaction — never by list position) ──
+function qrtDocFor(kind) { return db_admin.collection('restaurants').doc(qrtState.rid).collection('meta').doc(kind === 'room' ? 'rooms' : 'tables'); }
+
+function qrtEditRow(i) {
+  var r = qrtState.rows[i]; if (!r) return;
+  var box = document.getElementById('qrt-edit-' + i);
+  if (!box) return;
+  if (box.innerHTML) { box.innerHTML = ''; return; }
+  var isRoom = r.kind === 'room';
+  box.innerHTML = '<div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:10px;margin:6px 0 10px">'
+    + '<div class="form-row">'
+    + '<div class="form-group"><label class="form-label">Naam</label><input class="form-inp" id="qrt-e-name-' + i + '" value="' + esc(r.item.name) + '"/></div>'
+    + '<div class="form-group"><label class="form-label">' + (isRoom ? 'Room type' : 'Section') + '</label><input class="form-inp" id="qrt-e-sec-' + i + '" value="' + esc(isRoom ? (r.item.type || '') : (r.item.section || '')) + '"/></div>'
+    + '<div class="form-group"><label class="form-label">' + (isRoom ? 'Tariff (₹)' : 'Capacity') + '</label><input class="form-inp" type="number" id="qrt-e-num-' + i + '" value="' + (isRoom ? (parseFloat(r.item.tariff) || 0) : (parseInt(r.item.capacity, 10) || 4)) + '"/></div>'
+    + '</div>'
+    + '<div style="font-size:0.7rem;color:rgba(255,255,255,0.5);margin-bottom:8px">Naam badalne par pehle se chhapa QR chalta rahega (ID nahi badalti), bas customer ko purana naam dikhega — naya QR print kar sakte ho.</div>'
+    + '<button type="button" class="btn btn-sm btn-gold" onclick="qrtSaveEdit(' + i + ')">💾 Save</button> '
+    + '<button type="button" class="btn btn-sm btn-outline" onclick="qrtEditRow(' + i + ')">Cancel</button></div>';
+}
+async function qrtSaveEdit(i) {
+  var r = qrtState.rows[i]; if (!r) return;
+  var isRoom = r.kind === 'room';
+  var name = (document.getElementById('qrt-e-name-' + i).value || '').trim();
+  var sec = (document.getElementById('qrt-e-sec-' + i).value || '').trim();
+  var num = parseFloat(document.getElementById('qrt-e-num-' + i).value);
+  if (!name) { toast('Naam khaali nahi ho sakta', '#FF6B35'); return; }
+  var ref = qrtDocFor(r.kind);
+  try {
+    var updated;
+    await db_admin.runTransaction(async function(tx) {
+      var d = await tx.get(ref);
+      var items = (d.exists && d.data().items) ? d.data().items.slice() : [];
+      var idx = items.findIndex(function(x){ return x.id === r.item.id; });
+      if (idx < 0) throw new Error('Ye item ab cloud me nahi hai — list dobara load karein');
+      var dup = items.some(function(x, k){ return k !== idx && String(x.name || '').trim().toLowerCase() === name.toLowerCase(); });
+      if (dup) throw new Error('"' + name + '" naam pehle se hai');
+      var it = Object.assign({}, items[idx], { name: name });
+      if (isRoom) { it.type = sec || it.type || 'Standard'; it.tariff = isNaN(num) ? (it.tariff || 0) : num; }
+      else { it.section = sec || 'Indoor'; it.capacity = (num > 0 ? Math.round(num) : (it.capacity || 4)); }
+      items[idx] = it;
+      tx.set(ref, { items: items, _synced: new Date() });
+      updated = items;
+    });
+    if (isRoom) qrtState.rooms = updated; else qrtState.tables = updated;
+    qrtRender();
+    toast('✅ Update ho gaya', '#00C896');
+  } catch (e) { toast(e.message, '#FF6B35'); }
+}
+
+async function qrtDeleteSelected() {
+  var idx = [];
+  document.querySelectorAll('.qrt-chk').forEach(function(c){ if (c.checked) idx.push(parseInt(c.dataset.i, 10)); });
+  if (!idx.length) { toast('Kuch chuna nahi hai', '#FF6B35'); return; }
+  qrtDelete(idx);
+}
+async function qrtDelete(indices) {
+  var picks = indices.map(function(i){ return qrtState.rows[i]; }).filter(Boolean);
+  if (!picks.length) return;
+  var label = picks.length === 1 ? '"' + picks[0].item.name + '"' : picks.length + ' items';
+  if (!confirm(label + ' delete karein?\n\nIn ke chhape hue QR kaam karna band kar denge. Jis table par order chal raha hai wo delete nahi hoga.')) return;
+  var done = 0, blocked = [];
+  try {
+    for (var kind of ['table', 'room']) {
+      var ids = picks.filter(function(p){ return p.kind === kind; }).map(function(p){ return p.item.id; });
+      if (!ids.length) continue;
+      var ref = qrtDocFor(kind), result, dDone = 0, dBlocked = [];
+      await db_admin.runTransaction(async function(tx) {
+        var d = await tx.get(ref);
+        var items = (d.exists && d.data().items) ? d.data().items : [];
+        var keep = [];
+        dDone = 0; dBlocked = []; // reset: a transaction can retry
+        items.forEach(function(x) {
+          if (ids.indexOf(x.id) === -1) { keep.push(x); return; }
+          // Never remove something with a running order / bill pending.
+          if ((x.status && x.status !== 'empty') || x.orderId) { dBlocked.push(x.name); keep.push(x); }
+          else dDone++;
+        });
+        tx.set(ref, { items: keep, _synced: new Date() });
+        result = keep;
+      });
+      done += dDone; blocked = blocked.concat(dBlocked);
+      if (kind === 'room') qrtState.rooms = result; else qrtState.tables = result;
+    }
+    qrtRender();
+    toast('🗑️ ' + done + ' delete hue' + (blocked.length ? ' • in par order chal raha hai, isliye nahi hue: ' + blocked.join(', ') : ''), blocked.length ? '#FFD700' : '#00C896');
+  } catch (e) { toast('Delete nahi hua: ' + e.message, '#FF6B35'); }
 }
 
 function qrtLogoSrc() {
