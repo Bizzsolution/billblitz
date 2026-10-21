@@ -415,6 +415,16 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <div id="qrt-body" style="display:none">
         <div id="qrt-diag" style="background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.25);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:0.76rem;color:#93C5FD;line-height:1.6;word-break:break-all"></div>
         <div class="card" style="margin-bottom:14px"><div class="card-body">
+          <div style="font-weight:700;margin-bottom:8px">🖼️ Logo (customer ke QR menu me)</div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div id="qrt-logo-prev" style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:1.3rem">🍽️</div>
+            <div style="flex:1;min-width:160px;font-size:0.76rem;color:rgba(255,255,255,0.6)" id="qrt-logo-status"></div>
+            <input type="file" id="qrt-logo-file" accept="image/*" style="display:none" onchange="qrtLogoPick(event)"/>
+            <button class="btn btn-sm btn-outline" onclick="document.getElementById('qrt-logo-file').click()">📤 Logo upload</button>
+            <button class="btn btn-sm btn-red" onclick="qrtLogoRemove()">Hatao</button>
+          </div>
+        </div></div>
+        <div class="card" style="margin-bottom:14px"><div class="card-body">
           <div style="font-weight:700;margin-bottom:8px">➕ Naye tables add karein</div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Naam ka shuru</label><input class="form-inp" id="qrt-prefix" value="Table "/></div>
@@ -3110,6 +3120,8 @@ async function qrtLoad() {
     var t = await meta.doc('tables').get();
     var r = await meta.doc('rooms').get();
     var s = await meta.doc('settings').get();
+    var inf = await meta.doc('info').get();
+    qrtState.cloudInfo = inf.exists ? (inf.data() || {}) : {};
     qrtState.rid = rid; qrtState.client = c;
     qrtState.tables = (t.exists && t.data().items) || [];
     qrtState.rooms = (r.exists && r.data().items) || [];
@@ -3130,6 +3142,7 @@ function qrtRender() {
   qrtState.tables.forEach(function(x){ rows.push({ kind: 'table', item: x }); });
   qrtState.rooms.forEach(function(x){ rows.push({ kind: 'room', item: x }); });
   document.getElementById('qrt-title').textContent = 'Tables: ' + qrtState.tables.length + ' • Rooms: ' + qrtState.rooms.length;
+  qrtRenderLogo();
   var dg = document.getElementById('qrt-diag');
   if (dg) dg.innerHTML = '🔎 <b>Restaurant ID:</b> ' + esc(qrtState.rid) + ' <span style="opacity:.7">(' + esc(qrtState.src || '') + ')</span><br>'
     + '📱 Is restaurant me registered devices: <b>' + esc(String(qrtState.memCount)) + '</b> &nbsp;•&nbsp; Cloud me tables: <b>' + qrtState.tables.length + '</b>, rooms: <b>' + qrtState.rooms.length + '</b><br>'
@@ -3273,9 +3286,60 @@ async function qrtDelete(indices) {
   } catch (e) { toast('Delete nahi hua: ' + e.message, '#FF6B35'); }
 }
 
+// ── Logo shown on the customer's QR menu (stored in meta/info.logo) ──
+function qrtRenderLogo() {
+  var prev = document.getElementById('qrt-logo-prev'), st = document.getElementById('qrt-logo-status');
+  if (!prev || !st) return;
+  var lg = (qrtState.cloudInfo && qrtState.cloudInfo.logo) || '';
+  if (lg && /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+\/=]+$/i.test(lg)) {
+    prev.innerHTML = '<img src="' + lg + '" style="width:100%;height:100%;object-fit:cover"/>';
+    st.textContent = '✅ Cloud me logo laga hai — customer ke QR menu me dikhega.';
+  } else {
+    prev.textContent = '🍽️';
+    st.textContent = '⚠️ Cloud me logo nahi hai. Yahan upload karein, ya client app ke Settings me logo daal kar save karwayein.';
+  }
+}
+function qrtLogoPick(ev) {
+  var f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f || !qrtState.rid) return;
+  if (!f.type || f.type.indexOf('image/') !== 0) { toast('Sirf image file chunein', '#FF6B35'); return; }
+  var rd = new FileReader();
+  rd.onload = function(e) {
+    var im = new Image();
+    im.onload = async function() {
+      var src = Math.min(im.width, im.height), out = Math.min(200, src);
+      var c = document.createElement('canvas'); c.width = c.height = out;
+      var g = c.getContext('2d');
+      g.drawImage(im, (im.width - src) / 2, (im.height - src) / 2, src, src, 0, 0, out, out);
+      g.globalCompositeOperation = 'destination-in';
+      g.beginPath(); g.arc(out / 2, out / 2, out / 2, 0, Math.PI * 2); g.closePath(); g.fill();
+      var url = c.toDataURL('image/png');
+      try {
+        await db_admin.collection('restaurants').doc(qrtState.rid).collection('meta').doc('info').set({ logo: url }, { merge: true });
+        qrtState.cloudInfo = Object.assign({}, qrtState.cloudInfo, { logo: url });
+        qrtRenderLogo();
+        toast('✅ Logo save ho gaya', '#00C896');
+      } catch (er) { toast('Logo save nahi hua: ' + er.message, '#FF6B35'); }
+    };
+    im.onerror = function() { toast('Image padh nahi payi', '#FF6B35'); };
+    im.src = e.target.result;
+  };
+  rd.readAsDataURL(f);
+}
+async function qrtLogoRemove() {
+  if (!qrtState.rid || !confirm('Logo hata dein?')) return;
+  try {
+    await db_admin.collection('restaurants').doc(qrtState.rid).collection('meta').doc('info').set({ logo: '' }, { merge: true });
+    qrtState.cloudInfo = Object.assign({}, qrtState.cloudInfo, { logo: '' });
+    qrtRenderLogo();
+    toast('Logo hata diya', '#FFD700');
+  } catch (er) { toast('Nahi hua: ' + er.message, '#FF6B35'); }
+}
+
 function qrtLogoSrc() {
   var c = qrtState.client;
-  var logo = (qrtState.info && qrtState.info.logo) || '';
+  var logo = (qrtState.info && qrtState.info.logo) || (qrtState.cloudInfo && qrtState.cloudInfo.logo) || '';
   if (!c || !c.features || c.features.qr_logo !== true || !logo) return '';
   if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+\/=\s]+$/i.test(logo)) return logo.replace(/\s/g, '');
   return '';

@@ -4266,7 +4266,7 @@ function renderSettingsPage(){
     </label>`).join('');
 }
 
-function pushRestaurantInfo(){
+function pushRestaurantInfo(clearLogo){
   // Pushes just the identity fields that the customer-facing QR order page
   // (order.html) reads from meta/info. Called immediately on save so the QR
   // page reflects a name change right away instead of waiting for the next
@@ -4276,18 +4276,22 @@ function pushRestaurantInfo(){
   // QR payment is live only when the feature is ON for this client AND the
   // owner has saved a UPI ID. order.html reads these to decide the flow.
   var payOn = hasFeature('qr_payment') && !!(info.upi && info.upi.trim());
+  var payload = {
+    restaurantName: info.name || '',
+    phone: info.phone || '',
+    upi: payOn ? info.upi.trim() : '',
+    payeeName: info.name || 'Restaurant',
+    qrPayEnabled: payOn
+  };
+  // Small (≤200px, round) logo — shown in the header of the customer's QR menu.
+  // Only written when there IS one (or the owner explicitly removed it), so a
+  // logo set by admin is never wiped just because Settings has none.
+  var lg = safeImgSrc(info.logo) || '';
+  if (lg) payload.logo = lg; else if (clearLogo === true) payload.logo = '';
   firestoreDb.collection('restaurants').doc(restaurantId)
     .collection('meta').doc('info')
-    .set({
-      restaurantName: info.name || '',
-      phone: info.phone || '',
-      upi: payOn ? info.upi.trim() : '',
-      payeeName: info.name || 'Restaurant',
-      qrPayEnabled: payOn,
-      // Small (≤200px, round) logo — shown in the header of the customer's QR menu.
-      logo: safeImgSrc(info.logo) || ''
-    }, { merge: true })
-    .catch(function(){});
+    .set(payload, { merge: true })
+    .catch(function(e){ console.log('info push failed:', e); });
 }
 
 // Logo-only refresh on login, so clients who uploaded a logo earlier show it
@@ -4297,11 +4301,11 @@ function pushRestaurantLogoOnly(){
   if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
   var info = (db.settings && db.settings.restInfo) || {};
   var logo = safeImgSrc(info.logo) || '';
-  if (!logo && !info.name) return;
+  if (!logo) return; // never clear a logo that admin may have set
   firestoreDb.collection('restaurants').doc(restaurantId)
     .collection('meta').doc('info')
-    .set({ restaurantName: info.name || '', logo: logo }, { merge: true })
-    .catch(function(){});
+    .set({ logo: logo }, { merge: true })
+    .catch(function(e){ console.log('logo push failed:', e); });
 }
 
 // Holds the logo as a compressed data-URL between "pick file" and "Save" —
@@ -4380,9 +4384,10 @@ function saveRestInfo(){
     msg:   document.getElementById('set-rest-msg').value.trim(),
     logo:  finalLogo,
   };
+  var logoRemoved = (pendingLogoDataUrl === null);
   pendingLogoDataUrl = undefined;
   save();
-  pushRestaurantInfo();
+  pushRestaurantInfo(logoRemoved);
   toast('Restaurant info saved!');
 }
 
