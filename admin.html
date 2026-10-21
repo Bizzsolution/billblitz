@@ -413,6 +413,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
           <div style="font-size:0.7rem;color:rgba(255,255,255,0.45);margin-top:4px">Yahi link QR me jayega. Galat hua to QR nahi chalega, isliye ek test QR scan karke dekh lein.</div></div>
       </div></div>
       <div id="qrt-body" style="display:none">
+        <div id="qrt-diag" style="background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.25);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:0.76rem;color:#93C5FD;line-height:1.6;word-break:break-all"></div>
         <div class="card" style="margin-bottom:14px"><div class="card-body">
           <div style="font-weight:700;margin-bottom:8px">➕ Naye tables add karein</div>
           <div class="form-row">
@@ -3094,7 +3095,16 @@ async function qrtLoad() {
   var c = adminData.clients.find(function(x){ return x.id === id; });
   if (!c || !c.key) { toast('Is client ki license key nahi bani — pehle key banao', '#FF6B35'); body.style.display = 'none'; return; }
   try {
-    var rid = await resolveRestaurantIdAdmin(c.key);
+    // Resolve exactly like the app does, but also report HOW it was found,
+    // so a wrong restaurant path (the usual reason tables don't show up in the
+    // app) is visible instead of silent.
+    var rid = '', src = '';
+    var keys = [c.key, String(c.key).toUpperCase()].filter(function(k, i, arr){ return arr.indexOf(k) === i; });
+    for (var ki = 0; ki < keys.length && !rid; ki++) {
+      var ld = await db_admin.collection('licenses').doc(keys[ki]).get();
+      if (ld.exists && ld.data() && ld.data().restaurantId) { rid = ld.data().restaurantId; src = 'license doc (' + keys[ki] + ')'; }
+    }
+    if (!rid) { rid = computeRestaurantId(c.key); src = '⚠️ legacy fallback — license doc me restaurantId nahi mila'; }
     var meta = db_admin.collection('restaurants').doc(rid).collection('meta');
     var t = await meta.doc('tables').get();
     var r = await meta.doc('rooms').get();
@@ -3103,6 +3113,10 @@ async function qrtLoad() {
     qrtState.tables = (t.exists && t.data().items) || [];
     qrtState.rooms = (r.exists && r.data().items) || [];
     qrtState.info = (s.exists && s.data().data && s.data().data.restInfo) || {};
+    var mem = 0;
+    try { var ms = await db_admin.collection('restaurants').doc(rid).collection('members').limit(20).get(); mem = ms.size; } catch (e) { mem = '?'; }
+    qrtState.src = src;
+    qrtState.memCount = mem;
     body.style.display = 'block';
     qrtRender();
     if (!t.exists) toast('Is client ke tables abhi cloud me nahi hain — add karne par wahi chalenge', '#FFD700');
@@ -3115,6 +3129,10 @@ function qrtRender() {
   qrtState.tables.forEach(function(x){ rows.push({ kind: 'table', item: x }); });
   qrtState.rooms.forEach(function(x){ rows.push({ kind: 'room', item: x }); });
   document.getElementById('qrt-title').textContent = 'Tables: ' + qrtState.tables.length + ' • Rooms: ' + qrtState.rooms.length;
+  var dg = document.getElementById('qrt-diag');
+  if (dg) dg.innerHTML = '🔎 <b>Restaurant ID:</b> ' + esc(qrtState.rid) + ' <span style="opacity:.7">(' + esc(qrtState.src || '') + ')</span><br>'
+    + '📱 Is restaurant me registered devices: <b>' + esc(String(qrtState.memCount)) + '</b> &nbsp;•&nbsp; Cloud me tables: <b>' + qrtState.tables.length + '</b>, rooms: <b>' + qrtState.rooms.length + '</b><br>'
+    + '<span style="opacity:.75">Check: client ke app me kisi table ka QR kholo — uske link me <b>r=</b> ke baad wahi ID dikhni chahiye. Devices 0 ho ya ID alag ho to ye galat client/ID hai.</span>';
   if (!rows.length) { list.innerHTML = '<div style="color:rgba(255,255,255,0.5)">Abhi koi table nahi hai. Upar se add karein.</div>'; return; }
   list.innerHTML = rows.map(function(r, i) {
     return '<label style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer">'
@@ -3156,8 +3174,10 @@ async function qrtAdd() {
       tx.set(ref, { items: items, _synced: new Date() });
       if (kind === 'room') qrtState.rooms = items; else qrtState.tables = items;
     });
+    var chk = await ref.get({ source: 'server' });
+    var n = (chk.exists && chk.data().items) ? chk.data().items.length : 0;
     qrtRender();
-    toast('✅ ' + added + ' add hue' + (skipped ? ' (' + skipped + ' naam pehle se the, skip)' : ''), '#00C896');
+    toast('✅ ' + added + ' add hue — cloud me ab ' + n + ' hain' + (skipped ? ' (' + skipped + ' naam pehle se the, skip)' : ''), '#00C896');
   } catch (e) { toast('Add nahi hua: ' + e.message, '#FF6B35'); }
 }
 
