@@ -170,14 +170,26 @@ body{font-family:'Poppins',sans-serif;background:#F5F7FB;color:#1A2B3C;padding-b
       <div class="sheet-close" onclick="closePay()">✕</div>
     </div>
     <div class="sheet-body" style="text-align:center">
-      <div style="font-size:0.9rem;color:#6B7A99;margin-bottom:6px">Pay karein taaki order place ho</div>
-      <div style="font-size:1.8rem;font-weight:800;color:#1A2B3C;margin-bottom:12px" id="pay-amount">Rs.0</div>
+      <div style="font-size:0.9rem;color:#6B7A99;margin-bottom:6px">Pehle payment karein, tabhi order jayega</div>
+      <div style="font-size:1.8rem;font-weight:800;color:#1A2B3C;margin-bottom:4px" id="pay-amount">Rs.0</div>
+      <div style="display:flex;justify-content:center;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <span style="background:#F5F3FF;color:#6D28D9;border-radius:8px;padding:3px 10px;font-size:0.8rem;font-weight:700">Order Code: <span id="pay-code">—</span></span>
+        <span style="background:#FEF3C7;color:#B45309;border-radius:8px;padding:3px 10px;font-size:0.8rem;font-weight:700">⏱ <span id="pay-timer">5:00</span></span>
+      </div>
       <div id="pay-qr" style="display:flex;justify-content:center;margin-bottom:10px"></div>
-      <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:12px" id="pay-upi-lbl"></div>
-      <a id="pay-upi-link" href="#" class="place-btn" style="display:block;text-decoration:none;background:#5B3DF5;margin-bottom:10px">📲 UPI App me Pay karein</a>
-      <input class="note-inp" id="pay-ref" placeholder="UPI Reference / UTR No. (optional)" style="text-align:center"/>
+      <div style="background:#F7F9FF;border-radius:10px;padding:10px;font-size:0.76rem;color:#475569;text-align:left;line-height:1.55;margin-bottom:10px">
+        <b>Kaise pay karein:</b><br>
+        1️⃣ <b>Dusre phone se</b> ye QR scan karein, ya<br>
+        2️⃣ Isi phone par: QR ka screenshot lein → UPI app me <b>Scan → Gallery se upload</b>, ya<br>
+        3️⃣ Neeche <b>UPI ID copy</b> karke app me daalein (amount exact daalein)
+      </div>
+      <div style="font-size:0.82rem;font-weight:700;color:#1A2B3C;margin-bottom:6px" id="pay-upi-lbl"></div>
+      <button class="place-btn" onclick="copyUpiId()" id="pay-copy-btn" style="background:#5B3DF5;margin-bottom:10px">📋 UPI ID copy karein</button>
+      <a id="pay-upi-link" href="#" style="display:block;font-size:0.72rem;color:#9CA3AF;margin-bottom:12px;text-decoration:underline">UPI app seedha kholein (Paytm me block ho sakta hai)</a>
+      <input class="note-inp" id="pay-ref" inputmode="numeric" maxlength="12" placeholder="12-digit UTR / Ref No. (zaroori)" style="text-align:center"/>
+      <div style="font-size:0.7rem;color:#9CA3AF;margin:-4px 0 10px">Payment ke baad UPI app me "UPI Ref / UTR" 12 digit ka number milta hai</div>
       <button class="place-btn" id="pay-done-btn" onclick="confirmPayment()" style="background:#00A878">✅ Payment ho gaya — Order bhejo</button>
-      <div style="font-size:0.72rem;color:#9CA3AF;margin-top:10px">Payment karne ke baad hi "Payment ho gaya" dabayein. Staff aapka payment confirm karega.</div>
+      <div style="font-size:0.72rem;color:#9CA3AF;margin-top:10px">Staff aapka payment check karega. Payment verify hone ke baad hi order kitchen tak jayega.</div>
     </div>
   </div>
 </div>
@@ -457,9 +469,10 @@ async function submitOrder(payFields) {
       customerUid: (fbAuth.currentUser && fbAuth.currentUser.uid) || ''
     };
     if (payFields) {
-      doc.paymentStatus = payFields.paymentStatus; // 'paid_unverified'
+      doc.paymentStatus = payFields.paymentStatus; // 'awaiting_verification' (staff flips it to 'verified')
       doc.paymentMethod = payFields.paymentMethod; // 'upi_qr'
       doc.paymentRef    = payFields.paymentRef || '';
+      doc.orderCode     = pendingOrder.code || '';
     }
     await firestoreDb.collection('restaurants').doc(restaurantId)
       .collection('qrOrders').doc(orderId).set(doc);
@@ -488,15 +501,46 @@ function ensureQRLib(cb){
   s.onload = cb; s.onerror = function(){ cb(); };
   document.head.appendChild(s);
 }
-function buildUpiUri(amount){
+function buildUpiUri(amount, code){
+  // The order code goes into the UPI note so staff can match the payment
+  // in their bank/merchant app to this exact order.
   return 'upi://pay?pa=' + encodeURIComponent(payInfo.upi)
     + '&pn=' + encodeURIComponent(payInfo.payeeName)
     + '&am=' + encodeURIComponent(Number(amount||0).toFixed(2))
-    + '&cu=INR&tn=' + encodeURIComponent('Order ' + (tableName||''));
+    + '&cu=INR&tn=' + encodeURIComponent((code ? code + ' ' : 'Order ') + (tableName||''));
+}
+var payTimerId = null;
+function stopPayTimer(){ if (payTimerId) { clearInterval(payTimerId); payTimerId = null; } }
+function startPayTimer(secs){
+  stopPayTimer();
+  var left = secs;
+  var tEl = document.getElementById('pay-timer');
+  var btn = document.getElementById('pay-done-btn');
+  if (btn) btn.disabled = false;
+  function draw(){
+    var m = Math.floor(left/60), s2 = left%60;
+    if (tEl) tEl.textContent = m + ':' + (s2<10?'0':'') + s2;
+  }
+  draw();
+  payTimerId = setInterval(function(){
+    left--;
+    if (left <= 0) {
+      stopPayTimer();
+      if (tEl) tEl.textContent = '0:00';
+      if (btn) { btn.disabled = true; btn.textContent = 'Time khatam — dobara try karein'; }
+      return;
+    }
+    draw();
+  }, 1000);
 }
 function openPay(){
   if(!pendingOrder) return;
-  var uri = buildUpiUri(pendingOrder.total);
+  pendingOrder.code = 'BB-' + (1000 + Math.floor(Math.random() * 9000));
+  var uri = buildUpiUri(pendingOrder.total, pendingOrder.code);
+  document.getElementById('pay-code').textContent = pendingOrder.code;
+  var dBtn = document.getElementById('pay-done-btn');
+  if (dBtn) dBtn.textContent = '✅ Payment ho gaya — Order bhejo';
+  startPayTimer(300);
   document.getElementById('pay-amount').textContent = fmt(pendingOrder.total);
   document.getElementById('pay-upi-lbl').textContent = 'UPI: ' + payInfo.upi;
   document.getElementById('pay-upi-link').href = uri;
@@ -514,10 +558,25 @@ function openPay(){
   });
   document.getElementById('pay-overlay').classList.add('show');
 }
-function closePay(){ document.getElementById('pay-overlay').classList.remove('show'); }
+function closePay(){ stopPayTimer(); document.getElementById('pay-overlay').classList.remove('show'); }
+function copyUpiId(){
+  var b = document.getElementById('pay-copy-btn');
+  function done(){ if(b){ b.textContent = '✅ Copy ho gaya'; setTimeout(function(){ b.textContent = '📋 UPI ID copy karein'; }, 2000); } }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(payInfo.upi).then(done, function(){ alert('UPI ID: ' + payInfo.upi); }); return; }
+  } catch(e){}
+  alert('UPI ID: ' + payInfo.upi);
+}
 async function confirmPayment(){
-  var ref = (document.getElementById('pay-ref').value || '').trim().slice(0, 40);
-  await submitOrder({ paymentStatus: 'paid_unverified', paymentMethod: 'upi_qr', paymentRef: ref });
+  // Order is NOT created until a valid 12-digit UTR is entered. Staff then
+  // verify the payment in their bank/UPI app before the order is accepted.
+  if (!payTimerId) { alert('Payment ka time khatam ho gaya. Window band karke dobara "Place Order" dabayein.'); return; }
+  var ref = (document.getElementById('pay-ref').value || '').replace(/\s+/g, '');
+  if (!/^\d{12}$/.test(ref)) {
+    alert('Pehle payment karein, phir UPI app se 12-digit UTR / Ref number yahan daalein. Bina payment ke order nahi jayega.');
+    return;
+  }
+  await submitOrder({ paymentStatus: 'awaiting_verification', paymentMethod: 'upi_qr', paymentRef: ref });
 }
 
 // Tracks EVERY order placed this visit — not just the latest one — so
@@ -536,6 +595,7 @@ function trackOrderStatus(orderId) {
       if(!doc.exists) return;
       var data = doc.data();
       entry.status = data.status || 'pending';
+      entry.pay = data.paymentStatus || '';
       renderOrderStatusBar();
       // Keep the full-screen confirmation view in sync too, if it's
       // currently showing for this exact order.
@@ -545,6 +605,10 @@ function trackOrderStatus(orderId) {
           statusEl.innerHTML = '<span style="color:#00C896">✅</span><span>Order accepted! Ban raha hai...</span>';
         } else if(entry.status === 'declined') {
           statusEl.innerHTML = '<span style="color:#EF476F">✕</span><span>Order decline ho gaya. Staff se baat karein.</span>';
+        } else if(entry.pay === 'verified') {
+          statusEl.innerHTML = '<span style="color:#00C896">✅</span><span>Payment mil gaya! Staff order confirm kar raha hai...</span>';
+        } else if(entry.pay === 'awaiting_verification') {
+          statusEl.innerHTML = '<div class="pulse-dot"></div><span>Payment verify ho raha hai...</span>';
         } else {
           statusEl.innerHTML = '<div class="pulse-dot"></div><span>Waiting for confirmation...</span>';
         }
@@ -563,6 +627,8 @@ function renderOrderStatusBar() {
     var dotClass = o.status==='accepted' ? 'accepted' : (o.status==='declined' ? 'declined' : 'waiting');
     var label = o.status==='accepted' ? 'Accepted — ban raha hai'
               : o.status==='declined' ? 'Declined — staff se baat karein'
+              : o.pay==='verified' ? 'Payment mil gaya ✅'
+              : o.pay==='awaiting_verification' ? 'Payment verify ho raha hai...'
               : 'Waiting for confirmation...';
     return '<div class="osb-row"><div class="osb-dot '+dotClass+'"></div><div class="osb-text">Order #'+(i+1)+' — <b>'+label+'</b></div></div>';
   }).join('');
@@ -571,7 +637,9 @@ function renderOrderStatusBar() {
 function showConfirmation(orderId) {
   document.getElementById('confirm-screen').classList.add('show');
   document.getElementById('confirm-sub').textContent =
-    (tableId ? (locationType==='room' ? tableName + ' room service ke liye ' : tableName + ' ke liye ') : '') + 'Aapka order restaurant ko bhej diya gaya hai. Staff jald hi confirm karega.';
+    (tableId ? (locationType==='room' ? tableName + ' room service ke liye ' : tableName + ' ke liye ') : '') + (payInfo.enabled
+      ? 'Aapka payment staff verify kar raha hai. Verify hote hi order kitchen ko jayega.'
+      : 'Aapka order restaurant ko bhej diya gaya hai. Staff jald hi confirm karega.');
   trackOrderStatus(orderId);
 }
 

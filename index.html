@@ -3226,6 +3226,9 @@ function hasFeature(f) {
   if(licenseState.status === 'trial') {
     return ['billing','menu','reports','wa_bill','loyalty'].indexOf(f) !== -1;
   }
+  // Paid add-ons: only for clients the admin has explicitly switched ON
+  // (the "default to allowed" rule below is for core tabs, not add-ons).
+  if(['qr_payment','gst_reports','qr_logo'].indexOf(f) !== -1) return clientFeatures[f] === true;
   if(Object.keys(clientFeatures).length === 0) return true;
   // If this specific feature key was never explicitly configured by admin
   // (e.g. a newer feature added after this client's last Feature save, or
@@ -11575,12 +11578,16 @@ function showQROrdersModal() {
         + '<div class="qr-order-hdr"><span class="qr-order-table">' + (isRoom?'🛏️ ':'🪑 ') + esc(o.tableName || 'Takeaway') + (isRoom?' <span style="font-size:0.62rem;color:#7C3AED;font-weight:700">ROOM SERVICE</span>':'') + '</span><span class="qr-order-time">' + fmtTime(o.date) + '</span></div>'
         + itemsHtml
         + (o.note ? '<div class="qr-order-note">📝 ' + esc(o.note) + '</div>' : '')
-        + (o.paymentStatus === 'paid_unverified'
-            ? '<div style="background:#DCFCE7;color:#16A34A;border-radius:8px;padding:6px 10px;margin-top:8px;font-size:0.78rem;font-weight:700">💳 ONLINE PAID (UPI)' + (o.paymentRef ? ' · Ref: ' + esc(o.paymentRef) : '') + '<div style="font-weight:500;color:#15803D;font-size:0.68rem">Apni UPI app me confirm kar lein</div></div>'
-            : '')
+        + (o.paymentStatus === 'verified'
+            ? '<div style="background:#DCFCE7;color:#16A34A;border-radius:8px;padding:6px 10px;margin-top:8px;font-size:0.78rem;font-weight:700">✅ PAYMENT VERIFIED (UPI)' + (o.paymentRef ? ' · UTR: ' + esc(o.paymentRef) : '') + '</div>'
+            : (qrPayRequired()
+                ? '<div style="background:#FEF3C7;color:#B45309;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:0.78rem;font-weight:700">⏳ PAYMENT VERIFY BAAKI' + (o.orderCode ? ' · Code: ' + esc(o.orderCode) : '') + (o.paymentRef ? ' · UTR: ' + esc(o.paymentRef) : ' · customer ne UTR nahi diya')
+                  + '<div style="font-weight:500;font-size:0.68rem;margin-top:2px">Apni UPI/bank app me ' + fmt(qrTrustedTotal) + ' aaya hai ye check karein (note me ' + esc(o.orderCode || 'order code') + ' dikhna chahiye), phir "Payment mila" dabayein. Verify ke bina order accept nahi hoga.</div>'
+                  + '<button class="btn" style="width:100%;margin-top:6px;background:#16A34A;color:#fff" data-oid="' + esc(o.id) + '" onclick="verifyQRPayment(this.dataset.oid)">💰 Payment mila — Verify</button></div>'
+                : ''))
         + '<div class="qr-order-total"><span>Total</span><span>' + fmt(qrTrustedTotal) + '</span></div>'
         + '<div class="qr-order-actions">'
-        + '<button class="btn btn-green" style="flex:1" data-oid="' + esc(o.id) + '" onclick="acceptQROrder(this.dataset.oid)">✅ Accept</button>'
+        + '<button class="btn btn-green" style="flex:1' + ((qrPayRequired() && o.paymentStatus !== 'verified') ? ';opacity:.45' : '') + '" data-oid="' + esc(o.id) + '" onclick="acceptQROrder(this.dataset.oid)">✅ Accept</button>'
         + '<button class="btn btn-red" style="flex:1" data-oid="' + esc(o.id) + '" onclick="declineQROrder(this.dataset.oid)">✕ Decline</button>'
         + '</div>'
         + '</div>';
@@ -11606,9 +11613,43 @@ function sanitizeQROrderItems(items) {
   return { items: clean, dropped: dropped };
 }
 
+// QR Pay ON for this restaurant = a customer order must have staff-verified
+// payment before it can be accepted (and so before it reaches kitchen/billing).
+function qrPayRequired() {
+  var i = (db.settings && db.settings.restInfo) || {};
+  return hasFeature('qr_payment') && !!(i.upi && i.upi.trim());
+}
+async function verifyQRPayment(orderId) {
+  try {
+    var cur = (db.qrOrders || []).find(function(x){ return x.id === orderId; });
+    // Strict check: the same UTR must never verify two different orders.
+    if (cur && cur.paymentRef && isFirebaseReady && firestoreDb && restaurantId) {
+      var dup = await firestoreDb.collection('restaurants').doc(restaurantId)
+        .collection('qrOrders').where('paymentRef', '==', cur.paymentRef).get();
+      var clash = false;
+      dup.forEach(function(d){ if (d.id !== orderId && d.data().paymentStatus === 'verified') clash = true; });
+      if (clash) {
+        if (!confirm('⚠️ Ye UTR (' + cur.paymentRef + ') pehle ek aur order me verify ho chuka hai. Ho sakta hai ye galat/dobara use hua UTR ho. Phir bhi verify karein?')) return;
+      }
+    }
+    if (isFirebaseReady && firestoreDb && restaurantId) {
+      await firestoreDb.collection('restaurants').doc(restaurantId)
+        .collection('qrOrders').doc(orderId).set({ paymentStatus: 'verified' }, { merge: true });
+    }
+    var o = (db.qrOrders || []).find(function(x){ return x.id === orderId; });
+    if (o) o.paymentStatus = 'verified';
+    showQROrdersModal();
+    toast('✅ Payment verified — ab Accept kar sakte hain', '#16A34A');
+  } catch(e) { toast('Verify nahi hua: ' + e.message, '#EF476F'); }
+}
+
 async function acceptQROrder(orderId) {
   var o = (db.qrOrders || []).find(function(x){ return x.id === orderId; });
   if (!o) return;
+  if (qrPayRequired() && o.paymentStatus !== 'verified') {
+    toast('⛔ Pehle payment verify karein ("Payment mila" dabayein) — bina payment order accept nahi hoga.', '#EF476F');
+    return;
+  }
   var sanitized = sanitizeQROrderItems(o.items);
   if (!sanitized.items.length) {
     toast('⚠️ Is order ka koi bhi item menu mein nahi mila — accept nahi kiya.', '#FF6B35');
@@ -11769,16 +11810,133 @@ function showTableQRCode(tableId, tableName, locType) {
     '<div class="modal-handle"></div>'
     + '<div class="modal-title">📱 QR for ' + (isRoom?'🛏️ ':'🪑 ') + esc(tableName) + '</div>'
     + '<div style="text-align:center;padding:12px 0">'
-    + '<div id="tbl-qr-box" style="display:inline-block;padding:14px;background:#fff;border-radius:14px;border:4px solid #1A2B3C"></div>'
+    + '<style>#tbl-qr-box canvas,#tbl-qr-box img{width:190px!important;height:190px!important}</style>'
+    + '<div style="display:inline-block;padding:14px 14px 10px;background:#fff;border-radius:14px;border:4px solid #1A2B3C">'
+    + '<div id="tbl-qr-box" style="display:inline-block"></div>'
+    + '<div style="font-size:1.05rem;font-weight:800;color:#1A2B3C;margin-top:8px">' + esc(tableName) + '</div>'
+    + '<div style="font-size:0.78rem;font-weight:800;letter-spacing:1.5px;color:#6D28D9">SCAN FOR ORDER</div>'
+    + '</div>'
     + '<div style="margin-top:10px;font-size:0.78rem;color:#6B7A99">' + (isRoom?'Guest room mein QR chipkayein — scan karke order karega':'Customer is table pe scan karke order karega') + '</div>'
     + '<div style="margin-top:6px;font-size:0.68rem;color:#2563EB;word-break:break-all;padding:0 10px">' + url + '</div>'
     + '</div>'
-    + '<button class="btn btn-primary btn-full" data-url="' + encodeURIComponent(url) + '" data-tname="' + esc(tableName) + '" onclick="shareTableQR(this.dataset.url,this.dataset.tname)">📤 Print / Share</button>'
+    + '<button class="btn btn-primary btn-full" data-tname="' + esc(tableName) + '" onclick="printTableQRCard(this.dataset.tname)">🖨️ Print QR Card</button>'
+    + '<button class="btn btn-outline btn-full" style="margin-top:8px" data-tname="' + esc(tableName) + '" onclick="downloadTableQRCard(this.dataset.tname)">⬇️ Download PNG</button>'
+    + '<button class="btn btn-outline btn-full" style="margin-top:8px" data-url="' + encodeURIComponent(url) + '" data-tname="' + esc(tableName) + '" onclick="shareTableQR(this.dataset.url,this.dataset.tname)">📤 Share link (WhatsApp)</button>'
     + '<button class="btn btn-outline btn-full" style="margin-top:8px" onclick="closeModal()">Close</button>';
   openModal();
   ensureQRCodeLib(function() {
-    new QRCode(document.getElementById('tbl-qr-box'), { text: url, width: 190, height: 190, colorDark: '#1A2B3C', colorLight: '#ffffff' });
+    // Generated at 400px (shown at 190px) so printed cards stay sharp.
+    var logoSrc = qrLogoSource();
+    new QRCode(document.getElementById('tbl-qr-box'), { text: url, width: 400, height: 400, colorDark: '#1A2B3C', colorLight: '#ffffff',
+      // High error-correction so a centred logo never stops the QR scanning.
+      correctLevel: logoSrc ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M });
+    if (logoSrc) {
+      var plain = getTableQRDataUrl();
+      stampLogoOnQR(plain, logoSrc, function(withLogo) {
+        var bx = document.getElementById('tbl-qr-box');
+        if (bx && withLogo) bx.innerHTML = '<img src="' + withLogo + '" style="width:190px;height:190px"/>';
+      });
+    }
   });
+}
+
+// Customer logo for the QR: only when the admin enabled "QR Logo" for this
+// client AND the owner has uploaded a logo in Settings.
+function qrLogoSource() {
+  var info = (db.settings && db.settings.restInfo) || {};
+  if (!hasFeature('qr_logo') || !info.logo) return '';
+  return safeImgSrc(info.logo) || '';
+}
+// Draws the logo (in a white rounded square, ~20% of the QR) at the centre.
+// Falls back to the plain QR if the image can't be read (e.g. remote logo).
+function stampLogoOnQR(qrDataUrl, logoSrc, cb) {
+  if (!qrDataUrl) { cb(''); return; }
+  var qi = new Image();
+  qi.onload = function() {
+    var li = new Image();
+    if (logoSrc.indexOf('data:') !== 0) li.crossOrigin = 'anonymous';
+    li.onload = function() {
+      try {
+        var S = 400, c = document.createElement('canvas');
+        c.width = S; c.height = S;
+        var g = c.getContext('2d');
+        g.drawImage(qi, 0, 0, S, S);
+        var box = 92, lg = 76, x = (S - box) / 2;
+        g.fillStyle = '#fff';
+        g.beginPath();
+        if (g.roundRect) g.roundRect(x, x, box, box, 14); else g.rect(x, x, box, box);
+        g.fill();
+        var r = Math.min(lg / li.width, lg / li.height);
+        var w = li.width * r, h = li.height * r;
+        g.drawImage(li, (S - w) / 2, (S - h) / 2, w, h);
+        cb(c.toDataURL('image/png'));
+      } catch (e) { cb(''); }
+    };
+    li.onerror = function() { cb(''); };
+    li.src = logoSrc;
+  };
+  qi.onerror = function() { cb(''); };
+  qi.src = qrDataUrl;
+}
+
+// Reads the QR already drawn in the modal as a PNG data URL.
+function getTableQRDataUrl() {
+  var box = document.getElementById('tbl-qr-box');
+  if (!box) return '';
+  var cv = box.querySelector('canvas');
+  if (cv) { try { return cv.toDataURL('image/png'); } catch(e) {} }
+  var im = box.querySelector('img');
+  return im ? im.src : '';
+}
+
+// Printable card: restaurant name, QR, table name, then "SCAN FOR ORDER" —
+// so nothing needs to be written by hand on the printout.
+function printTableQRCard(tableName) {
+  var qr = getTableQRDataUrl();
+  if (!qr) { toast('QR abhi ban raha hai, 1 second baad try karein', '#FF6B35'); return; }
+  var rest = (db.settings && db.settings.restInfo && db.settings.restInfo.name) || '';
+  var w = window.open('', '_blank', 'width=600,height=800');
+  if (!w) { toast('Popup block hai — browser me popup allow karein', '#FF6B35'); return; }
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(tableName) + ' QR</title>'
+    + '<style>@page{size:A5;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#1A2B3C;display:flex;justify-content:center}'
+    + '.card{width:148mm;height:210mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12mm}'
+    + '.box{border:3mm solid #1A2B3C;border-radius:8mm;padding:8mm 8mm 6mm}'
+    + '.rn{font-size:20pt;font-weight:800;margin-bottom:6mm}'
+    + 'img{width:80mm;height:80mm;display:block;margin:0 auto}'
+    + '.tn{font-size:26pt;font-weight:800;margin-top:6mm}'
+    + '.sc{font-size:15pt;font-weight:800;letter-spacing:3px;color:#6D28D9;margin-top:2mm}'
+    + '</style></head><body><div class="card">'
+    + (rest ? '<div class="rn">' + esc(rest) + '</div>' : '')
+    + '<div class="box"><img src="' + qr + '"/><div class="tn">' + esc(tableName) + '</div><div class="sc">SCAN FOR ORDER</div></div>'
+    + '</div><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>';
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
+function downloadTableQRCard(tableName) {
+  var qr = getTableQRDataUrl();
+  if (!qr) { toast('QR abhi ban raha hai, 1 second baad try karein', '#FF6B35'); return; }
+  var rest = (db.settings && db.settings.restInfo && db.settings.restInfo.name) || '';
+  var img = new Image();
+  img.onload = function() {
+    var W = 900, H = 1200, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+    g.textAlign = 'center'; g.fillStyle = '#1A2B3C';
+    if (rest) { g.font = 'bold 52px Arial'; g.fillText(rest.slice(0, 28), W/2, 110); }
+    g.lineWidth = 14; g.strokeStyle = '#1A2B3C';
+    g.strokeRect(100, 170, W-200, 880);
+    g.drawImage(img, 190, 230, 520, 520);
+    g.font = 'bold 80px Arial'; g.fillText(String(tableName).slice(0, 18), W/2, 880);
+    g.fillStyle = '#6D28D9'; g.font = 'bold 48px Arial';
+    if ('letterSpacing' in g) g.letterSpacing = '6px';
+    g.fillText('SCAN FOR ORDER', W/2, 970);
+    var a = document.createElement('a');
+    a.download = 'QR-' + String(tableName).replace(/[^A-Za-z0-9_-]+/g, '_') + '.png';
+    a.href = c.toDataURL('image/png');
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  img.src = qr;
 }
 
 function shareTableQR(encodedUrl, tableName) {
