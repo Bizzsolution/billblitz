@@ -222,6 +222,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <div class="sb-link" id="nav-announce" onclick="showSection('announce');closeMobileSidebar()"><span>📢</span> Announcements</div>
       <div class="sb-link" id="nav-features" onclick="showSection('features');closeMobileSidebar()"><span>🎛️</span> Features</div>
       <div class="sb-link" id="nav-menuup" onclick="showSection('menuup');closeMobileSidebar()"><span>🍜</span> Menu Updater</div>
+      <div class="sb-link" id="nav-qrtables" onclick="showSection('qrtables');closeMobileSidebar()"><span>🪑</span> QR Tables</div>
       <div class="sb-link" id="nav-revenue" onclick="showSection('revenue');closeMobileSidebar()"><span>💰</span> Revenue</div>
       <div class="sb-link" id="nav-billing" onclick="showSection('billing');closeMobileSidebar()"><span>🧾</span> Billing</div>
       <div class="sb-link" id="nav-danger" onclick="showSection('danger');closeMobileSidebar()"><span>⚠️</span> Danger Zone</div>
@@ -399,6 +400,49 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
     </div>
 
     <!-- CLIENTS -->
+    <div id="sec-qrtables" style="display:none">
+      <div class="topbar"><div class="topbar-title">🪑 QR Tables</div></div>
+      <div style="background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.15);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:0.8rem;color:#FFD700">
+        Client select karo → tables/rooms add karo → QR cards print karo. Ye QR bilkul wahi hain jo client ke app me banta hai, aur table app me bhi apne aap dikhenge.
+      </div>
+      <div class="card" style="margin-bottom:14px"><div class="card-body">
+        <div class="form-group"><label class="form-label">Select Client</label>
+          <select class="form-select" id="qrt-client" onchange="qrtLoad()"><option value="">-- Client chunein --</option></select></div>
+        <div class="form-group" style="margin-bottom:0"><label class="form-label">App ka link (jahan client ka BillBlitz khulta hai)</label>
+          <input class="form-inp" id="qrt-base" placeholder="https://aapka-app.netlify.app" onchange="qrtSaveBase()"/>
+          <div style="font-size:0.7rem;color:rgba(255,255,255,0.45);margin-top:4px">Yahi link QR me jayega. Galat hua to QR nahi chalega, isliye ek test QR scan karke dekh lein.</div></div>
+      </div></div>
+      <div id="qrt-body" style="display:none">
+        <div class="card" style="margin-bottom:14px"><div class="card-body">
+          <div style="font-weight:700;margin-bottom:8px">➕ Naye tables add karein</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Naam ka shuru</label><input class="form-inp" id="qrt-prefix" value="Table "/></div>
+            <div class="form-group"><label class="form-label">Se</label><input class="form-inp" id="qrt-from" type="number" value="1"/></div>
+            <div class="form-group"><label class="form-label">Tak</label><input class="form-inp" id="qrt-to" type="number" value="10"/></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Section</label><input class="form-inp" id="qrt-section" value="Indoor"/></div>
+            <div class="form-group"><label class="form-label">Capacity</label><input class="form-inp" id="qrt-cap" type="number" value="4"/></div>
+            <div class="form-group"><label class="form-label">Type</label>
+              <select class="form-select" id="qrt-kind"><option value="table">🪑 Table</option><option value="room">🛏️ Room</option></select></div>
+          </div>
+          <button class="btn btn-gold" onclick="qrtAdd()">➕ Add karein</button>
+        </div></div>
+        <div class="card"><div class="card-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <div style="font-weight:700" id="qrt-title">Tables</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-outline" onclick="qrtSelectAll(true)">Sab chuno</button>
+              <button class="btn btn-sm btn-outline" onclick="qrtSelectAll(false)">Sab hatao</button>
+              <select class="form-select" id="qrt-layout" style="width:auto;padding:5px 8px"><option value="a5">A5 — 1 card/page</option><option value="a4">A4 — 4 card/page</option></select>
+              <button class="btn btn-sm btn-gold" onclick="qrtPrint()">🖨️ Print selected</button>
+            </div>
+          </div>
+          <div id="qrt-list" style="font-size:0.84rem"></div>
+        </div></div>
+      </div>
+    </div>
+
     <div id="sec-clients" style="display:none">
       <div class="topbar">
         <div class="topbar-title">👥 All Clients</div>
@@ -841,7 +885,7 @@ function closeMobileSidebar() {
 }
 
 function showSection(id) {
-  ['dashboard','clients','keys','announce','revenue','billing','asettings','features','menuup','danger'].forEach(s => {
+  ['dashboard','clients','keys','announce','revenue','billing','asettings','features','menuup','qrtables','danger'].forEach(s => {
     const el = document.getElementById('sec-'+s);
     const nav = document.getElementById('nav-'+s);
     if(el) el.style.display = s===id ? 'block' : 'none';
@@ -850,6 +894,7 @@ function showSection(id) {
   if(id==='dashboard') renderDashboard();
   if(id==='features') showFeaturesSection();
   if(id==='menuup') showMenuUpdaterSection();
+  if(id==='qrtables') showQRTablesSection();
   if(id==='danger') showDangerZoneSection();
   if(id==='clients') renderClients();
   if(id==='keys') renderKeys();
@@ -3002,6 +3047,194 @@ function markInvoiceSent(inv) {
   cloudSet('admin_invoices', inv.id, { sentAt: inv.sentAt });
 }
 function newInvoiceForClient(clientId) { closeModal('modal-view-client'); showSection('billing'); showNewInvoice(clientId); }
+
+// ══ QR TABLES (admin) ════════════════════════════════════
+// Lets admin create tables/rooms for a client and print their QR cards
+// without opening that client's app. Tables are written to the SAME cloud
+// document the app syncs (restaurants/{rid}/meta/tables), so the QR links
+// are identical to the ones the app generates.
+var qrtState = { rid: '', client: null, tables: [], rooms: [], info: {} };
+
+function qrtUid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function qrtDefaultBase() {
+  var b = window.location.href.split('?')[0].split('#')[0];
+  return b.replace(/\/[^\/]*$/, '');
+}
+function showQRTablesSection() {
+  var sel = document.getElementById('qrt-client');
+  if (sel && sel.options.length <= 1) {
+    var opts = '<option value="">-- Client chunein --</option>';
+    adminData.clients.forEach(function(c) {
+      opts += '<option value="' + c.id + '">' + esc(c.name) + (c.key ? ' (' + c.key + ')' : ' (No key yet)') + '</option>';
+    });
+    sel.innerHTML = opts;
+  }
+  var base = document.getElementById('qrt-base');
+  if (base && !base.value) {
+    var saved = ''; try { saved = localStorage.getItem('bb-admin-app-base') || ''; } catch (e) {}
+    base.value = saved || qrtDefaultBase();
+  }
+}
+function qrtSaveBase() {
+  var v = (document.getElementById('qrt-base').value || '').trim().replace(/\/+$/, '').replace(/\/index\.html$/, '');
+  document.getElementById('qrt-base').value = v;
+  try { localStorage.setItem('bb-admin-app-base', v); } catch (e) {}
+  qrtRender();
+}
+function qrtUrl(item, kind) {
+  var base = (document.getElementById('qrt-base').value || '').trim().replace(/\/+$/, '').replace(/\/index\.html$/, '');
+  var u = base + '/order.html?r=' + encodeURIComponent(qrtState.rid) + '&t=' + encodeURIComponent(item.id) + '&tn=' + encodeURIComponent(item.name || '');
+  if (kind === 'room') u += '&loc=room';
+  return u;
+}
+async function qrtLoad() {
+  var id = document.getElementById('qrt-client').value;
+  var body = document.getElementById('qrt-body');
+  if (!id) { body.style.display = 'none'; return; }
+  var c = adminData.clients.find(function(x){ return x.id === id; });
+  if (!c || !c.key) { toast('Is client ki license key nahi bani — pehle key banao', '#FF6B35'); body.style.display = 'none'; return; }
+  try {
+    var rid = await resolveRestaurantIdAdmin(c.key);
+    var meta = db_admin.collection('restaurants').doc(rid).collection('meta');
+    var t = await meta.doc('tables').get();
+    var r = await meta.doc('rooms').get();
+    var s = await meta.doc('settings').get();
+    qrtState.rid = rid; qrtState.client = c;
+    qrtState.tables = (t.exists && t.data().items) || [];
+    qrtState.rooms = (r.exists && r.data().items) || [];
+    qrtState.info = (s.exists && s.data().data && s.data().data.restInfo) || {};
+    body.style.display = 'block';
+    qrtRender();
+    if (!t.exists) toast('Is client ke tables abhi cloud me nahi hain — add karne par wahi chalenge', '#FFD700');
+  } catch (e) { toast('Load nahi hua: ' + e.message, '#FF6B35'); }
+}
+function qrtRender() {
+  var list = document.getElementById('qrt-list');
+  if (!list || !qrtState.rid) return;
+  var rows = [];
+  qrtState.tables.forEach(function(x){ rows.push({ kind: 'table', item: x }); });
+  qrtState.rooms.forEach(function(x){ rows.push({ kind: 'room', item: x }); });
+  document.getElementById('qrt-title').textContent = 'Tables: ' + qrtState.tables.length + ' • Rooms: ' + qrtState.rooms.length;
+  if (!rows.length) { list.innerHTML = '<div style="color:rgba(255,255,255,0.5)">Abhi koi table nahi hai. Upar se add karein.</div>'; return; }
+  list.innerHTML = rows.map(function(r, i) {
+    return '<label style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer">'
+      + '<input type="checkbox" class="qrt-chk" data-i="' + i + '" checked/>'
+      + '<span style="width:22px">' + (r.kind === 'room' ? '🛏️' : '🪑') + '</span>'
+      + '<span style="flex:1;font-weight:600">' + esc(r.item.name) + '</span>'
+      + '<span style="color:rgba(255,255,255,0.45);font-size:0.74rem">' + esc(r.item.section || r.item.type || '') + '</span></label>';
+  }).join('');
+  qrtState.rows = rows;
+}
+function qrtSelectAll(v) { document.querySelectorAll('.qrt-chk').forEach(function(c){ c.checked = v; }); }
+
+async function qrtAdd() {
+  if (!qrtState.rid) return;
+  var kind = document.getElementById('qrt-kind').value;
+  var prefix = document.getElementById('qrt-prefix').value;
+  var from = parseInt(document.getElementById('qrt-from').value, 10);
+  var to = parseInt(document.getElementById('qrt-to').value, 10);
+  var section = (document.getElementById('qrt-section').value || '').trim() || 'Indoor';
+  var cap = parseInt(document.getElementById('qrt-cap').value, 10) || 4;
+  if (!(from >= 0) || !(to >= from) || to - from > 199) { toast('Se / Tak sahi daalein (max 200 ek baar me)', '#FF6B35'); return; }
+  var docId = kind === 'room' ? 'rooms' : 'tables';
+  var ref = db_admin.collection('restaurants').doc(qrtState.rid).collection('meta').doc(docId);
+  var added = 0, skipped = 0;
+  try {
+    await db_admin.runTransaction(async function(tx) {
+      var d = await tx.get(ref);
+      var items = (d.exists && d.data().items) ? d.data().items.slice() : [];
+      var names = {}; items.forEach(function(x){ names[String(x.name || '').trim().toLowerCase()] = 1; });
+      added = 0; skipped = 0;
+      for (var n = from; n <= to; n++) {
+        var name = (prefix + n).trim();
+        if (names[name.toLowerCase()]) { skipped++; continue; }
+        names[name.toLowerCase()] = 1;
+        if (kind === 'room') items.push({ id: qrtUid(), name: name, type: section, tariff: 0, status: 'empty', orderId: null });
+        else items.push({ id: qrtUid(), name: name, capacity: cap, status: 'empty', orderId: null, section: section });
+        added++;
+      }
+      tx.set(ref, { items: items, _synced: new Date() });
+      if (kind === 'room') qrtState.rooms = items; else qrtState.tables = items;
+    });
+    qrtRender();
+    toast('✅ ' + added + ' add hue' + (skipped ? ' (' + skipped + ' naam pehle se the, skip)' : ''), '#00C896');
+  } catch (e) { toast('Add nahi hua: ' + e.message, '#FF6B35'); }
+}
+
+function qrtLogoSrc() {
+  var c = qrtState.client;
+  var logo = (qrtState.info && qrtState.info.logo) || '';
+  if (!c || !c.features || c.features.qr_logo !== true || !logo) return '';
+  if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+\/=\s]+$/i.test(logo)) return logo.replace(/\s/g, '');
+  return '';
+}
+function qrtMakeQR(url, logoSrc) {
+  return new Promise(function(resolve) {
+    var tmp = document.createElement('div'); tmp.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(tmp);
+    new QRCode(tmp, { text: url, width: 400, height: 400, colorDark: '#1A2B3C', colorLight: '#ffffff',
+      correctLevel: logoSrc ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M });
+    var cv = tmp.querySelector('canvas');
+    var plain = cv ? cv.toDataURL('image/png') : '';
+    tmp.remove();
+    if (!plain || !logoSrc) { resolve(plain); return; }
+    var qi = new Image();
+    qi.onload = function() {
+      var li = new Image();
+      li.onload = function() {
+        try {
+          var S = 400, c = document.createElement('canvas'); c.width = S; c.height = S;
+          var g = c.getContext('2d'); g.drawImage(qi, 0, 0, S, S);
+          var box = 92, lg = 76, x = (S - box) / 2;
+          g.fillStyle = '#fff'; g.beginPath();
+          if (g.roundRect) g.roundRect(x, x, box, box, 14); else g.rect(x, x, box, box);
+          g.fill();
+          var r = Math.min(lg / li.width, lg / li.height), w = li.width * r, h = li.height * r;
+          g.drawImage(li, (S - w) / 2, (S - h) / 2, w, h);
+          resolve(c.toDataURL('image/png'));
+        } catch (e) { resolve(plain); }
+      };
+      li.onerror = function() { resolve(plain); };
+      li.src = logoSrc;
+    };
+    qi.onerror = function() { resolve(plain); };
+    qi.src = plain;
+  });
+}
+async function qrtPrint() {
+  var picks = [];
+  document.querySelectorAll('.qrt-chk').forEach(function(c){ if (c.checked) picks.push(qrtState.rows[parseInt(c.dataset.i, 10)]); });
+  if (!picks.length) { toast('Kam se kam ek table chunein', '#FF6B35'); return; }
+  var w = window.open('', '_blank');
+  if (!w) { toast('Popup block hai — browser me popup allow karein', '#FF6B35'); return; }
+  w.document.write('<p style="font-family:Arial;padding:20px">QR cards ban rahe hain…</p>');
+  try {
+    await ensureQRLib();
+    var logo = qrtLogoSrc();
+    var rest = (qrtState.info && qrtState.info.name) || (qrtState.client && qrtState.client.name) || '';
+    var a4 = document.getElementById('qrt-layout').value === 'a4';
+    var cards = '';
+    for (var i = 0; i < picks.length; i++) {
+      var p = picks[i];
+      var img = await qrtMakeQR(qrtUrl(p.item, p.kind), logo);
+      cards += '<div class="card"><div class="rn">' + esc(rest) + '</div><div class="box"><img src="' + img + '"/>'
+        + '<div class="tn">' + esc(p.item.name) + '</div><div class="sc">SCAN FOR ORDER</div></div></div>';
+    }
+    var css = a4
+      ? '@page{size:A4;margin:8mm}body{margin:0;font-family:Arial,sans-serif;color:#1A2B3C}.sheet{display:grid;grid-template-columns:1fr 1fr;gap:4mm}'
+        + '.card{height:137mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;page-break-inside:avoid;border:0.3mm dashed #bbb}'
+        + '.rn{font-size:13pt;font-weight:800;margin-bottom:3mm}.box{border:2mm solid #1A2B3C;border-radius:5mm;padding:5mm 5mm 3mm}img{width:62mm;height:62mm;display:block;margin:0 auto}'
+        + '.tn{font-size:18pt;font-weight:800;margin-top:3mm}.sc{font-size:11pt;font-weight:800;letter-spacing:2px;color:#6D28D9;margin-top:1mm}'
+      : '@page{size:A5;margin:0}body{margin:0;font-family:Arial,sans-serif;color:#1A2B3C}.card{width:148mm;height:210mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12mm;page-break-after:always}'
+        + '.rn{font-size:20pt;font-weight:800;margin-bottom:6mm}.box{border:3mm solid #1A2B3C;border-radius:8mm;padding:8mm 8mm 6mm}img{width:80mm;height:80mm;display:block;margin:0 auto}'
+        + '.tn{font-size:26pt;font-weight:800;margin-top:6mm}.sc{font-size:15pt;font-weight:800;letter-spacing:3px;color:#6D28D9;margin-top:2mm}';
+    w.document.open();
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>QR Cards</title><style>' + css + '</style></head><body>'
+      + (a4 ? '<div class="sheet">' + cards + '</div>' : cards)
+      + '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script></body></html>');
+    w.document.close();
+  } catch (e) { w.document.body.innerHTML = '<p style="font-family:Arial;padding:20px">Error: ' + esc(e.message) + '</p>'; }
+}
 
 load();
 </script>
