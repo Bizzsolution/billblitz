@@ -110,11 +110,15 @@ body{font-family:'Poppins',sans-serif;background:#F5F7FB;color:#1A2B3C;padding-b
 .spin{width:36px;height:36px;border:3px solid rgba(255,209,102,.2);border-top-color:#FFD166;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 .powered{text-align:center;padding:16px;font-size:.65rem;color:#B8C2D6;}
+
+.lang-btn{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.14);color:#fff;border-radius:999px;padding:4px 10px;font-size:.72rem;font-weight:700;cursor:pointer;margin-right:8px;flex-shrink:0}
+.lang-abs{position:fixed;top:max(10px,env(safe-area-inset-top));right:12px;z-index:9999}
 </style>
 </head>
 <body>
 
 <div class="loading-screen" id="loading">
+  <div class="lang-abs"><button class="lang-btn" data-notr data-lang-cycle onclick="toggleLang()" title="Language / भाषा">🌐 हिं</button></div>
   <div class="spin"></div>
   <div style="font-size:.85rem;color:rgba(255,255,255,.6)">Menu load ho raha hai...</div>
 </div>
@@ -126,6 +130,7 @@ body{font-family:'Poppins',sans-serif;background:#F5F7FB;color:#1A2B3C;padding-b
       <div class="rest-name" id="rest-name">Restaurant</div>
       <div class="rest-sub" id="rest-sub">Digital Menu</div>
     </div>
+    <button class="lang-btn" data-notr data-lang-cycle onclick="toggleLang()" title="Language / भाषा">🌐 हिं</button>
     <div class="table-pill" id="table-pill">Table</div>
   </div>
   <div class="hdr-status"><div class="sdot"></div>Menu is live — order directly from here</div>
@@ -674,6 +679,195 @@ function startNewOrder() {
 // INIT
 // ══════════════════════════════════════════════════════════
 initFirebase();
+</script>
+<script>
+/* ===== BillBlitz i18n: English <-> हिन्दी (runtime translator) ===== */
+(function(){
+  var D = {"HI": {"Order Menu": "ऑर्डर मेन्यू", "Menu load ho raha hai...": "मेन्यू लोड हो रहा है...", "Digital Menu": "डिजिटल मेन्यू", "Menu is live — order directly from here": "मेन्यू चालू है — यहीं से सीधे ऑर्डर करें", "0 items": "0 आइटम", "View Cart →": "कार्ट देखें →", "Your Order": "आपका ऑर्डर", "Place Order": "ऑर्डर करें", "UPI Payment": "UPI भुगतान", "Pehle payment karein, tabhi order jayega": "पहले भुगतान करें, तभी ऑर्डर जाएगा", "Order Code:": "ऑर्डर कोड:", "Kaise pay karein:": "भुगतान कैसे करें:", "Dusre phone se": "दूसरे फ़ोन से", "ye QR scan karein, ya": "यह QR स्कैन करें, या", "2️⃣ Isi phone par: QR ka screenshot lein → UPI app me": "2️⃣ इसी फ़ोन पर: QR का स्क्रीनशॉट लें → UPI ऐप में", "Scan → Gallery se upload": "स्कैन → गैलरी से अपलोड करें", ", ya": ", या", "3️⃣ Neeche": "3️⃣ नीचे", "UPI ID copy": "UPI ID कॉपी", "karke app me daalein (amount exact daalein)": "करके ऐप में डालें (राशि बिल्कुल सही डालें)", "📋 UPI ID copy karein": "📋 UPI ID कॉपी करें", "UPI app seedha kholein (Paytm me block ho sakta hai)": "UPI ऐप सीधे खोलें (Paytm में ब्लॉक हो सकता है)", "Payment ke baad UPI app me \"UPI Ref / UTR\" 12 digit ka number milta hai": "भुगतान के बाद UPI ऐप में \"UPI Ref / UTR\" 12 अंकों का नंबर मिलता है", "✅ Payment ho gaya — Order bhejo": "✅ भुगतान हो गया — ऑर्डर भेजो", "Staff aapka payment check karega. Payment verify hone ke baad hi order kitchen tak jayega.": "स्टाफ़ आपका भुगतान जाँचेगा। भुगतान सत्यापित होने के बाद ही ऑर्डर किचन तक जाएगा।", "Order Sent!": "ऑर्डर भेज दिया गया!", "Aapka order restaurant ko bhej diya gaya hai. Staff jald hi confirm karega.": "आपका ऑर्डर रेस्टोरेंट को भेज दिया गया है। स्टाफ़ जल्द ही पुष्टि करेगा।", "Waiting for confirmation...": "पुष्टि का इंतज़ार...", "Place Another Order": "एक और ऑर्डर करें", "⚡ Powered by BillBlitz": "⚡ BillBlitz द्वारा संचालित", "Menu mein dhoondein...": "मेन्यू में खोजें...", "Special instructions (optional)": "विशेष निर्देश (वैकल्पिक)", "12-digit UTR / Ref No. (zaroori)": "12 अंकों का UTR / रेफ़ नंबर (ज़रूरी)", "Connection failed. Internet check karein.": "कनेक्शन विफल। इंटरनेट जाँचें।", "Invalid QR code — restaurant ID missing.": "अमान्य QR कोड — रेस्टोरेंट ID नहीं मिली।", "Connection error: {0}": "कनेक्शन त्रुटि: {0}", "Setup error: {0}": "सेटअप त्रुटि: {0}", "Room Service": "रूम सर्विस", "Digital Menu & Ordering": "डिजिटल मेन्यू और ऑर्डरिंग", "Menu abhi available nahi hai.": "मेन्यू अभी उपलब्ध नहीं है।", "Staff se poochein.": "स्टाफ़ से पूछें।", "Menu load nahi hua: {0}": "मेन्यू लोड नहीं हुआ: {0}", "\"{0}\" ke liye koi item nahi mila.": "\"{0}\" के लिए कोई आइटम नहीं मिला।", "No items in this category.": "इस श्रेणी में कोई आइटम नहीं है।", "+ Add": "+ जोड़ें", "Cart empty hai": "कार्ट खाली है", "Connection ho raha hai, thoda intezaar karein.": "कनेक्शन हो रहा है, थोड़ा इंतज़ार करें।", "Kuch items add karein!": "कुछ आइटम जोड़ें!", "Bhej raha hai...": "भेज रहा है...", "Order bhejne mein error: {0}": "ऑर्डर भेजने में त्रुटि: {0}", "Time khatam — dobara try karein": "समय समाप्त — दोबारा कोशिश करें", "UPI: {0}": "UPI: {0}", "QR nahi bana — upar \"UPI App me Pay karein\" dabayein.": "QR नहीं बना — ऊपर \"UPI ऐप में भुगतान करें\" दबाएँ।", "✅ Copy ho gaya": "✅ कॉपी हो गया", "UPI ID: {0}": "UPI ID: {0}", "Payment ka time khatam ho gaya. Window band karke dobara \"Place Order\" dabayein.": "भुगतान का समय समाप्त हो गया। विंडो बंद करके दोबारा \"ऑर्डर करें\" दबाएँ।", "Pehle payment karein, phir UPI app se 12-digit UTR / Ref number yahan daalein. Bina payment ke order nahi jayega.": "पहले भुगतान करें, फिर UPI ऐप से 12 अंकों का UTR / रेफ़ नंबर यहाँ डालें। भुगतान के बिना ऑर्डर नहीं जाएगा।", "Order accepted! Ban raha hai...": "ऑर्डर स्वीकार हुआ! बन रहा है...", "Order decline ho gaya. Staff se baat karein.": "ऑर्डर अस्वीकार हो गया। स्टाफ़ से बात करें।", "Payment mil gaya! Staff order confirm kar raha hai...": "भुगतान मिल गया! स्टाफ़ ऑर्डर की पुष्टि कर रहा है...", "Payment verify ho raha hai...": "भुगतान सत्यापित हो रहा है...", "Accepted — ban raha hai": "स्वीकार — बन रहा है", "Declined — staff se baat karein": "अस्वीकार — स्टाफ़ से बात करें", "Payment mil gaya ✅": "भुगतान मिल गया ✅", "Order #{1}{2} —": "ऑर्डर #{1}{2} —", "{0} room service ke liye": "{0} रूम सर्विस के लिए", "{0} ke liye": "{0} के लिए", "Aapka payment staff verify kar raha hai. Verify hote hi order kitchen ko jayega.": "आपका भुगतान स्टाफ़ सत्यापित कर रहा है। सत्यापित होते ही ऑर्डर किचन को जाएगा।", "Total": "कुल", "{0} items": "{0} आइटम", "{0} item": "{0} आइटम", "1 item": "1 आइटम", "Table": "टेबल", "Restaurant": "रेस्टोरेंट"}, "EN": {"Menu load ho raha hai...": "Loading menu...", "Pehle payment karein, tabhi order jayega": "Pay first, only then the order will go through", "Kaise pay karein:": "How to pay:", "Dusre phone se": "From another phone", "ye QR scan karein, ya": "scan this QR, or", "2️⃣ Isi phone par: QR ka screenshot lein → UPI app me": "2️⃣ On this same phone: take a screenshot of the QR → in the UPI app", "Scan → Gallery se upload": "Scan → upload from Gallery", ", ya": ", or", "3️⃣ Neeche": "3️⃣ Below", "UPI ID copy": "copy the UPI ID", "karke app me daalein (amount exact daalein)": "and enter it in the app (enter the exact amount)", "📋 UPI ID copy karein": "📋 Copy UPI ID", "UPI app seedha kholein (Paytm me block ho sakta hai)": "Open UPI app directly (may be blocked in Paytm)", "Payment ke baad UPI app me \"UPI Ref / UTR\" 12 digit ka number milta hai": "After payment, the UPI app gives a 12-digit \"UPI Ref / UTR\" number", "✅ Payment ho gaya — Order bhejo": "✅ Payment done — Send Order", "Staff aapka payment check karega. Payment verify hone ke baad hi order kitchen tak jayega.": "Staff will check your payment. The order will reach the kitchen only after the payment is verified.", "Aapka order restaurant ko bhej diya gaya hai. Staff jald hi confirm karega.": "Your order has been sent to the restaurant. Staff will confirm soon.", "Menu mein dhoondein...": "Search in menu...", "12-digit UTR / Ref No. (zaroori)": "12-digit UTR / Ref No. (required)", "Connection failed. Internet check karein.": "Connection failed. Check the internet.", "Menu abhi available nahi hai.": "Menu is not available right now.", "Staff se poochein.": "Ask the staff.", "Menu load nahi hua: {0}": "Menu did not load: {0}", "\"{0}\" ke liye koi item nahi mila.": "No item found for \"{0}\".", "Cart empty hai": "Cart is empty", "Connection ho raha hai, thoda intezaar karein.": "Connecting, please wait a moment.", "Kuch items add karein!": "Add some items!", "Bhej raha hai...": "Sending...", "Order bhejne mein error: {0}": "Error sending order: {0}", "Time khatam — dobara try karein": "Time over — try again", "QR nahi bana — upar \"UPI App me Pay karein\" dabayein.": "QR could not be created — press \"Pay in UPI App\" above.", "✅ Copy ho gaya": "✅ Copied", "Payment ka time khatam ho gaya. Window band karke dobara \"Place Order\" dabayein.": "Payment time is over. Close the window and press \"Place Order\" again.", "Pehle payment karein, phir UPI app se 12-digit UTR / Ref number yahan daalein. Bina payment ke order nahi jayega.": "First make the payment, then enter the 12-digit UTR / Ref number from the UPI app here. The order will not go through without payment.", "Order accepted! Ban raha hai...": "Order accepted! It is being prepared...", "Order decline ho gaya. Staff se baat karein.": "Order was declined. Talk to the staff.", "Payment mil gaya! Staff order confirm kar raha hai...": "Payment received! Staff is confirming the order...", "Payment verify ho raha hai...": "Payment is being verified...", "Accepted — ban raha hai": "Accepted — being prepared", "Declined — staff se baat karein": "Declined — talk to the staff", "Payment mil gaya ✅": "Payment received ✅", "{0} room service ke liye": "for {0} room service", "{0} ke liye": "for {0}", "Aapka payment staff verify kar raha hai. Verify hote hi order kitchen ko jayega.": "Staff is verifying your payment. As soon as it is verified the order will go to the kitchen."}};
+  var HI = D.HI, EN = D.EN;
+  var lang = 'en';
+  try { lang = localStorage.getItem('bb-lang-menu') === 'hi' ? 'hi' : 'en'; } catch(e){}
+  var SKIP = {SCRIPT:1, STYLE:1, TEXTAREA:1, NOSCRIPT:1, CODE:1, PRE:1};
+  var ATTRS = ['placeholder','title','aria-label','alt'];
+  function norm(s){ return s.replace(/\s+/g,' ').trim(); }
+  function esc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+  function compile(map){
+    var exact = Object.create(null), pats = [];
+    Object.keys(map).forEach(function(k){
+      if (/\{\d+\}/.test(k)) {
+        var parts = k.split(/(\{\d+\})/), labels = [], re = '^', lit = '';
+        parts.forEach(function(p){
+          if (/^\{\d+\}$/.test(p)) { labels.push(p); re += '(.*?)'; }
+          else { re += esc(p); if (p.length > lit.length) lit = p; }
+        });
+        try { pats.push({re:new RegExp(re+'$'), labels:labels, out:map[k], lit:lit.trim(), len:k.length}); } catch(e){}
+      } else exact[k] = map[k];
+    });
+    pats.sort(function(a,b){ return b.len - a.len; });
+    return {exact:exact, pats:pats};
+  }
+  var C = {hi: compile(HI), en: compile(EN)};
+  var cache = {hi:Object.create(null), en:Object.create(null)}, cacheN = 0;
+  var DAYS = {Mon:'सोम',Tue:'मंगल',Wed:'बुध',Thu:'गुरु',Fri:'शुक्र',Sat:'शनि',Sun:'रवि',Monday:'सोमवार',Tuesday:'मंगलवार',Wednesday:'बुधवार',Thursday:'गुरुवार',Friday:'शुक्रवार',Saturday:'शनिवार',Sunday:'रविवार'};
+  var MONS = {Jan:'जन',Feb:'फ़र',Mar:'मार्च',Apr:'अप्रैल',May:'मई',Jun:'जून',Jul:'जुल',Aug:'अग',Sep:'सित',Sept:'सित',Oct:'अक्टू',Nov:'नव',Dec:'दिस',January:'जनवरी',February:'फ़रवरी',March:'मार्च',April:'अप्रैल',June:'जून',July:'जुलाई',August:'अगस्त',September:'सितंबर',October:'अक्टूबर',November:'नवंबर',December:'दिसंबर'};
+  var DRE = /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:day|sday|nesday|rsday|urday)?\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(?:uary|ruary|ch|il|e|y|ust|tember|ober|ember)?\b/g;
+  function trDate(s){
+    if (lang !== 'hi' || !/\d/.test(s)) return null;
+    var hit = false;
+    var o = s.replace(DRE, function(w){ var r = DAYS[w] || MONS[w]; if (r) { hit = true; return r; } return w; });
+    return hit ? o : null;
+  }
+  function tr(raw, depth){
+    var r = tr0(raw, depth); if (r !== null) return r;
+    var s = norm(raw); if (!s || !/[A-Za-z]/.test(s)) return null;
+    var m = /^([^\p{L}\p{N}{]+)(.*?)([\s:!.…→▾▸]*)$/u.exec(s);
+    if (m && m[2] && (m[1] || m[3])) { var t = tr0(m[2], depth); if (t !== null) return m[1] + t + m[3]; }
+    m = /^(.*?[A-Za-z0-9\)\}])([:!.…]+)$/.exec(s);
+    if (m) { var t2 = tr0(m[1], depth); if (t2 !== null) return t2 + m[2]; }
+    if (/^[A-Z][A-Z &\/]{2,}$/.test(s)) { var c = s.charAt(0) + s.slice(1).toLowerCase(); var t3 = tr0(c, depth); if (t3 !== null) return t3; }
+    return trDate(s);
+  }
+  function tr0(raw, depth){
+    var s = norm(raw); if (!s) return null;
+    var L = lang, c = C[L];
+    if (c.exact[s] !== undefined) return c.exact[s];
+    if (!/[A-Za-z]/.test(s) && L === 'hi') return null;
+    var cc = cache[L]; if (!depth && cc[s] !== undefined) return cc[s];
+    var res = null;
+    for (var i = 0; i < c.pats.length; i++) {
+      var p = c.pats[i];
+      if (p.lit && s.indexOf(p.lit) < 0) continue;
+      var m = p.re.exec(s); if (!m) continue;
+      var out = p.out;
+      for (var j = 0; j < p.labels.length; j++) {
+        var cap = m[j+1] || '';
+        var t = (depth||0) < 2 && cap ? tr(cap, (depth||0)+1) : null;
+        out = out.split(p.labels[j]).join(t !== null ? t : cap);
+      }
+      res = out; break;
+    }
+    if (!depth) { if (cacheN > 6000) { cache = {hi:Object.create(null), en:Object.create(null)}; cacheN = 0; cc = cache[L]; } cc[s] = res; cacheN++; }
+    return res;
+  }
+  function trKeep(raw){ // preserve outer whitespace
+    var t = tr(raw); if (t === null) return null;
+    var lead = (raw.match(/^\s*/)||[''])[0], trail = (raw.match(/\s*$/)||[''])[0];
+    return lead + t + trail;
+  }
+  function skipEl(el){
+    for (var e = el; e && e.nodeType === 1; e = e.parentNode) {
+      if (SKIP[e.tagName]) return true;
+      if (e.hasAttribute && (e.hasAttribute('data-notr') || e.isContentEditable === true || /(^|\s)notranslate(\s|$)/.test(e.getAttribute('class')||''))) return true;
+    }
+    return false;
+  }
+  function procText(n){
+    var p = n.parentNode; if (!p || skipEl(p)) return;
+    var cur = n.data, src;
+    if (n.__o !== undefined && cur === n.__o) src = n.__s; else { n.__s = cur; src = cur; }
+    var out = trKeep(src); if (out === null) out = src;
+    if (out !== cur) n.data = out;
+    n.__o = out;
+  }
+  function procAttr(el, name){
+    if (!el.getAttribute || skipEl(el)) return;
+    var cur = el.getAttribute(name); if (cur == null) return;
+    var st = el.__a || (el.__a = {}), rec = st[name], src;
+    if (rec && rec.o === cur) src = rec.s; else src = cur;
+    var t = tr(src), out = t === null ? src : t;
+    if (out !== cur) el.setAttribute(name, out);
+    st[name] = {s:src, o:out};
+  }
+  function walk(root){
+    if (!root) return;
+    if (root.nodeType === 3) { procText(root); return; }
+    if (root.nodeType !== 1 && root.nodeType !== 9) return;
+    var el = root.nodeType === 9 ? root.documentElement : root;
+    if (el.nodeType === 1 && SKIP[el.tagName]) return;
+    var tw = document.createTreeWalker(el, 4, null), n, arr = [];
+    while ((n = tw.nextNode())) arr.push(n);
+    arr.forEach(procText);
+    var els = el.querySelectorAll ? el.querySelectorAll('[placeholder],[title],[aria-label],[alt]') : [];
+    for (var i = 0; i < els.length; i++) ATTRS.forEach(function(a){ if (els[i].hasAttribute(a)) procAttr(els[i], a); });
+    if (el.nodeType === 1) ATTRS.forEach(function(a){ if (el.hasAttribute(a)) procAttr(el, a); });
+  }
+  var mo = new MutationObserver(function(recs){
+    for (var i = 0; i < recs.length; i++) {
+      var r = recs[i];
+      if (r.type === 'characterData') procText(r.target);
+      else if (r.type === 'attributes') procAttr(r.target, r.attributeName);
+      else r.addedNodes.forEach(function(n){ walk(n); });
+    }
+  });
+  function startObs(){
+    mo.observe(document.documentElement, {childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:ATTRS});
+  }
+  /* ---- html strings (bills / print windows) ---- */
+  function trHtml(h){
+    if (typeof h !== 'string' || !/[A-Za-z]/.test(h)) return h;
+    return h.split(/(<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<[^>]*>)/i).map(function(p, i){
+      if (i % 2 === 1) {
+        if (p.charAt(0) !== '<' || /^<(style|script)/i.test(p)) return p;
+        return p.replace(/\b(placeholder|title|aria-label|alt)\s*=\s*("([^"]*)"|'([^']*)')/g, function(all, a, q, d, s){
+          var v = d !== undefined ? d : s, t = tr(v); if (t === null) return all;
+          return a + '="' + t.replace(/"/g,'&quot;') + '"';
+        });
+      }
+      if (!/[A-Za-z]/.test(p)) return p;
+      var core = p.replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&middot;/g,'·');
+      var t = trKeep(core); return t === null ? p : t.replace(/&(?!amp;|nbsp;|#)/g,'&amp;');
+    }).join('');
+  }
+  function trMsg(m){
+    if (m == null) return m;
+    var s = String(m), t = tr(s); if (t !== null) return t;
+    if (s.indexOf('\n') < 0) return s;
+    return s.split('\n').map(function(l){ var x = tr(l); return x === null ? l : x; }).join('\n');
+  }
+  ['alert','confirm','prompt'].forEach(function(fn){
+    var o = window[fn]; if (!o) return;
+    window[fn] = function(m, d){ return fn === 'prompt' ? o.call(window, trMsg(m), d) : o.call(window, trMsg(m)); };
+  });
+  var _open = window.open;
+  window.open = function(){
+    var w = _open.apply(window, arguments);
+    try {
+      if (w && w.document && !w.document.__bbw) {
+        var d = w.document, dw = d.write.bind(d);
+        d.__bbw = 1;
+        d.write = function(){ return dw.apply(null, [].slice.call(arguments).map(trHtml)); };
+      }
+    } catch(e){}
+    return w;
+  };
+  /* ---- public API ---- */
+  function syncUI(){
+    var other = lang === 'hi' ? 'EN' : 'हिं';
+    var b = document.querySelectorAll('[data-lang-cycle]');
+    for (var i = 0; i < b.length; i++) b[i].textContent = '🌐 ' + other;
+    var pills = document.querySelectorAll('[data-lang-btn]');
+    for (var j = 0; j < pills.length; j++) pills[j].classList.toggle('on', pills[j].getAttribute('data-lang-btn') === lang);
+  }
+  window.setLang = function(l){
+    l = l === 'hi' ? 'hi' : 'en';
+    lang = l;
+    try { localStorage.setItem('bb-lang-menu', l); } catch(e){}
+    document.documentElement.lang = l;
+    cache = {hi:Object.create(null), en:Object.create(null)}; cacheN = 0;
+    mo.disconnect(); walk(document); startObs();
+    syncUI();
+    try { window.dispatchEvent(new Event('bb-lang-menu')); } catch(e){}
+  };
+  window.toggleLang = function(){ window.setLang(lang === 'hi' ? 'en' : 'hi'); };
+  window.bbLang = function(){ return lang; };
+  window.bbTr = function(s){ var t = tr(String(s)); return t === null ? s : t; };
+  function init(){
+    document.documentElement.lang = lang;
+    walk(document); startObs(); syncUI();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+
 </script>
 </body>
 </html>
