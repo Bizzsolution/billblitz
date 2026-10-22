@@ -757,8 +757,6 @@ tr:nth-child(even) td{background:#FFFFFF;}
    Nothing may ever make the page wider than the screen: a too-wide header
    used to push the layout width past the phone's width, so the browser
    zoomed the whole app out and left a blank strip on the right. */
-html,body{max-width:100%;}
-html{overflow-x:clip;}
 img,video,canvas,svg{max-width:100%;}
 input,select,textarea{min-width:0;max-width:100%;}
 .smart-inp{min-width:0;width:100%;}
@@ -822,7 +820,6 @@ table{max-width:100%;}
     <button class="sb-item" id="sb-loyalty" onclick="setPage('loyalty')"><span class="sb-icon">⭐</span> Loyalty</button>
   </div>
   <div class="sb-footer">
-    <button data-notr data-lang-cycle style="width:100%;margin-bottom:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;font-size:0.78rem;font-weight:700;text-align:left;cursor:pointer" onclick="toggleLang()">🌐 हिं</button>
     <button id="sb-outlet-chip" style="display:none;width:100%;margin-bottom:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;font-size:0.78rem;font-weight:700;text-align:left;cursor:pointer" onclick="openOutletSwitcher()">🏬 <span id="sb-outlet-name"></span> ▾</button>
     <div class="sb-user">
       <div class="sb-avatar" id="sb-avatar">?</div>
@@ -994,7 +991,6 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     <div class="hdr-time" id="live-time"></div>
     <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
     <button class="hdr-btn" id="hdr-alerts-btn" style="background:rgba(255,255,255,0.12);color:#fff;position:relative;display:none" onclick="showOwnerAlertsModal()" title="Notifications">🔔<span id="hdr-alerts-count" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:0.55rem;font-weight:800;padding:1px 5px;border-radius:10px"></span></button>
-    <button class="hdr-btn" data-notr data-lang-cycle style="background:rgba(255,255,255,0.12);color:#fff" onclick="toggleLang()" title="Language / भाषा">🌐 हिं</button>
     <button class="hdr-btn" id="hdr-printer-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="showPrinterModal()" title="Bluetooth Printer">🖨️</button>
     <button class="hdr-btn" id="hdr-settings-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="setPage('settings')" title="Settings">⚙️</button>
     <button class="hdr-btn" style="background:rgba(255,255,255,0.12);color:#fff" onclick="logoutConfirm()">🔒</button>
