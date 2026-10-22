@@ -1173,14 +1173,14 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="page-title" style="margin:0">🪑 Table Management</div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="qr-badge-btn" onclick="showManageLocations('table')">✏️ Manage</button>
+        <button class="qr-badge-btn" data-feat="table_manage" onclick="showManageLocations('table')">✏️ Manage</button>
         <button class="qr-badge-btn" data-qr-nav onclick="showQROrdersModal()">📱 QR Orders<span class="qr-badge-count-target"></span></button>
       </div>
     </div>
     <div class="table-stats" id="table-stats"></div>
     <div class="table-section-tabs" id="table-section-tabs"></div>
     <div class="tables-grid" id="tables-grid"></div>
-    <button class="btn btn-outline btn-full" onclick="showAddTableModal()" style="margin-top:4px">➕ Add New Table</button>
+    <button class="btn btn-outline btn-full" data-feat="table_manage" onclick="showAddTableModal()" style="margin-top:4px">➕ Add New Table</button>
   </div>
 
   <!-- ROOMS PAGE (Hotel Room Service) -->
@@ -1188,13 +1188,13 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="page-title" style="margin:0">🛏️ Room Service</div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="qr-badge-btn" onclick="showManageLocations('room')">✏️ Manage</button>
+        <button class="qr-badge-btn" data-feat="table_manage" onclick="showManageLocations('room')">✏️ Manage</button>
         <button class="qr-badge-btn" data-qr-nav onclick="showQROrdersModal()">📱 QR Orders<span class="qr-badge-count-target"></span></button>
       </div>
     </div>
     <div class="table-stats" id="room-stats"></div>
     <div class="tables-grid" id="rooms-grid"></div>
-    <button class="btn btn-outline btn-full" onclick="showAddRoomModal()" style="margin-top:4px">➕ Add New Room</button>
+    <button class="btn btn-outline btn-full" data-feat="table_manage" onclick="showAddRoomModal()" style="margin-top:4px">➕ Add New Room</button>
   </div>
 
   <!-- KITCHEN DISPLAY PAGE -->
@@ -3313,7 +3313,7 @@ function hasFeature(f) {
   }
   // Paid add-ons: only for clients the admin has explicitly switched ON
   // (the "default to allowed" rule below is for core tabs, not add-ons).
-  if(['qr_payment','gst_reports','qr_logo','inventory_auto'].indexOf(f) !== -1) return clientFeatures[f] === true;
+  if(['qr_payment','gst_reports','qr_logo','inventory_auto','table_manage'].indexOf(f) !== -1) return clientFeatures[f] === true;
   if(Object.keys(clientFeatures).length === 0) return true;
   // If this specific feature key was never explicitly configured by admin
   // (e.g. a newer feature added after this client's last Feature save, or
@@ -10295,6 +10295,7 @@ function clearTable(tableId) {
 }
 
 function showAddTableModal() {
+  if (!hasFeature('table_manage')) { toast('Table/Room Manage feature aapke plan mein nahi hai. Admin se contact karein.', '#FF6B35'); return; }
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'+
     '<div class="modal-title">➕ New Table</div>'+
@@ -10310,6 +10311,7 @@ function showAddTableModal() {
 }
 
 function saveNewTable() {
+  if (!hasFeature('table_manage')) { toast('Table/Room Manage feature aapke plan mein nahi hai. Admin se contact karein.', '#FF6B35'); return; }
   const name = document.getElementById('new-table-name')?.value.trim();
   if(!name) { toast('Table name daalo!','#FF6B35'); return; }
   if(!db.tables) db.tables=[];
@@ -10362,6 +10364,7 @@ function editTableModal(tableId) {
 // popup that opens when a table/room is tapped — so a busy tap during
 // service can't lead to an accidental edit or delete.
 function showManageLocations(kind) {
+  if (!hasFeature('table_manage')) { toast('Table/Room Manage feature aapke plan mein nahi hai. Admin se contact karein.', '#FF6B35'); return; }
   var isRoom = kind === 'room';
   if (isRoom && !checkFeatureAccess('room_service')) return;
   var list = isRoom ? (db.rooms || []) : (db.tables || []);
@@ -10393,6 +10396,7 @@ function showManageLocations(kind) {
 // running order or bill data can be lost. Past bills keep their own copy of
 // the table/room name, so reports are unaffected.
 function deleteLocation(kind, id) {
+  if (!hasFeature('table_manage')) { toast('Table/Room Manage feature aapke plan mein nahi hai. Admin se contact karein.', '#FF6B35'); return; }
   var isRoom = kind === 'room';
   var label = isRoom ? 'Room' : 'Table';
   if (currentRole !== 'owner') { toast('🔒 Sirf Owner ' + label + ' delete kar sakta hai.', '#FF6B35'); return; }
@@ -10423,6 +10427,7 @@ function deleteLocation(kind, id) {
 }
 
 function saveEditTable(tableId) {
+  if (!hasFeature('table_manage')) { toast('Table/Room Manage feature aapke plan mein nahi hai. Admin se contact karein.', '#FF6B35'); return; }
   var t = (db.tables || []).find(function(x){ return x.id === tableId; });
   if (!t) return;
   var name = document.getElementById('edit-table-name').value.trim();
@@ -10604,6 +10609,7 @@ function clearRoom(roomId) {
 }
 
 function showAddRoomModal() {
+  if (!hasFeature('table_manage')) { toast('Table/Room Manage feature aapke plan mein nahi hai. Admin se contact karein.', '#FF6B35'); return; }
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'+
     '<div class="modal-title">➕ New Room</div>'+
@@ -10619,6 +10625,7 @@ function showAddRoomModal() {
 }
 
 function saveNewRoom() {
+  if (!hasFeature('table_manage')) { toast('Table/Room Manage feature aapke plan mein nahi hai. Admin se contact karein.', '#FF6B35'); return; }
   const name = document.getElementById('new-room-name')?.value.trim();
   if(!name) { toast('Room number/naam daalo!','#FF6B35'); return; }
   if(!db.rooms) db.rooms=[];
