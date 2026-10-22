@@ -450,6 +450,13 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
             <button class="btn btn-sm btn-outline" onclick="document.getElementById('qrt-logo-file').click()">📤 Logo upload</button>
             <button class="btn btn-sm btn-red" onclick="qrtLogoRemove()">Hatao</button>
           </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:12px;padding-top:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <img id="qrt-qrlogo-prev" alt="" style="width:92px;height:92px;border-radius:8px;background:#fff;display:none"/>
+            <div style="flex:1;min-width:180px">
+              <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.86rem;cursor:pointer"><input type="checkbox" id="qrt-qrlogo" onchange="qrtQrLogoToggle(this.checked)"/> 🔳 Printed table QR ke beech me logo lagao</label>
+              <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:4px;line-height:1.5" id="qrt-qrlogo-note"></div>
+            </div>
+          </div>
         </div></div>
         <div class="card" style="margin-bottom:14px"><div class="card-body">
           <div style="font-weight:700;margin-bottom:8px">➕ Naye tables add karein</div>
@@ -3319,6 +3326,7 @@ async function qrtDelete(indices) {
 function qrtRenderLogo() {
   var prev = document.getElementById('qrt-logo-prev'), st = document.getElementById('qrt-logo-status');
   if (!prev || !st) return;
+  setTimeout(qrtQrLogoRender, 0);
   var lg = (qrtState.cloudInfo && qrtState.cloudInfo.logo) || '';
   if (lg && /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+\/=]+$/i.test(lg)) {
     prev.innerHTML = '<img src="' + lg + '" style="width:100%;height:100%;object-fit:cover"/>';
@@ -3327,6 +3335,36 @@ function qrtRenderLogo() {
     prev.textContent = '🍽️';
     st.textContent = '⚠️ Cloud me logo nahi hai. Yahan upload karein, ya client app ke Settings me logo daal kar save karwayein.';
   }
+}
+// ── Logo in the CENTRE of the printed table QR (per-client 'qr_logo' feature) ──
+async function qrtQrLogoToggle(on) {
+  var c = qrtState.client; if (!c || !c.key) return;
+  var cb = document.getElementById('qrt-qrlogo');
+  try {
+    var feats = Object.assign({}, c.features || {}); feats.qr_logo = !!on;
+    var lic = String(c.key).toUpperCase();
+    await db_admin.collection('licenses').doc(lic).set({ features: { qr_logo: !!on } }, { merge: true });
+    await db_admin.collection('admin_clients').doc(c.id).set({ features: { qr_logo: !!on } }, { merge: true });
+    c.features = feats; save();
+    logActivity('QR logo ' + (on ? 'ON' : 'OFF') + ': ' + c.name);
+    toast(on ? '✅ QR ke beech me logo ON' : 'QR ke beech ka logo OFF', on ? '#00C896' : '#FFD700');
+  } catch (e) { if (cb) cb.checked = !on; toast('Save nahi hua: ' + e.message, '#FF6B35'); return; }
+  qrtQrLogoRender();
+}
+async function qrtQrLogoRender() {
+  var cb = document.getElementById('qrt-qrlogo'), note = document.getElementById('qrt-qrlogo-note'), im = document.getElementById('qrt-qrlogo-prev');
+  if (!cb || !note || !qrtState.client) return;
+  var on = !!(qrtState.client.features && qrtState.client.features.qr_logo === true);
+  var hasLogo = !!((qrtState.info && qrtState.info.logo) || (qrtState.cloudInfo && qrtState.cloudInfo.logo));
+  cb.checked = on;
+  if (!hasLogo) { note.textContent = '⚠️ Pehle upar logo upload karein — phir ye option kaam karega.'; im.style.display = 'none'; return; }
+  note.textContent = on ? 'ON — print/download hone wale har table QR ke beech me logo aayega (preview side me).' : 'OFF — QR plain rahega. Tick karte hi save ho jaata hai.';
+  try {
+    await ensureQRLib();
+    var url = qrtState.rid ? qrtUrl({ id: 'sample', name: 'Sample' }, 'table') : 'https://example.com';
+    im.src = await qrtMakeQR(url, on ? qrtLogoSrc() : '');
+    im.style.display = 'block';
+  } catch (e) { im.style.display = 'none'; }
 }
 function qrtLogoPick(ev) {
   var f = ev.target.files && ev.target.files[0];

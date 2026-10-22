@@ -1079,7 +1079,9 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="page-title" style="margin:0">📦 Inventory</div>
-      <div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" id="inv-report-btn" style="display:none" onclick="showStockReport('today')">📊 Consumption</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn btn-outline btn-sm" id="inv-report-btn" style="display:none" onclick="showStockReport('today')">📊 Consumption</button>
+      <button class="btn btn-outline btn-sm" onclick="openInvReports()">⬇️ Reports</button>
+      <button class="btn btn-outline btn-sm" onclick="openStockTransfer()">⇄ Transfer</button>
       <button class="btn btn-primary btn-sm" onclick="openInventoryModal()">+ Add Item</button></div>
     </div>
     <input class="search-inp" id="inv-search" placeholder="🔍 Search inventory…" oninput="renderInventoryPage()"/>
@@ -6806,9 +6808,11 @@ function renderInventoryPage(){
         <div class="list-title">${esc(i.name)}</div>
         <div class="stock-bar-wrap"><div class="stock-bar" style="width:${pct}%;background:${col}"></div></div>
         <div class="list-sub">${i.qty} ${esc(i.unit)} · Min: ${i.minQty} · Cost: ${fmt(i.costPrice)}/${esc(i.unit)}</div>
+        ${locBreakdownHtml(i)}
       </div>
       <div style="display:flex;gap:4px">
         <button class="btn btn-sm btn-green" onclick="openStockUpdate('${i.id}')">+Stock</button>
+        <button class="btn btn-sm btn-outline" title="Transfer" onclick="openStockTransfer('${i.id}')">⇄</button>
         <button class="btn btn-sm btn-outline" onclick="openInventoryModal('${i.id}')">✏️</button>
         <button class="btn btn-sm btn-red" onclick="deleteInventory('${i.id}')">🗑️</button>
       </div>
@@ -6840,7 +6844,7 @@ function saveInventory(id){
   const qty=parseFloat(document.getElementById('inv-qty').value);
   if(!name||isNaN(qty)){ toast('Name and quantity required','#FF6B35'); return; }
   const data={name,qty,unit:document.getElementById('inv-unit').value.trim()||'unit',minQty:parseFloat(document.getElementById('inv-min').value)||0,costPrice:parseFloat(document.getElementById('inv-cost').value)||0};
-  if(id){ Object.assign(db.inventory.find(x=>x.id===id),data); toast('Updated!'); }
+  if(id){ const _it=db.inventory.find(x=>x.id===id); Object.assign(_it,data); clampLocs(_it); toast('Updated!'); }
   else{ db.inventory.push({id:uid(),...data}); toast('Item added!'); }
   save(); cloudSave('meta','inventory',{items:db.inventory}); closeModal(); renderInventoryPage();
 }
@@ -6877,7 +6881,8 @@ function reduceStock(id){
   const item=db.inventory.find(x=>x.id===id); if(!item) return;
   const reason=(document.getElementById('stock-reason')||{}).value||'';
   item.qty=Math.round((item.qty-sub)*1000)/1000;
-  item.wastage=(item.wastage||[]).concat([{date:new Date().toISOString(),qty:sub,reason:reason.trim().slice(0,80)}]).slice(-50);
+  item.wastage=(item.wastage||[]).concat([{date:new Date().toISOString(),qty:sub,reason:reason.trim().slice(0,80)}]).slice(-100);
+  clampLocs(item);
   save(); cloudSave('meta','inventory',{items:db.inventory}); closeModal(); renderInventoryPage(); renderDashboard();
   toast(`${item.name}: ${sub} ${item.unit} kam kiya. Ab ${item.qty} ${item.unit}.`,'#FF6B35');
 }
@@ -6938,6 +6943,7 @@ function deductStockForItems(items) {
     var inv = findInv(id); if (!inv) return;
     var q = r3(agg[id]);
     inv.qty = r3((Number(inv.qty) || 0) - q);
+    consumeFromLocs(inv, q);
     used.push({ invId: id, name: inv.name, unit: inv.unit || '', qty: q, cost: Math.round(q * (Number(inv.costPrice) || 0) * 100) / 100 });
     if (inv.qty <= (Number(inv.minQty) || 0)) low.push(inv.name + ' (' + inv.qty + ' ' + (inv.unit || '') + ')');
   });
@@ -6960,6 +6966,216 @@ function restoreStockForReturns(o, returns) {
     back.push(q + ' ' + (inv.unit || '') + ' ' + inv.name);
   });
   if (back.length) { save(); cloudSave('meta', 'inventory', { items: db.inventory }); toast('📦 Stock wapas jod diya: ' + back.join(', '), '#00A878'); }
+}
+
+
+// ╔══════════════════════════════════════════════════════╗
+// ║   STOCK LOCATIONS / TRANSFER  +  INVENTORY REPORTS   ║
+// ╚══════════════════════════════════════════════════════╝
+// item.qty is always the TOTAL. item.loc = {Kitchen: n, Bar: n} holds what has
+// been moved out of the main "Store"; Store = qty − sum(loc). So adding stock,
+// wastage and sales keep working exactly as before and a transfer never
+// changes the total.
+var STOCK_LOCS = ['Store', 'Kitchen', 'Bar'];
+var SALE_LOC_ORDER = ['Kitchen', 'Bar'];
+function locSum(it) { var s = 0, l = it.loc || {}; Object.keys(l).forEach(function(k){ s += Number(l[k]) || 0; }); return s; }
+function locMap(it) {
+  var m = { Store: r3((Number(it.qty) || 0) - locSum(it)) }, l = it.loc || {};
+  Object.keys(l).forEach(function(k){ if (Number(l[k])) m[k] = r3(l[k]); });
+  return m;
+}
+function allLocNames() {
+  var set = STOCK_LOCS.slice();
+  (db.inventory || []).forEach(function(it){ Object.keys(it.loc || {}).forEach(function(k){ if (set.indexOf(k) < 0) set.push(k); }); });
+  return set;
+}
+function clampLocs(it) {
+  if (!it.loc) return;
+  var total = Math.max(0, Number(it.qty) || 0), keys = Object.keys(it.loc);
+  keys.forEach(function(k){ if (!(Number(it.loc[k]) > 0)) delete it.loc[k]; });
+  var over = locSum(it) - total;
+  if (over > 0) {
+    keys.slice().sort(function(a, b){ return SALE_LOC_ORDER.indexOf(a) - SALE_LOC_ORDER.indexOf(b); }).forEach(function(k) {
+      if (over <= 0 || it.loc[k] == null) return;
+      var cut = Math.min(over, it.loc[k]); it.loc[k] = r3(it.loc[k] - cut); over = r3(over - cut);
+      if (!(it.loc[k] > 0)) delete it.loc[k];
+    });
+  }
+  if (!Object.keys(it.loc).length) delete it.loc;
+}
+// a sale used q of this item: take it from Kitchen, then Bar, before touching Store
+function consumeFromLocs(it, q) {
+  if (!it.loc) return;
+  var left = q;
+  SALE_LOC_ORDER.concat(Object.keys(it.loc).filter(function(k){ return SALE_LOC_ORDER.indexOf(k) < 0; })).forEach(function(k) {
+    if (left <= 0 || !(it.loc && it.loc[k] > 0)) return;
+    var cut = Math.min(left, it.loc[k]); it.loc[k] = r3(it.loc[k] - cut); left = r3(left - cut);
+  });
+  clampLocs(it);
+}
+function locBreakdownHtml(it) {
+  var m = locMap(it), keys = Object.keys(m);
+  if (keys.length < 2) return '';
+  return '<div class="list-sub" style="margin-top:2px">' + keys.map(function(k){ return '<span class="badge badge-blue" style="margin-right:4px">' + esc(k) + ': ' + m[k] + '</span>'; }).join('') + '</div>';
+}
+var _xfer = { id: '' };
+function openStockTransfer(id) {
+  if (!(db.inventory || []).length) { toast('Pehle inventory me items add karein', '#FF6B35'); return; }
+  _xfer.id = id || db.inventory[0].id;
+  renderStockTransfer();
+}
+function renderStockTransfer() {
+  var it = findInv(_xfer.id) || db.inventory[0], locs = allLocNames(), m = locMap(it);
+  var opt = function(sel, skip) { return locs.map(function(l){ return '<option value="' + esc(l) + '"' + (l === sel ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join(''); };
+  var recent = [];
+  db.inventory.forEach(function(x){ (x.transfers || []).forEach(function(t){ recent.push(Object.assign({ name: x.name, unit: x.unit }, t)); }); });
+  recent.sort(function(a, b){ return String(b.date).localeCompare(String(a.date)); });
+  var h = '<div class="modal-handle"></div><div class="modal-title">⇄ Stock Transfer</div>'
+    + '<div class="form-group"><label class="form-label">Item</label><select class="form-select" id="xf-item" onchange="_xfer.id=this.value;renderStockTransfer()">'
+    + db.inventory.map(function(x){ return '<option value="' + esc(x.id) + '"' + (x.id === it.id ? ' selected' : '') + '>' + esc(x.name) + ' (' + esc(x.unit) + ')</option>'; }).join('') + '</select></div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' + Object.keys(m).map(function(k){ return '<span class="badge badge-blue">' + esc(k) + ': ' + m[k] + ' ' + esc(it.unit) + '</span>'; }).join('') + '<span class="badge" style="background:#F1F5F9;color:#334155">Total: ' + it.qty + ' ' + esc(it.unit) + '</span></div>'
+    + '<div style="display:flex;gap:8px"><div class="form-group" style="flex:1"><label class="form-label">Kahan se</label><select class="form-select" id="xf-from">' + opt('Store') + '</select></div>'
+    + '<div class="form-group" style="flex:1"><label class="form-label">Kahan ko</label><select class="form-select" id="xf-to">' + opt('Kitchen') + '</select></div></div>'
+    + '<div class="form-group"><label class="form-label">Nayi jagah (optional, jaise "Godown")</label><input class="form-inp" id="xf-new" placeholder="Khali chhodein agar upar se chunni hai"/></div>'
+    + '<div class="form-group"><label class="form-label">Quantity (' + esc(it.unit) + ')</label><input class="form-inp" id="xf-qty" type="number" step="any" min="0" placeholder="0"/></div>'
+    + '<div class="btn-row"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="doStockTransfer()">Transfer karein</button></div>';
+  if (recent.length) {
+    h += '<div style="font-weight:800;font-size:0.8rem;margin:14px 0 4px">Recent transfers</div>' + recent.slice(0, 6).map(function(t) {
+      return '<div style="font-size:0.74rem;color:#475569;padding:3px 0;border-bottom:1px solid #F1F5F9">' + new Date(t.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' · ' + esc(t.name) + ' · ' + t.qty + ' ' + esc(t.unit) + ' · ' + esc(t.from) + ' → ' + esc(t.to) + '</div>';
+    }).join('');
+  }
+  document.getElementById('modal-body').innerHTML = h;
+  openModal();
+}
+function doStockTransfer() {
+  var it = findInv(document.getElementById('xf-item').value); if (!it) return;
+  var from = document.getElementById('xf-from').value;
+  var nw = (document.getElementById('xf-new').value || '').trim().slice(0, 24);
+  var to = nw || document.getElementById('xf-to').value;
+  var q = r3(parseFloat(document.getElementById('xf-qty').value));
+  if (!(q > 0)) { toast('Sahi quantity daalein', '#FF6B35'); return; }
+  if (from === to) { toast('Kahan se aur kahan ko alag hone chahiye', '#FF6B35'); return; }
+  var m = locMap(it);
+  if ((m[from] || 0) < q) { toast(from + ' me sirf ' + (m[from] || 0) + ' ' + it.unit + ' hai', '#FF6B35'); return; }
+  it.loc = it.loc || {};
+  if (from !== 'Store') it.loc[from] = r3((it.loc[from] || 0) - q);
+  if (to !== 'Store') it.loc[to] = r3((it.loc[to] || 0) + q);
+  clampLocs(it);
+  it.transfers = (it.transfers || []).concat([{ date: new Date().toISOString(), from: from, to: to, qty: q }]).slice(-100);
+  save(); cloudSave('meta', 'inventory', { items: db.inventory });
+  closeModal(); renderInventoryPage();
+  toast('⇄ ' + q + ' ' + it.unit + ' ' + it.name + ': ' + from + ' → ' + to, '#00A878');
+}
+
+// ── Consumption data (shared by the on-screen report and Excel export) ──
+function rangeStart(range) {
+  var now = new Date(), start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === '7') start = new Date(start.getTime() - 6 * 86400000);
+  else if (range === '30') start = new Date(start.getTime() - 29 * 86400000);
+  else if (range === 'month') start = new Date(now.getFullYear(), now.getMonth(), 1);
+  else if (range === 'all') start = new Date(0);
+  return start;
+}
+function rangeLabel(range) { return { today: 'Aaj', '7': 'Last 7 din', '30': 'Last 30 din', month: 'Is mahine', all: 'Sab' }[range] || range; }
+function stockConsumptionData(range) {
+  var start = rangeStart(range), use = {}, unlinked = {};
+  (db.orders || []).forEach(function(o) {
+    if (new Date(o.date) < start) return;
+    (o.stockUsed || []).forEach(function(u) {
+      var a = use[u.invId] || (use[u.invId] = { name: u.name, unit: u.unit, qty: 0, cost: 0 });
+      a.qty += u.qty; a.cost += u.cost || 0;
+    });
+    (o.stockRestored || []).forEach(function(rs) {
+      var a = use[rs.invId]; if (!a) return;
+      var unitCost = a.qty > 0 ? a.cost / a.qty : 0;
+      a.qty -= rs.qty; a.cost -= rs.qty * unitCost;
+    });
+    (o.items || []).forEach(function(it) {
+      if (!it.menuId || getRecipeFor(it.menuId)) return;
+      unlinked[it.name] = (unlinked[it.name] || 0) + (Number(it.qty) || 0);
+    });
+  });
+  var rows = Object.keys(use).map(function(k){ var inv = findInv(k); return Object.assign({ id: k, left: inv ? inv.qty : null }, use[k]); })
+    .sort(function(a, b){ return b.cost - a.cost; });
+  return { start: start, rows: rows, unlinked: unlinked, total: rows.reduce(function(s, r){ return s + r.cost; }, 0) };
+}
+
+// ── Inventory reports: download as Excel ──
+var _rptRange = 'today';
+function openInvReports(range) {
+  if (range) _rptRange = range;
+  var chip = function(k) { return '<button type="button" onclick="openInvReports(\'' + k + '\')" style="padding:6px 12px;border-radius:16px;border:1.5px solid ' + (_rptRange === k ? '#7C3AED' : '#E2E8F5') + ';background:' + (_rptRange === k ? '#EDE9FE' : '#fff') + ';font-size:0.74rem;font-weight:700;cursor:pointer;color:#1A2B3C">' + rangeLabel(k) + '</button>'; };
+  var btn = function(kind, icon, t, sub) { return '<button type="button" class="btn btn-outline btn-full" style="text-align:left;margin-bottom:8px;display:block" onclick="exportInventoryReport(\'' + kind + '\')"><b>' + icon + ' ' + t + '</b><div style="font-size:0.7rem;font-weight:400;color:#6B7A99">' + sub + '</div></button>'; };
+  var auto = autoStockOn();
+  document.getElementById('modal-body').innerHTML = '<div class="modal-handle"></div><div class="modal-title">⬇️ Inventory Reports (Excel)</div>'
+    + '<div style="font-size:0.74rem;color:#6B7A99;margin-bottom:6px">Period (consumption / wastage / transfer ke liye):</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">' + ['today', '7', '30', 'month', 'all'].map(chip).join('') + '</div>'
+    + btn('stock', '📦', 'Stock Report', 'Abhi ka stock, location-wise, min level, stock value, low-stock status')
+    + (auto ? btn('consumption', '📊', 'Consumption Report', 'Kis item ki kitni khapat, cost, bacha hua stock + dish food-cost') : '')
+    + btn('wastage', '🗑️', 'Wastage Report', 'Kharab / gira hua maal — date, qty, reason, cost')
+    + btn('transfers', '⇄', 'Stock Transfer Report', 'Store / Kitchen / Bar ke beech transfers')
+    + btn('all', '📁', 'Sab ek file me', 'Upar ke saare reports alag-alag sheet me')
+    + '<button class="btn btn-outline btn-full" onclick="closeModal()">Close</button>';
+  openModal();
+}
+function invReportSheets(kind) {
+  var sheets = [], range = _rptRange, start = rangeStart(range), inv = db.inventory || [];
+  var want = function(k) { return kind === 'all' || kind === k; };
+  if (want('stock')) {
+    var locs = allLocNames();
+    var rows = inv.map(function(i) {
+      var m = locMap(i), val = (Number(i.qty) || 0) * (Number(i.costPrice) || 0);
+      return [i.name, i.unit || '', i.qty].concat(locs.map(function(l){ return m[l] || 0; })).concat([i.minQty || 0, i.costPrice || 0, Math.round(val * 100) / 100, i.qty <= (i.minQty || 0) ? 'LOW' : 'OK']);
+    });
+    var tv = inv.reduce(function(s, i){ return s + Math.max(0, i.qty) * (Number(i.costPrice) || 0); }, 0);
+    rows.push([]); rows.push(['TOTAL STOCK VALUE'].concat(new Array(locs.length + 4).fill('')).concat([Math.round(tv * 100) / 100]));
+    sheets.push({ name: 'Stock', head: ['Item', 'Unit', 'Total Qty'].concat(locs).concat(['Min Qty', 'Cost/Unit', 'Stock Value', 'Status']), rows: rows });
+  }
+  if (want('consumption') && autoStockOn()) {
+    var D = stockConsumptionData(range);
+    var cr = D.rows.map(function(r){ return [r.name, r.unit, r3(r.qty), Math.round(r.cost * 100) / 100, r.left === null ? '' : r.left]; });
+    cr.push([]); cr.push(['TOTAL', '', '', Math.round(D.total * 100) / 100, '']);
+    sheets.push({ name: 'Consumption', head: ['Item', 'Unit', 'Used (' + rangeLabel(range) + ')', 'Cost', 'Balance'], rows: cr });
+    var fc = (db.menu || []).map(function(m) {
+      var r = getRecipeFor(m.id); if (!r || r.mode !== 'recipe') return null;
+      var c = 0; (r.ingredients || []).forEach(function(i){ var iv = findInv(i.invId); if (iv) c += i.qty * (Number(iv.costPrice) || 0); });
+      var p = Number(m.price) || 0;
+      return [m.name, p, Math.round(c * 100) / 100, Math.round((p - c) * 100) / 100, p > 0 ? Math.round(c / p * 100) : ''];
+    }).filter(Boolean);
+    if (fc.length) sheets.push({ name: 'Dish Food Cost', head: ['Dish', 'Price', 'Recipe Cost', 'Margin', 'Cost %'], rows: fc });
+    var ul = Object.keys(D.unlinked).map(function(n){ return [n, D.unlinked[n]]; });
+    if (ul.length) sheets.push({ name: 'Not Linked', head: ['Menu item (stock link nahi)', 'Qty sold'], rows: ul });
+  }
+  if (want('wastage')) {
+    var wr = [];
+    inv.forEach(function(i){ (i.wastage || []).forEach(function(w) { if (new Date(w.date) >= start) wr.push([new Date(w.date).toLocaleString('en-IN'), i.name, w.qty, i.unit || '', w.reason || '', Math.round((w.qty * (Number(i.costPrice) || 0)) * 100) / 100, w.date]); }); });
+    wr.sort(function(a, b){ return String(b[6]).localeCompare(String(a[6])); });
+    sheets.push({ name: 'Wastage', head: ['Date', 'Item', 'Qty', 'Unit', 'Reason', 'Cost'], rows: wr.map(function(r){ return r.slice(0, 6); }) });
+  }
+  if (want('transfers')) {
+    var tr = [];
+    inv.forEach(function(i){ (i.transfers || []).forEach(function(t) { if (new Date(t.date) >= start) tr.push([new Date(t.date).toLocaleString('en-IN'), i.name, t.qty, i.unit || '', t.from, t.to, t.date]); }); });
+    tr.sort(function(a, b){ return String(b[6]).localeCompare(String(a[6])); });
+    sheets.push({ name: 'Transfers', head: ['Date', 'Item', 'Qty', 'Unit', 'From', 'To'], rows: tr.map(function(r){ return r.slice(0, 6); }) });
+  }
+  return sheets;
+}
+function exportInventoryReport(kind) {
+  var sheets = invReportSheets(kind);
+  if (!sheets.length) { toast('Is report ke liye data nahi hai', '#FF6B35'); return; }
+  ensureXLSXLib(function() {
+    try {
+      var wb = XLSX.utils.book_new();
+      sheets.forEach(function(sh) {
+        var ws = XLSX.utils.aoa_to_sheet([sh.head].concat(sh.rows.length ? sh.rows : [['(is period me koi entry nahi)']]));
+        ws['!cols'] = sh.head.map(function(h, i){ return { wch: i === 0 || i === 1 ? 26 : 14 }; });
+        XLSX.utils.book_append_sheet(wb, ws, sh.name.slice(0, 31));
+      });
+      var nm = { stock: 'Stock_Report', consumption: 'Consumption_Report', wastage: 'Wastage_Report', transfers: 'Transfer_Report', all: 'Inventory_Reports' }[kind] || 'Inventory_Report';
+      XLSX.writeFile(wb, nm + '_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+      toast('✅ Excel download ho gayi', '#00A878');
+    } catch (e) { toast('Excel error: ' + e.message, '#FF6B35'); }
+  });
 }
 
 // ── menu-item editor: the "Stock link" block ──
@@ -7066,31 +7282,7 @@ function saveRecipeFor(menuId, entry) {
 // ── Consumption report ──
 function showStockReport(range) {
   range = range || 'today';
-  var now = new Date(), start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (range === '7') start = new Date(start.getTime() - 6 * 86400000);
-  else if (range === '30') start = new Date(start.getTime() - 29 * 86400000);
-  else if (range === 'month') start = new Date(now.getFullYear(), now.getMonth(), 1);
-  var use = {}, unlinked = {}, nOrders = 0;
-  (db.orders || []).forEach(function(o) {
-    if (new Date(o.date) < start) return;
-    nOrders++;
-    (o.stockUsed || []).forEach(function(u) {
-      var a = use[u.invId] || (use[u.invId] = { name: u.name, unit: u.unit, qty: 0, cost: 0 });
-      a.qty += u.qty; a.cost += u.cost || 0;
-    });
-    (o.stockRestored || []).forEach(function(rs) {
-      var a = use[rs.invId]; if (!a) return;
-      var unitCost = a.qty > 0 ? a.cost / a.qty : 0;
-      a.qty -= rs.qty; a.cost -= rs.qty * unitCost;
-    });
-    (o.items || []).forEach(function(it) {
-      if (!it.menuId || getRecipeFor(it.menuId)) return;
-      unlinked[it.name] = (unlinked[it.name] || 0) + (Number(it.qty) || 0);
-    });
-  });
-  var rows = Object.keys(use).map(function(k){ var inv = findInv(k); return Object.assign({ id: k, left: inv ? inv.qty : null }, use[k]); })
-    .sort(function(a, b){ return b.cost - a.cost; });
-  var total = rows.reduce(function(s, r){ return s + r.cost; }, 0);
+  var D = stockConsumptionData(range), rows = D.rows, unlinked = D.unlinked, total = D.total;
   var chip = function(k, l) { return '<button type="button" onclick="showStockReport(\'' + k + '\')" style="padding:6px 12px;border-radius:16px;border:1.5px solid ' + (range === k ? '#7C3AED' : '#E2E8F5') + ';background:' + (range === k ? '#EDE9FE' : '#fff') + ';font-size:0.74rem;font-weight:700;cursor:pointer;color:#1A2B3C">' + l + '</button>'; };
   var h = '<div class="modal-handle"></div><div class="modal-title">📊 Inventory Consumption</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' + chip('today', 'Aaj') + chip('7', '7 din') + chip('30', '30 din') + chip('month', 'Is mahine') + '</div>';
@@ -7121,7 +7313,8 @@ function showStockReport(range) {
         return '<div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:5px 2px;border-bottom:1px solid #F1F5F9"><span>' + esc(x.name) + '</span><span>' + fmt(x.cost) + ' / ' + fmt(x.price) + ' · <b style="color:' + (pct > 45 ? '#DC2626' : '#16A34A') + '">' + pct + '%</b></span></div>';
       }).join('');
   }
-  h += '<button class="btn btn-outline btn-full" style="margin-top:12px" onclick="closeModal()">Close</button>';
+  h += '<button class="btn btn-primary btn-full" style="margin-top:12px" onclick="_rptRange=\'' + range + '\';exportInventoryReport(\'consumption\')">⬇️ Excel download</button>';
+  h += '<button class="btn btn-outline btn-full" style="margin-top:8px" onclick="closeModal()">Close</button>';
   document.getElementById('modal-body').innerHTML = h;
   openModal();
 }
