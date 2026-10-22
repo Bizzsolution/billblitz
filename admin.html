@@ -223,6 +223,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
       <div class="sb-link" id="nav-features" onclick="showSection('features');closeMobileSidebar()"><span>🎛️</span> Features</div>
       <div class="sb-link" id="nav-menuup" onclick="showSection('menuup');closeMobileSidebar()"><span>🍜</span> Menu Updater</div>
       <div class="sb-link" id="nav-qrtables" onclick="showSection('qrtables');closeMobileSidebar()"><span>🪑</span> QR Tables</div>
+      <div class="sb-link" id="nav-groups" onclick="showSection('groups');closeMobileSidebar()"><span>🏬</span> Outlet Groups</div>
       <div class="sb-link" id="nav-recipes" onclick="showSection('recipes');closeMobileSidebar()"><span>🧾</span> Recipe Upload</div>
       <div class="sb-link" id="nav-revenue" onclick="showSection('revenue');closeMobileSidebar()"><span>💰</span> Revenue</div>
       <div class="sb-link" id="nav-billing" onclick="showSection('billing');closeMobileSidebar()"><span>🧾</span> Billing</div>
@@ -401,6 +402,16 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
     </div>
 
     <!-- CLIENTS -->
+    <!-- OUTLET GROUPS (one login, many outlets) -->
+    <div id="sec-groups" style="display:none">
+      <div class="topbar"><div class="topbar-title">🏬 Outlet Groups</div>
+        <button class="btn btn-gold" onclick="ogOpen(null)">➕ Naya Group</button></div>
+      <div style="background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.15);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:0.8rem;color:#FFD700;line-height:1.6">
+        Jis customer ke <b>multiple outlets</b> hain unka ek <b>Group Key</b> banta hai. Customer app me wahi ek key daalta hai → outlet chunta hai → baad me upar ke chip se kisi bhi outlet par switch kar sakta hai. Har outlet ka data, license, plan aur features alag rehte hain.
+      </div>
+      <div id="og-list"></div>
+    </div>
+
     <!-- RECIPE UPLOAD (Excel / CSV / PDF bulk import) -->
     <div id="sec-recipes" style="display:none">
       <div class="topbar"><div class="topbar-title">🧾 Recipe Upload</div></div>
@@ -736,6 +747,10 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
   </div>
 </div>
 
+<div class="modal-bg" id="modal-group">
+  <div class="modal-box" id="modal-group-body"></div>
+</div>
+
 <div class="modal-bg" id="modal-view-client">
   <div class="modal-box" id="modal-view-client-body"></div>
 </div>
@@ -812,7 +827,8 @@ let adminData = {
   announcements: [],
   settings: { prefix:'BB', trialDays:30, bizName:'', bizWa:'', bizUpi:'' },
   invoices: [],
-  billingProfile: null
+  billingProfile: null,
+  groups: []
 };
 
 // ══ INIT ══════════════════════════════════════════
@@ -931,7 +947,7 @@ function closeMobileSidebar() {
 }
 
 function showSection(id) {
-  ['dashboard','clients','keys','announce','revenue','billing','asettings','features','menuup','qrtables','recipes','danger'].forEach(s => {
+  ['dashboard','clients','keys','announce','revenue','billing','asettings','features','menuup','qrtables','recipes','groups','danger'].forEach(s => {
     const el = document.getElementById('sec-'+s);
     const nav = document.getElementById('nav-'+s);
     if(el) el.style.display = s===id ? 'block' : 'none';
@@ -942,6 +958,7 @@ function showSection(id) {
   if(id==='menuup') showMenuUpdaterSection();
   if(id==='qrtables') showQRTablesSection();
   if(id==='recipes') showRecipeSection();
+  if(id==='groups') renderGroups();
   if(id==='danger') showDangerZoneSection();
   if(id==='clients') renderClients();
   if(id==='keys') renderKeys();
@@ -968,6 +985,10 @@ async function syncFromFirebase() {
     if(!ksnap.empty) {
       adminData.keys = ksnap.docs.map(d => ({id:d.id, ...d.data()}));
     }
+    try {
+      const gsnap = await db_admin.collection('admin_groups').get();
+      if(!gsnap.empty) adminData.groups = gsnap.docs.map(d => ({id:d.id, ...d.data()}));
+    } catch(eg) { console.log('admin_groups sync (rules?):', eg.message); }
     save();
     renderDashboard();
     toast('☁️ Synced!','#00C896');
@@ -3734,6 +3755,135 @@ async function rcpApply() {
     document.getElementById('rcp-preview').innerHTML = '<div style="padding:14px;font-size:0.88rem;line-height:1.7">✅ <b>' + entries.length + '</b> recipes client ke app me push ho gayi' + (added ? ', <b>' + added + '</b> naye inventory items (qty 0) bane — client ko unka stock/cost bharna hoga' : '') + (skipped ? '. <b>' + skipped + '</b> skip hui (menu me naam nahi mila ya valid ingredient nahi)' : '') + '.<br>Client ka app agle sync par apne aap update ho jaayega.</div>';
     rcpState.parsed = []; rcpLoad();
   } catch (e) { toast('Push nahi hua: ' + e.message, '#FF6B35'); }
+}
+
+
+// ══ OUTLET GROUPS ═══════════════════════════════════════════════
+// One Group Key → many outlets. The group is a license-style doc
+// (licenses/<GROUPKEY>, type:'group') holding each outlet's own license key,
+// so the app can list outlets after a single key entry. Every outlet stays a
+// normal client (own license, restaurantId, plan, features).
+function ogGenKey() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k = 'BBG-';
+  for (var s = 0; s < 2; s++) { for (var i = 0; i < 4; i++) k += chars[Math.floor(Math.random() * chars.length)]; if (s < 1) k += '-'; }
+  return k;
+}
+function ogFind(key) { return (adminData.groups || []).find(function(g){ return g.key === key; }); }
+function ogOutletsFromClients(ids) {
+  return ids.map(function(id) {
+    var c = adminData.clients.find(function(x){ return x.id === id; });
+    return c && c.key ? { clientId: c.id, key: String(c.key).toUpperCase(), name: c.name, city: c.city || '' } : null;
+  }).filter(Boolean);
+}
+async function ogPush(g) {
+  var licDoc = { type: 'group', groupName: g.name, clientName: g.name, restaurantName: g.name, status: g.status || 'active', expiry: '2099-12-31',
+    outlets: g.outlets.map(function(o){ return { key: o.key, name: o.name, city: o.city || '' }; }), updatedAt: new Date().toISOString() };
+  await db_admin.collection('licenses').doc(g.key).set(licDoc, { merge: true });
+  try { await db_admin.collection('admin_groups').doc(g.key).set(g, { merge: true }); }
+  catch (e) { toast('Group app ke liye save ho gaya, par admin list cloud me save nahi hui (rules me admin_groups add karein) — is device me save hai', '#FFD700'); }
+}
+function renderGroups() {
+  var el = document.getElementById('og-list'); if (!el) return;
+  var gs = adminData.groups || [];
+  if (!gs.length) { el.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;color:rgba(255,255,255,0.5);font-size:0.86rem">Abhi koi group nahi. "➕ Naya Group" se banayein.</div></div>'; return; }
+  el.innerHTML = gs.map(function(g) {
+    return '<div class="card" style="margin-bottom:12px"><div class="card-body">'
+      + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div style="font-weight:800">' + esc(g.name) + (g.status === 'blocked' ? ' <span class="badge-pill badge-red">Blocked</span>' : '') + '</div>'
+      + '<div class="key-display" style="margin:0;font-size:0.95rem;padding:6px 12px">' + esc(g.key) + '</div></div>'
+      + '<div style="font-size:0.78rem;color:rgba(255,255,255,0.6);margin:8px 0">' + (g.outlets || []).map(function(o){ return '🏪 ' + esc(o.name) + (o.city ? ' (' + esc(o.city) + ')' : ''); }).join(' &nbsp;·&nbsp; ') + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      + '<button class="btn btn-sm btn-gold" onclick="ogOpen(\'' + g.key + '\')">✏️ Outlets edit</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="ogQuick(\'' + g.key + '\')">➕ Naya outlet banao</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="ogCopy(\'' + g.key + '\')">📋 Key</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="ogWhatsApp(\'' + g.key + '\')">📲 WhatsApp</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="ogRefresh(\'' + g.key + '\')">🔄 Refresh</button>'
+      + '<button class="btn btn-sm btn-outline" onclick="ogToggle(\'' + g.key + '\')">' + (g.status === 'blocked' ? '✅ Unblock' : '🚫 Block') + '</button>'
+      + '<button class="btn btn-sm btn-red" onclick="ogDelete(\'' + g.key + '\')">🗑️</button>'
+      + '</div></div></div>';
+  }).join('');
+}
+function ogOpen(key) {
+  var g = key ? ogFind(key) : null, sel = {};
+  (g ? g.outlets : []).forEach(function(o){ sel[o.clientId || o.key] = true; });
+  var rows = adminData.clients.filter(function(c){ return c.key; }).map(function(c) {
+    var used = (adminData.groups || []).find(function(x){ return x.key !== (g && g.key) && (x.outlets || []).some(function(o){ return o.clientId === c.id; }); });
+    return '<label style="display:flex;gap:8px;align-items:center;padding:7px 4px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.84rem;cursor:pointer">'
+      + '<input type="checkbox" class="og-chk" value="' + c.id + '"' + (sel[c.id] ? ' checked' : '') + '/> <span style="flex:1">' + esc(c.name) + (c.city ? ' <span style="color:rgba(255,255,255,0.45)">(' + esc(c.city) + ')</span>' : '') + '</span>'
+      + (used ? '<span style="font-size:0.68rem;color:#FFD700">already: ' + esc(used.name) + '</span>' : '') + '</label>';
+  }).join('');
+  document.getElementById('modal-group-body').innerHTML = '<div class="modal-title">' + (g ? '✏️ Group edit' : '➕ Naya Outlet Group') + '</div>'
+    + '<div class="form-group"><label class="form-label">Group / Customer ka naam</label><input class="form-inp" id="og-name" value="' + esc(g ? g.name : '') + '" placeholder="e.g. Sharma Group of Restaurants"/></div>'
+    + '<div class="form-group"><label class="form-label">Outlets (existing clients me se chunein)</label><input class="form-inp" id="og-search" placeholder="🔍 search" oninput="ogFilter()" style="margin-bottom:6px"/>'
+    + '<div id="og-rows" style="max-height:280px;overflow:auto;background:rgba(255,255,255,0.03);border-radius:10px;padding:4px 8px">' + (rows || '<div style="padding:10px;font-size:0.8rem;color:rgba(255,255,255,0.5)">Koi client (key ke saath) nahi mila.</div>') + '</div>'
+    + '<div style="font-size:0.7rem;color:rgba(255,255,255,0.45);margin-top:6px">Naya outlet chahiye to group banane ke baad "➕ Naya outlet banao" use karein.</div></div>'
+    + '<div style="display:flex;gap:8px"><button class="btn btn-outline" style="flex:1" onclick="closeModal(\'modal-group\')">Cancel</button><button class="btn btn-gold" style="flex:1" onclick="ogSave(' + (g ? '\'' + g.key + '\'' : 'null') + ')">💾 Save</button></div>';
+  document.getElementById('modal-group').classList.add('open');
+}
+function ogFilter() {
+  var q = (document.getElementById('og-search').value || '').toLowerCase();
+  document.querySelectorAll('#og-rows label').forEach(function(l){ l.style.display = !q || l.textContent.toLowerCase().indexOf(q) >= 0 ? 'flex' : 'none'; });
+}
+async function ogSave(key) {
+  var name = (document.getElementById('og-name').value || '').trim();
+  if (!name) { toast('Group ka naam daalein', '#FF6B35'); return; }
+  var ids = []; document.querySelectorAll('.og-chk').forEach(function(c){ if (c.checked) ids.push(c.value); });
+  if (!ids.length) { toast('Kam se kam 1 outlet chunein', '#FF6B35'); return; }
+  var g = key ? ogFind(key) : null;
+  if (!g) { g = { key: ogGenKey(), status: 'active', createdAt: new Date().toISOString() }; adminData.groups.push(g); }
+  g.name = name; g.outlets = ogOutletsFromClients(ids);
+  save();
+  try { await ogPush(g); toast('✅ Group save ho gaya', '#00C896'); logActivity('Outlet group: ' + name); }
+  catch (e) { toast('Cloud save fail: ' + e.message, '#FF6B35'); }
+  closeModal('modal-group'); renderGroups();
+}
+async function ogRefresh(key) {
+  var g = ogFind(key); if (!g) return;
+  g.outlets = ogOutletsFromClients(g.outlets.map(function(o){ return o.clientId; }));
+  save(); try { await ogPush(g); toast('🔄 Outlet names/keys refresh ho gaye', '#00C896'); } catch (e) { toast('Fail: ' + e.message, '#FF6B35'); }
+  renderGroups();
+}
+async function ogToggle(key) {
+  var g = ogFind(key); if (!g) return;
+  g.status = g.status === 'blocked' ? 'active' : 'blocked'; save();
+  try { await ogPush(g); } catch (e) { toast('Fail: ' + e.message, '#FF6B35'); }
+  renderGroups();
+}
+async function ogDelete(key) {
+  var g = ogFind(key); if (!g || !confirm('"' + g.name + '" group delete karein? Outlets/clients delete nahi honge, bas Group Key kaam karna band kar degi.')) return;
+  try { await db_admin.collection('licenses').doc(key).delete(); } catch (e) { toast('Delete fail: ' + e.message, '#FF6B35'); return; }
+  try { await db_admin.collection('admin_groups').doc(key).delete(); } catch (e) {}
+  adminData.groups = adminData.groups.filter(function(x){ return x.key !== key; }); save(); renderGroups(); toast('Group delete ho gaya', '#FFD700');
+}
+function ogCopy(key) { try { navigator.clipboard.writeText(key); toast('📋 Group Key copy ho gayi'); } catch (e) { prompt('Group Key:', key); } }
+function ogWhatsApp(key) {
+  var g = ogFind(key); if (!g) return;
+  var msg = 'Namaste! 🙏\n*BillBlitz* me aapke saare outlets ek hi login se chalenge.\n\n*Group Key:* ' + key + '\n\nApp kholkar yahi key daalein, phir outlet chunein. Baad me upar ke 🏬 chip se kisi bhi outlet par switch kar sakte hain.\n\nOutlets: ' + g.outlets.map(function(o){ return o.name; }).join(', ');
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+// Create a brand-new outlet (client + own license) for an existing group, copying plan/expiry/features of its first outlet.
+async function ogQuick(key) {
+  var g = ogFind(key); if (!g) return;
+  var nm = prompt('Naye outlet ka naam (jaise "Sharma Restaurant - Sector 62"):'); if (!nm || !nm.trim()) return;
+  var city = prompt('City / area (optional):') || '';
+  var ref = adminData.clients.find(function(c){ return g.outlets[0] && c.id === g.outlets[0].clientId; }) || {};
+  var k = generateLicenseKey(), expiry = ref.expiry || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+  var client = { id: 'c' + Date.now(), name: nm.trim(), owner: ref.owner || '', phone: ref.phone || '', city: city.trim(), plan: ref.plan || 'trial', amount: 0, expiry: expiry,
+    notes: 'Outlet of group: ' + g.name, key: k, status: 'active', createdAt: new Date().toISOString(), payments: [] };
+  if (ref.features) client.features = Object.assign({}, ref.features);
+  adminData.clients.push(client);
+  adminData.keys.push({ key: k, clientId: client.id, clientName: client.name, plan: client.plan, expiry: expiry, createdAt: client.createdAt, status: 'active' });
+  g.outlets.push({ clientId: client.id, key: k, name: client.name, city: client.city });
+  save();
+  try {
+    pushToFirebase('admin_clients', client.id, client);
+    var licDoc = { clientId: client.id, clientName: client.name, restaurantName: client.name, phone: client.phone, plan: client.plan, expiry: expiry,
+      status: 'active', restaurantId: generateRestaurantId(), createdAt: client.createdAt };
+    if (client.features) licDoc.features = client.features;
+    await pushToFirebase('licenses', k, licDoc);
+    await ogPush(g);
+    toast('✅ Naya outlet bana aur group me jud gaya', '#00C896'); logActivity('New outlet ' + client.name + ' in group ' + g.name);
+  } catch (e) { toast('Cloud save fail: ' + e.message, '#FF6B35'); }
+  renderGroups();
 }
 
 

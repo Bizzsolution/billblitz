@@ -775,6 +775,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
     <button class="sb-item" id="sb-loyalty" onclick="setPage('loyalty')"><span class="sb-icon">⭐</span> Loyalty</button>
   </div>
   <div class="sb-footer">
+    <button id="sb-outlet-chip" style="display:none;width:100%;margin-bottom:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;font-size:0.78rem;font-weight:700;text-align:left;cursor:pointer" onclick="openOutletSwitcher()">🏬 <span id="sb-outlet-name"></span> ▾</button>
     <div class="sb-user">
       <div class="sb-avatar" id="sb-avatar">?</div>
       <div class="sb-user-info">
@@ -933,6 +934,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
 <div class="header">
   <div class="logo">⚡ BillBlitz <small>Restaurant Manager</small></div>
   <div class="header-right">
+    <button class="hdr-btn" id="outlet-chip" style="display:none;background:rgba(255,255,255,0.14);color:#fff;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="openOutletSwitcher()" title="Outlet badlein">🏬 <span id="outlet-chip-name"></span> ▾</button>
     <span id="role-display" class="role-badge role-owner">👑 Owner</span>
     <div class="hdr-time" id="live-time"></div>
     <button class="hdr-btn" onclick="quickBill()">+ Bill</button>
@@ -1262,6 +1264,7 @@ tr:nth-child(even) td{background:#FFFFFF;}
   <div class="page" id="page-reports">
     <a href="#" onclick="setPage('manage');return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:none">← Manage</a>
     <div class="page-title">📊 Reports</div>
+    <button class="btn btn-outline btn-sm" id="rep-allout-btn" style="display:none;margin-bottom:10px" onclick="openAllOutletsReport()">🏬 Sabhi outlets ki combined report</button>
 
     <!-- Data Source selector — only shown when Banquet is enabled, so
          everyone else's Reports look exactly as before -->
@@ -3013,10 +3016,12 @@ async function processActivation(key, msgId, retryCount) {
     if(!snap.exists) { setLicMsg('Invalid key! Admin se sahi key lo.', msgId); return; }
     var data = snap.data();
     if(data.status === 'blocked') { setLicMsg('License block hai! Support se contact karein.', msgId); return; }
+    if(data.type === 'group') { showGroupPicker(key, data, msgId); return; }
     if(data.expiry && data.expiry !== '2099-12-31') {
       if(new Date(data.expiry) < new Date()) { setLicMsg('License expire ho gayi! Renew karein.', msgId); return; }
     }
     loadFeaturesFromLicense(data);
+    if (window._viaGroupPick) window._viaGroupPick = false; else { try { localStorage.removeItem('bb-group-v1'); } catch (eg) {} }
     activationSuccess({key:key, clientName:data.clientName||data.restaurantName||'Client', expiryDate:data.expiry||'', status:'active'});
     // Apply feature gating after short delay (DOM needs to be ready)
     setTimeout(applyFeatureGating, 500);
@@ -3059,6 +3064,8 @@ function activationSuccess(data){
   // day-to-day app open, not a fresh activation — never separately called
   // it). This is what made a stale/incorrect button state linger.
   applyFeatureGating();
+  // Owner just switched outlet from the outlet chip → stay logged in as owner.
+  try { if (sessionStorage.getItem('bb-auto-owner') === '1') { sessionStorage.removeItem('bb-auto-owner'); finishLogin('owner'); } } catch (eAo) {}
   if(!data.offline) toast(`✅ ${data.clientName?data.clientName+' — ':''}License Active!`,'#00A878');
   // ☁️ Start Firebase cloud sync
   if(data.key) authenticateClient(data.key);
@@ -3560,6 +3567,325 @@ function saveNewOwnerPinFromReset(){
   toast('✅ Naya Owner PIN set! Settings mein naya Recovery Code zaroor bana lein.', '#00A878');
 }
 
+function finishLogin(role){
+  currentRole = role;
+  document.getElementById('login-screen').style.display = 'none';
+  // This device just got a role — re-evaluate who should be ringing.
+  try { refreshQrRinger(); refreshKitchenRinger(); } catch (e) {}
+  // Mobile header badge
+  var ROLE_LABEL = {owner:'👑 Owner', cashier:'🧾 Cashier', kitchen:'🍳 Kitchen', order_manager:'📝 Order Mgr'};
+  var ROLE_ICON  = {owner:'👑', cashier:'🧾', kitchen:'🍳', order_manager:'📝'};
+  var ROLE_NAME  = {owner:'Owner', cashier:'Cashier', kitchen:'Kitchen', order_manager:'Order Manager'};
+  const badge = document.getElementById('role-display');
+  badge.textContent = ROLE_LABEL[currentRole] || '🧾 Cashier';
+  badge.className = 'role-badge ' + (currentRole==='owner'?'role-owner':'role-cashier');
+  // Desktop sidebar user
+  const sbAvatar=document.getElementById('sb-avatar');
+  const sbRoleName=document.getElementById('sb-role-name');
+  const dhRoleBadge=document.getElementById('dh-role-badge');
+  const restName=db.settings?.restInfo?.name||'My Restaurant';
+  if(sbAvatar) sbAvatar.textContent=ROLE_ICON[currentRole]||'🧾';
+  if(sbRoleName){ sbRoleName.textContent=ROLE_NAME[currentRole]||'Cashier'; }
+  if(dhRoleBadge){
+    dhRoleBadge.textContent=ROLE_LABEL[currentRole]||'🧾 Cashier';
+    dhRoleBadge.className='dh-role '+(currentRole==='owner'?'role-owner':'role-cashier');
+  }
+  // Update sidebar license info
+  const sbLic=document.getElementById('sb-lic-info');
+  if(sbLic) sbLic.textContent=licenseState.status==='active'?'✓ Licensed':'⏳ Trial';
+  applyRoleRestrictions();
+  // A kitchen device must land straight on the Kitchen queue, never the
+  // dashboard (which it isn't allowed to see).
+  renderAlertsBadge();
+  // Silently restore the Bluetooth printer link (if this device already
+  // has permission for it) so staff don't have to re-pair after every
+  // app restart. Deliberately not awaited — never block the UI on it.
+  btAutoReconnectOnStartup();
+  if(currentRole==='kitchen'){ setPage('kitchen'); }
+  else { renderDashboard(); }
+  try { updateOutletChip(); } catch (e) {}
+}
+
+
+// ╔══════════════════════════════════════════════════════╗
+// ║        MULTI-OUTLET  (one Group Key, many outlets)   ║
+// ╚══════════════════════════════════════════════════════╝
+// The admin creates a Group Key (licenses/<key>, type:'group') listing each
+// outlet's own license key. Entering it lets the owner pick an outlet; later
+// the 🏬 chip switches outlets without re-typing anything. Every outlet keeps
+// its own cloud data, license, features and local copy — switching just swaps
+// which one this device is working on.
+function getGroup() { try { return JSON.parse(localStorage.getItem('bb-group-v1') || 'null'); } catch (e) { return null; } }
+function showGroupPicker(groupKey, data, msgId) {
+  var outlets = (data.outlets || []).filter(function(o){ return o && o.key; });
+  if (!outlets.length) { setLicMsg('Is group me abhi koi outlet nahi hai. Support se contact karein.', msgId); return; }
+  try { localStorage.setItem('bb-group-v1', JSON.stringify({ groupKey: groupKey, groupName: data.groupName || data.clientName || 'Group', outlets: outlets })); } catch (e) {}
+  window._groupPickMsgId = msgId;
+  var el = document.getElementById(msgId); if (!el) return;
+  el.innerHTML = '<div style="font-weight:800;margin-bottom:8px">🏬 ' + esc(data.groupName || 'Group') + ' — outlet chunein</div>'
+    + outlets.map(function(o, i){ return '<button type="button" class="btn btn-primary btn-full" style="margin-bottom:6px" onclick="pickGroupOutlet(' + i + ')">🏪 ' + esc(o.name || o.key) + (o.city ? ' · ' + esc(o.city) : '') + '</button>'; }).join('');
+}
+function pickGroupOutlet(i) {
+  var g = getGroup(); if (!g || !g.outlets[i]) return;
+  window._viaGroupPick = true;
+  processActivation(String(g.outlets[i].key).toUpperCase(), window._groupPickMsgId || 'lic-msg');
+}
+function updateOutletChip() {
+  var g = getGroup(), show = !!(g && g.outlets && g.outlets.length > 1 && currentRole === 'owner');
+  var cur = (g && g.outlets || []).find(function(o){ return String(o.key).toUpperCase() === String(licenseState.key || '').toUpperCase(); });
+  var nm = cur ? cur.name : '';
+  ['outlet-chip', 'sb-outlet-chip', 'rep-allout-btn'].forEach(function(id){ var b = document.getElementById(id); if (b) b.style.display = show ? '' : 'none'; });
+  ['outlet-chip-name', 'sb-outlet-name'].forEach(function(id){ var b = document.getElementById(id); if (b) b.textContent = nm || 'Outlet'; });
+}
+async function openOutletSwitcher() {
+  if (currentRole !== 'owner') { toast('Sirf Owner outlet badal sakta hai', '#FF6B35'); return; }
+  var g = getGroup(); if (!g) return;
+  // Refresh the outlet list from the cloud (admin may have added outlets) and honour a blocked group.
+  try {
+    if (isFirebaseReady && firestoreDb && navigator.onLine) {
+      var d = await firestoreDb.collection('licenses').doc(g.groupKey).get();
+      if (d.exists) {
+        var gd = d.data();
+        if (gd.status === 'blocked') { toast('Ye group block hai — support se contact karein', '#FF6B35'); return; }
+        if (gd.outlets && gd.outlets.length) { g.outlets = gd.outlets; g.groupName = gd.groupName || g.groupName; localStorage.setItem('bb-group-v1', JSON.stringify(g)); }
+      }
+    }
+  } catch (e) {}
+  var curKey = String(licenseState.key || '').toUpperCase();
+  document.getElementById('modal-body').innerHTML = '<div class="modal-handle"></div><div class="modal-title">🏬 ' + esc(g.groupName || 'Outlets') + '</div>'
+    + '<div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Jis outlet par jaana hai use chunein. Aap Owner ke roop me hi rahenge.</div>'
+    + g.outlets.map(function(o, i) {
+      var on = String(o.key).toUpperCase() === curKey;
+      return '<button type="button" class="btn ' + (on ? 'btn-primary' : 'btn-outline') + ' btn-full" style="margin-bottom:8px;text-align:left" ' + (on ? 'disabled' : 'onclick="switchOutlet(' + i + ')"') + '>' + (on ? '✅ ' : '🏪 ') + esc(o.name || o.key) + (o.city ? ' · ' + esc(o.city) : '') + (on ? ' (current)' : '') + '</button>';
+    }).join('')
+    + '<button class="btn btn-gold btn-full" style="margin-bottom:8px" onclick="closeModal();openAllOutletsReport()">📊 Sabhi outlets ki combined report</button>'
+    + '<button class="btn btn-outline btn-full" onclick="closeModal()">Close</button>';
+  openModal();
+}
+async function switchOutlet(i) {
+  var g = getGroup(); if (!g || !g.outlets[i] || currentRole !== 'owner') return;
+  var target = String(g.outlets[i].key).toUpperCase(), cur = String(licenseState.key || '').toUpperCase();
+  if (!target || target === cur) { closeModal(); return; }
+  document.getElementById('modal-body').innerHTML = '<div style="padding:30px;text-align:center"><div class="lic-spinner" style="margin:0 auto 12px"></div>Data save karke <b>' + esc(g.outlets[i].name || '') + '</b> khol rahe hain…</div>';
+  try {
+    // Make sure this outlet's latest data is in the cloud before leaving it.
+    if (typeof pushSharedDataToCloud === 'function') { try { await Promise.race([pushSharedDataToCloud(), new Promise(function(r){ setTimeout(r, 4000); })]); } catch (e) {} }
+    await new Promise(function(r){ setTimeout(r, 600); });
+    // Park this outlet's local copy, restore the target's (if we have one)
+    var stash = { db: localStorage.getItem('bb-db-v1'), feat: localStorage.getItem('bb-feat-v1'), lic: localStorage.getItem('bb-lic-v1') };
+    if (cur) localStorage.setItem('bb-outlet-' + cur, JSON.stringify(stash));
+    var next = null; try { next = JSON.parse(localStorage.getItem('bb-outlet-' + target) || 'null'); } catch (e) {}
+    ['bb-db-v1', 'bb-feat-v1'].forEach(function(k){ localStorage.removeItem(k); });
+    if (next && next.db) localStorage.setItem('bb-db-v1', next.db);
+    if (next && next.feat) localStorage.setItem('bb-feat-v1', next.feat);
+    localStorage.setItem('bb-lic-v1', JSON.stringify({ key: target, clientName: g.outlets[i].name || '', expiryDate: '', status: 'active', installDate: (licenseState.installDate || new Date().toISOString()), lastChecked: new Date().toISOString() }));
+    sessionStorage.setItem('bb-auto-owner', '1');
+    window.save = function() {};   // nothing may write the old outlet's data over the new copy while we reload
+    location.reload();
+  } catch (e) { toast('Outlet switch nahi hua: ' + e.message, '#FF6B35'); closeModal(); }
+}
+
+
+// ╔══════════════════════════════════════════════════════╗
+// ║   ALL-OUTLETS COMBINED REPORT (owner, group login)   ║
+// ╚══════════════════════════════════════════════════════╝
+// Reads every outlet of the group straight from the cloud (this device joins
+// each outlet as a member using that outlet's own license key — the same
+// thing that happens when you switch to it) and shows Sale / Purchase /
+// Expense / Inventory / GST side by side, outlet-wise with a grand total.
+var _oc = { range: 'month', from: '', to: '', tab: 'sales', data: null, busy: false };
+function ocPad(n) { return String(n).padStart(2, '0'); }
+function ocStr(d) { return d.getFullYear() + '-' + ocPad(d.getMonth() + 1) + '-' + ocPad(d.getDate()); }
+function ocSetRange(r) {
+  var now = new Date(), t = new Date(now.getFullYear(), now.getMonth(), now.getDate()), f = t, to = t;
+  if (r === 'yesterday') { f = to = new Date(t.getTime() - 86400000); }
+  else if (r === '7') f = new Date(t.getTime() - 6 * 86400000);
+  else if (r === 'month') f = new Date(now.getFullYear(), now.getMonth(), 1);
+  else if (r === 'lastmonth') { f = new Date(now.getFullYear(), now.getMonth() - 1, 1); to = new Date(now.getFullYear(), now.getMonth(), 0); }
+  if (r !== 'custom') { _oc.from = ocStr(f); _oc.to = ocStr(to); }
+  _oc.range = r;
+}
+async function refreshGroupFromCloud() {
+  var g = getGroup(); if (!g) return null;
+  try {
+    if (isFirebaseReady && firestoreDb && navigator.onLine) {
+      var d = await firestoreDb.collection('licenses').doc(g.groupKey).get();
+      if (d.exists) {
+        var gd = d.data();
+        if (gd.status === 'blocked') return Object.assign({}, g, { blocked: true });
+        if (gd.outlets && gd.outlets.length) { g.outlets = gd.outlets; g.groupName = gd.groupName || g.groupName; localStorage.setItem('bb-group-v1', JSON.stringify(g)); }
+      }
+    }
+  } catch (e) {}
+  return g;
+}
+function openAllOutletsReport() {
+  if (currentRole !== 'owner') { toast('Sirf Owner dekh sakta hai', '#FF6B35'); return; }
+  if (!getGroup()) { toast('Ye sirf Group Key se login par chalta hai', '#FF6B35'); return; }
+  if (!_oc.from) ocSetRange('month');
+  var ov = document.getElementById('oc-overlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'oc-overlay'; ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:#F4F6FB;overflow:auto;padding:14px 14px 40px;font-family:inherit'; document.body.appendChild(ov); }
+  ov.style.display = 'block';
+  ocDraw();
+  ocLoad();
+}
+function ocClose() { var ov = document.getElementById('oc-overlay'); if (ov) ov.style.display = 'none'; }
+function ocChip(k, l) { return '<button type="button" onclick="ocPick(\'' + k + '\')" style="padding:6px 12px;border-radius:16px;border:1.5px solid ' + (_oc.range === k ? '#7C3AED' : '#E2E8F5') + ';background:' + (_oc.range === k ? '#EDE9FE' : '#fff') + ';font-size:0.76rem;font-weight:700;cursor:pointer;color:#1A2B3C">' + l + '</button>'; }
+function ocPick(k) { ocSetRange(k); if (k !== 'custom') { ocDraw(); ocLoad(); } else ocDraw(); }
+function ocApplyCustom() {
+  var f = document.getElementById('oc-from').value, t = document.getElementById('oc-to').value;
+  if (!f || !t || f > t) { toast('Sahi date range chunein', '#FF6B35'); return; }
+  _oc.from = f; _oc.to = t; _oc.range = 'custom'; ocDraw(); ocLoad();
+}
+function ocDraw() {
+  var ov = document.getElementById('oc-overlay'); if (!ov) return;
+  var g = getGroup() || {};
+  var tabs = [['sales', '💰 Sale'], ['purchase', '🛒 Purchase'], ['expense', '💸 Expense'], ['inventory', '📦 Inventory'], ['gst', '🧾 GST']];
+  ov.innerHTML = '<div style="max-width:1100px;margin:0 auto">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px"><div style="font-weight:800;font-size:1.1rem">🏬 ' + esc(g.groupName || 'Group') + ' — Combined Report</div><button class="btn btn-outline btn-sm" onclick="ocClose()">✕ Close</button></div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' + ocChip('today', 'Aaj') + ocChip('yesterday', 'Kal') + ocChip('7', '7 din') + ocChip('month', 'Is mahine') + ocChip('lastmonth', 'Pichle mahine') + ocChip('custom', 'Custom') + '</div>'
+    + (_oc.range === 'custom' ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><input type="date" id="oc-from" class="form-inp" style="width:auto" value="' + _oc.from + '"/> → <input type="date" id="oc-to" class="form-inp" style="width:auto" value="' + _oc.to + '"/><button class="btn btn-primary btn-sm" onclick="ocApplyCustom()">Show</button></div>' : '')
+    + '<div style="font-size:0.76rem;color:#6B7A99;margin-bottom:10px">📅 ' + _oc.from + ' → ' + _oc.to + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' + tabs.map(function(t) {
+        var on = _oc.tab === t[0];
+        return '<button type="button" onclick="_oc.tab=\'' + t[0] + '\';ocDraw()" style="padding:8px 14px;border-radius:10px;border:2px solid ' + (on ? '#7C3AED' : '#E2E8F5') + ';background:' + (on ? '#7C3AED' : '#fff') + ';color:' + (on ? '#fff' : '#1A2B3C') + ';font-weight:700;font-size:0.8rem;cursor:pointer">' + t[1] + '</button>';
+      }).join('') + '<span style="flex:1"></span><button class="btn btn-primary btn-sm" onclick="ocExport()">⬇️ Excel (sab reports)</button></div>'
+    + '<div id="oc-body">' + (_oc.busy ? '<div style="padding:30px;text-align:center;color:#6B7A99">Sabhi outlets ka data la rahe hain…</div>' : ocBodyHtml()) + '</div></div>';
+}
+async function ocLoad() {
+  if (_oc.busy) return;
+  _oc.busy = true; ocDraw();
+  try {
+    var g = await refreshGroupFromCloud();
+    if (!g || g.blocked) { _oc.data = null; _oc.busy = false; ocDraw(); toast('Group block hai ya nahi mila', '#FF6B35'); return; }
+    var uid = fbAuth.currentUser && fbAuth.currentUser.uid;
+    var startIso = new Date(_oc.from + 'T00:00:00').toISOString(), endIso = new Date(_oc.to + 'T23:59:59.999').toISOString();
+    var inRange = function(d) { if (!d) return false; var x = new Date(d); return ocStr(x) >= _oc.from && ocStr(x) <= _oc.to; };
+    var res = await Promise.all(g.outlets.map(async function(o) {
+      var out = { name: o.name || o.key, key: o.key, ok: false };
+      try {
+        var key = String(o.key).toUpperCase();
+        var ld = await firestoreDb.collection('licenses').doc(key).get();
+        if (!ld.exists) throw new Error('license nahi mili');
+        var L = ld.data() || {}; if (L.status === 'blocked') throw new Error('license blocked');
+        var rid = L.restaurantId || legacyRestaurantIdFromKey(key);
+        var rr = firestoreDb.collection('restaurants').doc(rid), cur = (rid === restaurantId);
+        if (!cur && uid) {
+          var mr = rr.collection('members').doc(uid), ex = null;
+          try { ex = await mr.get(); } catch (e) {}
+          var pl = { licenseKey: key, lastSeen: new Date().toISOString(), device: (navigator.userAgent || '').slice(0, 80), deviceName: getFriendlyDeviceName() };
+          if (!ex || !ex.exists) pl.joinedAt = new Date().toISOString();
+          await mr.set(pl, { merge: true });
+        }
+        var metaGet = async function(k, local) { if (cur && local) return local; var d = await rr.collection('meta').doc(k).get(); return (d.exists && d.data().items) || []; };
+        var parts = await Promise.all([
+          fetchAllOrdersBetween(rr, startIso, endIso),
+          metaGet('purchases', db.purchases), metaGet('expenses', db.expenses), metaGet('inventory', db.inventory)
+        ]);
+        out.orders = parts[0];
+        out.purchases = parts[1].filter(function(p){ return inRange(p.date); });
+        out.expenses = parts[2].filter(function(e){ return inRange(e.date); });
+        out.inventory = parts[3];
+        out.ok = true;
+      } catch (e) { out.err = (e && e.message) || 'error'; }
+      return out;
+    }));
+    _oc.data = res.map(ocCompute);
+  } catch (e) { toast('Report load nahi hui: ' + e.message, '#FF6B35'); _oc.data = null; }
+  _oc.busy = false; ocDraw();
+}
+function ocCompute(o) {
+  if (!o.ok) return o;
+  var S = { bills: 0, subtotal: 0, discount: 0, tax: 0, total: 0, returned: 0, modes: {} };
+  var G = { outTaxable: 0, cgst: 0, sgst: 0, igst: 0, outTax: 0, inTaxable: 0, inTax: 0 };
+  o.orders.forEach(function(x) {
+    S.bills++; S.subtotal += Number(x.subtotal) || 0; S.discount += Number(x.discount) || 0; S.tax += Number(x.tax) || 0; S.total += Number(x.total) || 0; S.returned += Number(x.returnedAmount) || 0;
+    var pushed = false;
+    if (x.payment === 'mixed' && typeof getOrderPaymentBreakup === 'function') { try { getOrderPaymentBreakup(x).forEach(function(r){ var m = String(r.mode || 'other').toLowerCase(); S.modes[m] = (S.modes[m] || 0) + (Number(r.amount) || 0); pushed = true; }); } catch (e) {} }
+    if (!pushed) { var m2 = String(x.payment || 'pending').toLowerCase(); S.modes[m2] = (S.modes[m2] || 0) + (Number(x.total) || 0); }
+    G.outTaxable += orderTaxable(x); G.outTax += Number(x.tax) || 0;
+    getGSTBreakdown(x).forEach(function(b){ if (b.name === 'CGST') G.cgst += b.amt; else if (b.name === 'SGST') G.sgst += b.amt; else if (b.name === 'IGST') G.igst += b.amt; });
+  });
+  var P = { count: o.purchases.length, total: 0, paid: 0 };
+  o.purchases.forEach(function(p) {
+    var t = Number(p.total) || 0; P.total += t;
+    P.paid += p.paidAmount !== undefined ? Number(p.paidAmount) || 0 : (p.status === 'paid' ? t : 0);
+    var rate = Number(p.gstPct) || 0; G.inTaxable += t; G.inTax += t * rate / 100;
+  });
+  var E = { count: o.expenses.length, total: 0, cats: {} };
+  o.expenses.forEach(function(e){ var a = Number(e.amount) || 0, c = e.category || 'Other'; E.total += a; E.cats[c] = (E.cats[c] || 0) + a; });
+  var I = { items: o.inventory.length, value: 0, low: 0, list: o.inventory };
+  o.inventory.forEach(function(i){ I.value += Math.max(0, Number(i.qty) || 0) * (Number(i.costPrice) || 0); if ((Number(i.qty) || 0) <= (Number(i.minQty) || 0)) I.low++; });
+  return Object.assign(o, { S: S, P: P, E: E, I: I, G: G });
+}
+// Build every table once; used by both the screen and the Excel export.
+function ocTables() {
+  var D = (_oc.data || []), okD = D.filter(function(x){ return x.ok; }), T = {};
+  var tot = function(rows, from) { var t = ['TOTAL']; for (var c = 1; c < rows[0].length; c++) { t.push(typeof rows[0][c] === 'number' ? rows.reduce(function(s, r){ return s + (Number(r[c]) || 0); }, 0) : ''); } return t; };
+  var mk = function(head, fmts, rows) { if (rows.length) rows.push(tot(rows)); return { head: head, fmts: fmts, rows: rows }; };
+  var r2 = function(n) { return Math.round((Number(n) || 0) * 100) / 100; };
+  T.sales = mk(['Outlet', 'Bills', 'Subtotal', 'Discount', 'GST', 'Gross Sale', 'Returns', 'Net Sale', 'Avg Bill'], ['t', 'n', 'm', 'm', 'm', 'm', 'm', 'm', 'm'],
+    okD.map(function(x){ var s = x.S; return [x.name, s.bills, r2(s.subtotal), r2(s.discount), r2(s.tax), r2(s.total), r2(s.returned), r2(s.total - s.returned), s.bills ? r2(s.total / s.bills) : 0]; }));
+  if (T.sales.rows.length) { var l = T.sales.rows[T.sales.rows.length - 1]; l[8] = l[1] ? r2(l[5] / l[1]) : 0; }
+  var modes = []; okD.forEach(function(x){ Object.keys(x.S.modes).forEach(function(m){ if (modes.indexOf(m) < 0) modes.push(m); }); });
+  T.modes = mk(['Outlet'].concat(modes.map(function(m){ return m.toUpperCase(); })), ['t'].concat(modes.map(function(){ return 'm'; })),
+    okD.map(function(x){ return [x.name].concat(modes.map(function(m){ return r2(x.S.modes[m] || 0); })); }));
+  T.purchase = mk(['Outlet', 'Purchases', 'Total', 'Paid', 'Pending'], ['t', 'n', 'm', 'm', 'm'],
+    okD.map(function(x){ return [x.name, x.P.count, r2(x.P.total), r2(x.P.paid), r2(Math.max(0, x.P.total - x.P.paid))]; }));
+  var cats = []; okD.forEach(function(x){ Object.keys(x.E.cats).forEach(function(c){ if (cats.indexOf(c) < 0) cats.push(c); }); });
+  var er = cats.map(function(c){ var row = [c]; okD.forEach(function(x){ row.push(r2(x.E.cats[c] || 0)); }); row.push(r2(okD.reduce(function(s, x){ return s + (x.E.cats[c] || 0); }, 0))); return row; });
+  T.expense = { head: ['Category'].concat(okD.map(function(x){ return x.name; })).concat(['Total']), fmts: ['t'].concat(okD.map(function(){ return 'm'; })).concat(['m']), rows: er };
+  if (er.length) { var tr = ['TOTAL']; for (var c = 1; c < er[0].length; c++) tr.push(r2(er.reduce(function(s, r){ return s + r[c]; }, 0))); T.expense.rows.push(tr); }
+  T.inventory = mk(['Outlet', 'Items', 'Stock Value', 'Low-stock items'], ['t', 'n', 'm', 'n'], okD.map(function(x){ return [x.name, x.I.items, r2(x.I.value), x.I.low]; }));
+  var names = {}, order = [];
+  okD.forEach(function(x){ x.I.list.forEach(function(i){ var k = rcpKeyName(i.name); if (!names[k]) { names[k] = { name: i.name, unit: i.unit || '', q: {} }; order.push(k); } names[k].q[x.key] = (names[k].q[x.key] || 0) + (Number(i.qty) || 0); }); });
+  T.invItems = { head: ['Item', 'Unit'].concat(okD.map(function(x){ return x.name; })).concat(['Total Qty']), fmts: ['t', 't'].concat(okD.map(function(){ return 'n'; })).concat(['n']),
+    rows: order.sort().map(function(k){ var n = names[k], row = [n.name, n.unit], t = 0; okD.forEach(function(x){ var q = r2(n.q[x.key] || 0); row.push(q); t += q; }); row.push(r2(t)); return row; }) };
+  T.gst = mk(['Outlet', 'Taxable (Sales)', 'CGST', 'SGST', 'IGST', 'Output GST', 'Input GST (ITC)', 'Net Payable'], ['t', 'm', 'm', 'm', 'm', 'm', 'm', 'm'],
+    okD.map(function(x){ var g = x.G; return [x.name, r2(g.outTaxable), r2(g.cgst), r2(g.sgst), r2(g.igst), r2(g.outTax), r2(g.inTax), r2(g.outTax - g.inTax)]; }));
+  return T;
+}
+function rcpKeyName(n) { return String(n || '').toLowerCase().replace(/[^a-z0-9ऀ-ॿ]+/g, ' ').trim(); }
+function ocTableHtml(t, title) {
+  if (!t || !t.rows.length) return '<div style="padding:14px;color:#6B7A99;font-size:0.85rem">' + (title ? '<b>' + title + '</b><br>' : '') + 'Is period me koi data nahi.</div>';
+  var cell = function(v, f) { return f === 'm' ? fmt(v) : (typeof v === 'number' ? v : esc(v)); };
+  return (title ? '<div style="font-weight:800;margin:14px 0 6px">' + title + '</div>' : '')
+    + '<div style="overflow:auto;background:#fff;border:1px solid #E2E8F5;border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;min-width:520px"><thead><tr>'
+    + t.head.map(function(h, i){ return '<th style="text-align:' + (i ? 'right' : 'left') + ';padding:9px 10px;background:#F1F5F9;border-bottom:2px solid #E2E8F5;white-space:nowrap">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>'
+    + t.rows.map(function(r, ri) {
+        var last = ri === t.rows.length - 1 && String(r[0]) === 'TOTAL';
+        return '<tr style="' + (last ? 'font-weight:800;background:#EDE9FE' : '') + '">' + r.map(function(v, i){ return '<td style="text-align:' + (i ? 'right' : 'left') + ';padding:8px 10px;border-bottom:1px solid #F1F5F9;white-space:nowrap">' + cell(v, t.fmts[i]) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+}
+function ocBodyHtml() {
+  if (!_oc.data) return '<div style="padding:20px;color:#6B7A99">Data nahi aaya. Internet check karke dobara try karein.</div>';
+  var bad = _oc.data.filter(function(x){ return !x.ok; });
+  var T = ocTables(), h = '';
+  if (bad.length) h += '<div style="background:#FEF3C7;border-radius:10px;padding:10px;font-size:0.78rem;color:#92400E;margin-bottom:10px">⚠️ In outlets ka data nahi aaya (total me shamil nahi): ' + bad.map(function(b){ return '<b>' + esc(b.name) + '</b> (' + esc(b.err) + ')'; }).join(', ') + '</div>';
+  if (_oc.tab === 'sales') h += ocTableHtml(T.sales, '💰 Outlet-wise Sale') + ocTableHtml(T.modes, 'Payment mode-wise');
+  else if (_oc.tab === 'purchase') h += ocTableHtml(T.purchase, '🛒 Outlet-wise Purchase');
+  else if (_oc.tab === 'expense') h += ocTableHtml(T.expense, '💸 Category-wise Expense (outlet-wise columns)');
+  else if (_oc.tab === 'inventory') h += ocTableHtml(T.inventory, '📦 Inventory Summary') + ocTableHtml(T.invItems, 'Item-wise stock (outlet-wise)');
+  else h += ocTableHtml(T.gst, '🧾 GST — Output vs Input (outlet-wise)') + '<div style="font-size:0.72rem;color:#6B7A99;margin-top:8px">ℹ️ Input GST purchases me dale gaye GST% se nikla hai. Filing se pehle CA se verify karein; asli GST return har outlet ki GSTIN ke hisaab se alag bharna hota hai.</div>';
+  h += '<div style="font-size:0.7rem;color:#9CA3AF;margin-top:12px">Banquet bookings is combined report me shamil nahi hain. Sale = bills ka total; Net Sale = Gross − returns.</div>';
+  return h;
+}
+function ocExport() {
+  if (!_oc.data) { toast('Pehle report load hone dein', '#FF6B35'); return; }
+  var T = ocTables();
+  ensureXLSXLib(function() {
+    try {
+      var wb = XLSX.utils.book_new();
+      var add = function(name, t) { if (!t || !t.rows.length) return; var ws = XLSX.utils.aoa_to_sheet([t.head].concat(t.rows)); ws['!cols'] = t.head.map(function(h, i){ return { wch: i === 0 ? 28 : 16 }; }); XLSX.utils.book_append_sheet(wb, ws, name); };
+      add('Sale', T.sales); add('Payment Modes', T.modes); add('Purchase', T.purchase); add('Expense', T.expense); add('Inventory', T.inventory); add('Inventory Items', T.invItems); add('GST', T.gst);
+      if (!wb.SheetNames.length) { toast('Is period me export karne layak data nahi', '#FF6B35'); return; }
+      var g = getGroup() || {};
+      XLSX.writeFile(wb, 'AllOutlets_' + String(g.groupName || 'Group').replace(/[^a-z0-9]+/gi, '_') + '_' + _oc.from + '_to_' + _oc.to + '.xlsx');
+      toast('✅ Excel download ho gayi', '#00A878');
+    } catch (e) { toast('Excel error: ' + e.message, '#FF6B35'); }
+  });
+}
+
 function checkPin(){
   var lockScope = 'login-' + selectedLoginRole;
   var waitL = pinLockRemaining(lockScope);
@@ -3573,41 +3899,7 @@ function checkPin(){
   if(verifyPin(pinBuffer, correct)){
     pinLockReset(lockScope);
     upgradeRolePinIfLegacy(selectedLoginRole, pinBuffer);
-    currentRole = selectedLoginRole;
-    document.getElementById('login-screen').style.display = 'none';
-    // This device just got a role — re-evaluate who should be ringing.
-    try { refreshQrRinger(); refreshKitchenRinger(); } catch (e) {}
-    // Mobile header badge
-    var ROLE_LABEL = {owner:'👑 Owner', cashier:'🧾 Cashier', kitchen:'🍳 Kitchen', order_manager:'📝 Order Mgr'};
-    var ROLE_ICON  = {owner:'👑', cashier:'🧾', kitchen:'🍳', order_manager:'📝'};
-    var ROLE_NAME  = {owner:'Owner', cashier:'Cashier', kitchen:'Kitchen', order_manager:'Order Manager'};
-    const badge = document.getElementById('role-display');
-    badge.textContent = ROLE_LABEL[currentRole] || '🧾 Cashier';
-    badge.className = 'role-badge ' + (currentRole==='owner'?'role-owner':'role-cashier');
-    // Desktop sidebar user
-    const sbAvatar=document.getElementById('sb-avatar');
-    const sbRoleName=document.getElementById('sb-role-name');
-    const dhRoleBadge=document.getElementById('dh-role-badge');
-    const restName=db.settings?.restInfo?.name||'My Restaurant';
-    if(sbAvatar) sbAvatar.textContent=ROLE_ICON[currentRole]||'🧾';
-    if(sbRoleName){ sbRoleName.textContent=ROLE_NAME[currentRole]||'Cashier'; }
-    if(dhRoleBadge){
-      dhRoleBadge.textContent=ROLE_LABEL[currentRole]||'🧾 Cashier';
-      dhRoleBadge.className='dh-role '+(currentRole==='owner'?'role-owner':'role-cashier');
-    }
-    // Update sidebar license info
-    const sbLic=document.getElementById('sb-lic-info');
-    if(sbLic) sbLic.textContent=licenseState.status==='active'?'✓ Licensed':'⏳ Trial';
-    applyRoleRestrictions();
-    // A kitchen device must land straight on the Kitchen queue, never the
-    // dashboard (which it isn't allowed to see).
-    renderAlertsBadge();
-    // Silently restore the Bluetooth printer link (if this device already
-    // has permission for it) so staff don't have to re-pair after every
-    // app restart. Deliberately not awaited — never block the UI on it.
-    btAutoReconnectOnStartup();
-    if(currentRole==='kitchen'){ setPage('kitchen'); }
-    else { renderDashboard(); }
+    finishLogin(selectedLoginRole);
   } else {
     var lockW = pinLockFail(lockScope, (selectedLoginRole || '') + ' login');
     document.getElementById('login-error').textContent = lockW > 0
@@ -3694,6 +3986,7 @@ function applyRoleRestrictions(){
 function logoutConfirm(){
   if(confirm('Logout and lock the app?')){
     currentRole = null; pinBuffer = '';
+    try { updateOutletChip(); } catch (e) {}
     updatePinDots();
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('login-error').textContent = '';
@@ -8002,6 +8295,24 @@ function getReportPeriodBounds() {
   return null; // 'all' — no bounds, fetch everything (capped at 5000 as a sane ceiling)
 }
 
+// Reads ALL orders in the range, page by page (no cap) — a busy outlet can
+// have any number of bills in a period.
+async function fetchAllOrdersBetween(restRef, startIso, endIso) {
+  var all = [], last = null, PAGE = 1000;
+  for (;;) {
+    var q = restRef.collection('orders');
+    if (startIso) q = q.where('date', '>=', startIso);
+    if (endIso) q = q.where('date', '<=', endIso);
+    q = q.orderBy('date', 'desc');
+    if (last) q = q.startAfter(last);
+    var snap = await q.limit(PAGE).get();
+    snap.docs.forEach(function(d){ all.push(d.data()); });
+    if (snap.docs.length < PAGE) break;
+    last = snap.docs[snap.docs.length - 1];
+  }
+  return all;
+}
+
 async function fetchReportOrders() {
   var myToken = ++reportOrdersFetchToken;
   toast('📊 Poora data load ho raha hai...', '#2563EB');
@@ -8017,10 +8328,7 @@ async function fetchReportOrders() {
     if (reportSource !== 'banquet') {
       var bounds = getReportPeriodBounds();
       var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
-      var q = restRef.collection('orders');
-      if (bounds) q = q.where('date', '>=', bounds.start).where('date', '<=', bounds.end);
-      var snap = await q.orderBy('date','desc').limit(5000).get();
-      restaurantOrders = snap.docs.map(function(d){ return d.data(); });
+      restaurantOrders = await fetchAllOrdersBetween(restRef, bounds ? bounds.start : null, bounds ? bounds.end : null);
     }
     if (myToken !== reportOrdersFetchToken) return; // superseded by a newer fetch — discard this one
     reportOrdersCache = restaurantOrders;
