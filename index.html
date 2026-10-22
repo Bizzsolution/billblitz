@@ -853,6 +853,7 @@ table{max-width:100%;}
 
 
 <style>
+.feat-off{display:none !important;}
 .lang-pill{border:1px solid rgba(0,0,0,.18);background:#fff;color:#1A2B3C;border-radius:999px;padding:5px 12px;font-size:.78rem;font-weight:700;cursor:pointer}
 .lang-pill.on{background:#1A2B3C;color:#FFD700;border-color:#1A2B3C}
 .lang-float{position:fixed;top:max(8px,env(safe-area-inset-top));right:10px;z-index:100000;display:flex;gap:6px}
@@ -1551,7 +1552,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     </div>
 
     <!-- QR Order Alert Routing -->
-    <div class="card" style="margin-bottom:10px">
+    <div class="card" style="margin-bottom:10px" data-feat="qr_menu">
       <div class="card-header"><div class="card-title">🔔 QR Order Ring Kiske Paas</div></div>
       <div class="card-body">
         <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Ek baar tick karke decide karein ki jab customer QR se order kare to ring <b>kis-kis role</b> ke device par baje. Jinke saamne tick hoga, unka device login hone par ring bajegi. Order <b>accept</b> hote hi ring band. Uske baad jab staff "Send to Kitchen" kare, <b>Kitchen</b> device par alag ring bajegi jab tak kitchen "Banana Shuru Karo" na dabaye.</div>
@@ -1563,7 +1564,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     </div>
 
     <!-- Weekly Off Settings -->
-    <div class="card" style="margin-bottom:10px">
+    <div class="card" style="margin-bottom:10px" data-feat="staff">
       <div class="card-header"><div class="card-title">📅 Weekly Off Days</div></div>
       <div class="card-body">
         <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Choose which days are weekly off (holidays) for your restaurant</div>
@@ -1573,7 +1574,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     </div>
 
     <!-- Late/OT Rules (customizable per restaurant/hotel) -->
-    <div class="card" style="margin-bottom:10px">
+    <div class="card" style="margin-bottom:10px" data-feat="staff">
       <div class="card-header"><div class="card-title">⏰ Late & Overtime Rules</div></div>
       <div class="card-body">
         <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Apne restaurant/hotel ke hisaab se Late aur OT ke rules set karein — koi bhi standard fix nahi hai, jo chahiye wahi set karein.</div>
@@ -1618,7 +1619,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
           <div class="form-group" style="flex:1"><label class="form-label">Phone</label><input class="form-inp" id="set-rest-phone" type="tel" placeholder="Contact number"/></div>
           <div class="form-group" style="flex:1"><label class="form-label">GST Number</label><input class="form-inp" id="set-rest-gst" placeholder="e.g. 07AAAAA0000A1Z5"/></div>
         </div>
-        <div class="form-group"><label class="form-label">UPI ID (QR Payment ke liye)</label><input class="form-inp" id="set-rest-upi" placeholder="e.g. yourname@okhdfcbank"/>
+        <div class="form-group" data-feat="qr_payment"><label class="form-label">UPI ID (QR Payment ke liye)</label><input class="form-inp" id="set-rest-upi" placeholder="e.g. yourname@okhdfcbank"/>
           <div style="font-size:0.72rem;color:#9CA3AF;margin-top:4px">Jab "QR Pay" feature on ho, customer isi UPI par payment karega. Khaali chhodne par online payment off rahega.</div>
         </div>
         <div style="display:flex;gap:8px">
@@ -1631,7 +1632,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     </div>
 
     <!-- Location-based Attendance -->
-    <div class="card" style="margin-bottom:10px">
+    <div class="card" style="margin-bottom:10px" data-feat="staff">
       <div class="card-header"><div class="card-title">📍 Location-based Attendance</div></div>
       <div class="card-body">
         <div style="font-size:0.78rem;color:#6B7A99;margin-bottom:10px">Restaurant ki location set karo — staff check-in/out karega tab uski current location match ki jaayegi. Isse manager/staff milke door se fake attendance nahi laga sakenge.</div>
@@ -1643,14 +1644,14 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
     </div>
 
     <!-- Quick Actions -->
-    <div class="card" style="margin-bottom:10px">
+    <div class="card" style="margin-bottom:10px" data-feat="wa_alerts,qr_menu,pdf_reports">
       <div class="card-header"><div class="card-title">⚡ Quick Actions</div></div>
       <div class="card-body">
-        <div class="form-group">
+        <div class="form-group" data-feat="wa_alerts">
           <label class="form-label">📱 Owner WhatsApp Number</label>
           <input class="form-inp" id="set-owner-phone" placeholder="9876543210" type="tel"/>
         </div>
-        <button class="btn btn-primary btn-full" onclick="saveOwnerPhone()" style="margin-bottom:10px">💾 Save Number</button>
+        <button class="btn btn-primary btn-full" data-feat="wa_alerts" onclick="saveOwnerPhone()" style="margin-bottom:10px">💾 Save Number</button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <button class="btn btn-green" id="feat-btn-wa_alerts-1" onclick="sendSalesAlert()">📊 Sales Alert</button>
           <button class="btn btn-yellow" id="feat-btn-wa_alerts-2" onclick="sendStockAlert()">⚠️ Stock Alert</button>
@@ -1663,7 +1664,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
 
     <!-- Bluetooth Printer -->
     <!-- Printer Preference -->
-    <div class="card" style="margin-bottom:10px" id="printer-pref-card">
+    <div class="card" style="margin-bottom:10px" id="printer-pref-card" data-feat="bt_printer">
       <div class="card-header"><div class="card-title">🖨️ Printer Preference</div></div>
       <div class="card-body">
         <div style="font-size:0.78rem;color:rgba(255,255,255,0.5);margin-bottom:10px">Bill aur KOT print karte waqt kaunsa option dikhega — yeh chunein.</div>
@@ -3187,6 +3188,7 @@ let selectedLoginRole = 'owner';
 
 const DEFAULT_PINS = { owner: '1234', cashier: '0000', kitchen: '1111', order_manager: '2222' };
 const CASHIER_BLOCKED_PAGES = ['reports','settings','purchases'];
+const ACCESS_FEAT = {inventory:'inventory',purchases:'purchases',reports:'reports',loyalty:'loyalty'};
 const ACCESS_LABELS = {
   menu: '🍜 Edit Menu',
   inventory: '📦 View Inventory',
@@ -3390,6 +3392,20 @@ async function applyOfflineModeFeature() {
   } catch (e) { /* best effort — never block the app on this */ }
 }
 
+// Settings cards/fields follow the client's feature plan: anything tagged
+// data-feat="a,b" is shown only if the client has at least one of those
+// features. Uses a class (not inline display) so it never fights the
+// show/hide logic that other code already does on the same elements.
+function applySettingsFeatureGating() {
+  var els = document.querySelectorAll('[data-feat]');
+  for (var i = 0; i < els.length; i++) {
+    var fs = (els[i].getAttribute('data-feat') || '').split(',').filter(Boolean);
+    if (!fs.length) continue;
+    var ok = fs.some(function(f){ return hasFeature(f); });
+    els[i].classList.toggle('feat-off', !ok);
+  }
+}
+
 function applyFeatureGating() {
   // Order Manager and Kitchen are OPTIONAL roles — their login buttons only
   // show for clients whose plan has the matching feature enabled. Runs every
@@ -3398,6 +3414,7 @@ function applyFeatureGating() {
   var omBtn = document.getElementById('role-order_manager');
   if (omBtn) omBtn.style.display = hasFeature('order_manager_role') ? '' : 'none';
   applyOfflineModeFeature();
+  applySettingsFeatureGating();
   var kBtn = document.getElementById('role-kitchen');
   if (kBtn) kBtn.style.display = hasFeature('kitchen_display') ? '' : 'none';
 
@@ -4628,10 +4645,11 @@ function renderSettingsPage(){
   const access = getCashierAccess();
   const ac = document.getElementById('access-controls');
   if(ac) ac.innerHTML = Object.entries(ACCESS_LABELS).map(([key,label])=>`
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:7px 9px;background:#F7F9FF;border-radius:8px;border:1px solid #E2E8F5">
+    <label data-feat="${ACCESS_FEAT[key]||''}" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:7px 9px;background:#F7F9FF;border-radius:8px;border:1px solid #E2E8F5">
       <input type="checkbox" id="acc-${key}" ${access[key]?'checked':''} style="width:18px;height:18px;accent-color:#FF6B35"/>
       <span style="font-size:0.85rem;font-weight:600">${label}</span>
     </label>`).join('');
+  applySettingsFeatureGating();
 }
 
 function pushRestaurantInfo(clearLogo){
