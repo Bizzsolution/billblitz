@@ -757,7 +757,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
    Nothing may ever make the page wider than the screen: a too-wide header
    used to push the layout width past the phone's width, so the browser
    zoomed the whole app out and left a blank strip on the right. */
-html,body{max-width:100%;overflow-x:hidden;}
+html,body{max-width:100%;}
+html{overflow-x:clip;}
 img,video,canvas,svg{max-width:100%;}
 input,select,textarea{min-width:0;max-width:100%;}
 .smart-inp{min-width:0;width:100%;}
