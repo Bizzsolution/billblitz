@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="BillBlitz">
 <meta name="application-name" content="BillBlitz">
 <meta name="theme-color" content="#0F1923">
-<link rel="manifest" href="/billblitz/manifest.json">
+<link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
@@ -875,6 +875,7 @@ body.mode-hotel .header [onclick="quickBill()"]{display:none;}
 .feat-off{display:none !important;}
 .lang-pill{border:1px solid rgba(0,0,0,.18);background:#fff;color:#1A2B3C;border-radius:999px;padding:5px 12px;font-size:.78rem;font-weight:700;cursor:pointer}
 .lang-pill.on{background:#1A2B3C;color:#FFD700;border-color:#1A2B3C}
+.pwa-float{display:none;position:fixed;top:max(8px,env(safe-area-inset-top));left:10px;z-index:100000;align-items:center;gap:6px;background:#FFD700;color:#0F1923;border:none;border-radius:20px;padding:6px 12px;font-weight:800;font-size:0.78rem;cursor:pointer;font-family:inherit}
 .lang-float{position:fixed;top:max(8px,env(safe-area-inset-top));right:10px;z-index:100000;display:flex;gap:6px}
 html[lang="hi"] body{line-height:1.5}
 html[lang="hi"] .bnav{font-size:.58rem}
@@ -886,7 +887,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
 <div id="print-overlay"></div>
 
 <!-- ══════════ LICENSE / TRIAL OVERLAY ══════════ -->
-<div class="lic-overlay" id="lic-overlay"><div class="lang-float" data-notr><button class="lang-pill" data-lang-btn="en" onclick="setLang('en')">English</button><button class="lang-pill" data-lang-btn="hi" onclick="setLang('hi')">हिन्दी</button></div>
+<div class="lic-overlay" id="lic-overlay"><button class="pwa-float" data-notr onclick="bbInstallApp()">📥 Install App</button><div class="lang-float" data-notr><button class="lang-pill" data-lang-btn="en" onclick="setLang('en')">English</button><button class="lang-pill" data-lang-btn="hi" onclick="setLang('hi')">हिन्दी</button></div>
   <div class="lic-box">
     <div class="lic-logo">⚡ BillBlitz</div>
     <div class="lic-tagline">RESTAURANT MANAGER</div>
@@ -947,7 +948,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
 </div>
 
 <!-- LOGIN SCREEN -->
-<div class="login-screen" id="login-screen" style="display:none"><div class="lang-float" data-notr><button class="lang-pill" data-lang-btn="en" onclick="setLang('en')">English</button><button class="lang-pill" data-lang-btn="hi" onclick="setLang('hi')">हिन्दी</button></div>
+<div class="login-screen" id="login-screen" style="display:none"><button class="pwa-float" data-notr onclick="bbInstallApp()">📥 Install App</button><div class="lang-float" data-notr><button class="lang-pill" data-lang-btn="en" onclick="setLang('en')">English</button><button class="lang-pill" data-lang-btn="hi" onclick="setLang('hi')">हिन्दी</button></div>
   <div class="login-logo">⚡ BillBlitz</div>
   <div class="login-sub">Restaurant Management System</div>
   <div class="login-card">
@@ -3425,22 +3426,35 @@ function hasOfflineModeFeature() {
   return !!(clientFeatures && clientFeatures['offline_mode'] === true);
 }
 
+
+// ── PWA install (taskbar / home screen) ───────────────────
+var bbDeferredInstall = null;
+window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); bbDeferredInstall = e; bbInstallUi(); });
+window.addEventListener('appinstalled', function(){ bbDeferredInstall = null; bbInstallUi(); });
+function bbIsStandalone(){ return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; }
+function bbInstallUi(){
+  var show = !!bbDeferredInstall && !bbIsStandalone();
+  var els = document.querySelectorAll('.pwa-float');
+  for (var i = 0; i < els.length; i++) els[i].style.display = show ? 'inline-flex' : 'none';
+}
+function bbInstallApp(){
+  if (!bbDeferredInstall) return;
+  bbDeferredInstall.prompt();
+  bbDeferredInstall.userChoice.then(function(){ bbDeferredInstall = null; bbInstallUi(); });
+}
+
 async function applyOfflineModeFeature() {
   if (!('serviceWorker' in navigator)) return;
   var enabled = hasOfflineModeFeature();
   try {
+    var want = enabled ? 'service-worker.js' : 'sw-lite.js';
     var regs = await navigator.serviceWorker.getRegistrations();
-    if (enabled) {
-      if (regs.length === 0) {
-        await navigator.serviceWorker.register('./service-worker.js');
-      }
-    } else if (regs.length > 0) {
-      for (var i = 0; i < regs.length; i++) { await regs[i].unregister(); }
-      if ('caches' in window) {
-        var keys = await caches.keys();
-        for (var j = 0; j < keys.length; j++) {
-          if (keys[j].indexOf('billblitz-') === 0) await caches.delete(keys[j]);
-        }
+    var has = regs.some(function(r){ var w = r.active || r.waiting || r.installing; return w && w.scriptURL.indexOf(want) >= 0; });
+    if (!has) await navigator.serviceWorker.register('./' + want);
+    if (!enabled && 'caches' in window) {
+      var keys = await caches.keys();
+      for (var j = 0; j < keys.length; j++) {
+        if (keys[j].indexOf('billblitz-') === 0) await caches.delete(keys[j]);
       }
     }
   } catch (e) { /* best effort — never block the app on this */ }
