@@ -3746,6 +3746,9 @@ function finishLogin(role){
   // has permission for it) so staff don't have to re-pair after every
   // app restart. Deliberately not awaited — never block the UI on it.
   btAutoReconnectOnStartup();
+  // Role is known only now — re-apply feature gating so role-dependent
+  // modules (Hotel mode switch) show up right after login.
+  try { applyFeatureGating(); } catch (e) {}
   if(currentRole==='kitchen'){ setPage('kitchen'); }
   else { renderDashboard(); }
   try { updateOutletChip(); } catch (e) {}
