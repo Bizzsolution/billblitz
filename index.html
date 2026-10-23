@@ -846,6 +846,7 @@ table{max-width:100%;}
     <div class="dh-page-title" id="dh-page-title">🏠 Dashboard</div>
   </div>
   <div class="dh-right">
+    <div class="mode-sw" data-notr><button data-mode-btn="restaurant" onclick="setMode('restaurant')" title="Restaurant">🍽️<span> Restaurant</span></button><button data-mode-btn="hotel" onclick="setMode('hotel')" title="Hotel">🏨<span> Hotel</span></button></div>
     <div class="dh-time" id="dh-time"></div>
     <div id="dh-sync" style="font-size:0.72rem;color:rgba(255,255,255,0.4)"></div>
     <span id="dh-role-badge" class="dh-role role-owner">👑 Owner</span>
@@ -870,7 +871,7 @@ body.mode-hotel .bottom-nav .bnav:not(.hnav){display:none !important;}
 body.mode-hotel .bottom-nav .hnav{display:flex !important;}
 body.mode-hotel .sb-rest{display:none !important;}
 body.mode-hotel .sb-hotel{display:block !important;}
-body.mode-hotel .header [onclick="quickBill()"]{display:none;}
+body.mode-hotel .header [onclick="quickBill()"],body.mode-hotel .desktop-header [onclick="quickBill()"]{display:none;}
 @media(max-width:600px){.mode-sw button span{display:none;}}
 .feat-off{display:none !important;}
 .lang-pill{border:1px solid rgba(0,0,0,.18);background:#fff;color:#1A2B3C;border-radius:999px;padding:5px 12px;font-size:.78rem;font-weight:700;cursor:pointer}
