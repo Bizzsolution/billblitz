@@ -575,7 +575,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
      NOTE: uses `td + td` (not :last-child) on purpose — KOT slips render
      single-column rows, and a :last-child rule would wrongly squeeze and
      right-align those too. `td + td` only ever matches a real 2nd column. */
-  .print-bill-wrap table { table-layout: fixed !important; width: 100% !important; }
+  .print-bill-wrap table { table-layout: fixed !important; width: 100% !important; min-width: 0 !important; max-width: 100% !important; }
+  .print-bill-wrap td { border-bottom: none !important; padding: 2px 0 !important; }
   .print-bill-wrap td + td { width: 38% !important; text-align: right !important; }
 }
 .print-bill-wrap {
@@ -586,7 +587,8 @@ tr:nth-child(even) td{background:#FFFFFF;}
 .print-bill-wrap .pc { text-align:center; font-size:12px; margin:2px 0; }
 .print-bill-wrap hr { border:none; border-top:1px dashed #000; margin:5px 0; }
 .print-bill-wrap hr.s { border-top:2px solid #000; }
-.print-bill-wrap table { width:100%; border-collapse:collapse; }
+.print-bill-wrap table { width:100%; border-collapse:collapse; min-width:0; }
+.print-bill-wrap td { border-bottom:none; }
 .print-bill-wrap td { font-size:12px; padding:2px 0; }
 
 /* ══ PROFESSIONAL A4 INVOICE (Banquet) ═══════════════════ */
