@@ -561,15 +561,16 @@ tr:nth-child(even) td{background:#FFFFFF;}
      a thermal page's printable area, which is what clipped the right-hand
      price column. `max-width:100%` keeps it safe on very narrow rolls too. */
   .print-bill-wrap {
-    width: 70mm !important;
+    width: var(--pb-w, 72mm) !important;
     max-width: 100% !important;
     margin: 0 auto !important;
-    font-size: 11px !important;
+    font-size: var(--pb-fs, 14px) !important;
+    font-weight: var(--pb-fw, 600) !important;
     box-sizing: border-box !important;
   }
-  .print-bill-wrap td { font-size: 10.5px !important; word-break: break-word; }
-  .print-bill-wrap h2 { font-size: 13px !important; }
-  .print-bill-wrap .pc { font-size: 10px !important; }
+  .print-bill-wrap td { font-size: var(--pb-fs, 14px) !important; word-break: break-word; }
+  .print-bill-wrap h2 { font-size: calc(var(--pb-fs, 14px) * 1.35) !important; }
+  .print-bill-wrap .pc { font-size: var(--pb-fs, 14px) !important; }
   /* Never let a long item name push the price column off the page.
      NOTE: uses `td + td` (not :last-child) on purpose — KOT slips render
      single-column rows, and a :last-child rule would wrongly squeeze and
@@ -1724,6 +1725,11 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
             <option value="80">80mm (Standard)</option>
           </select>
           <button class="btn btn-sm btn-outline" onclick="showBtHelp()" style="color:#fff">❓</button>
+        </div>
+        <div class="bt-paper-row">
+          <span style="font-size:0.8rem;font-weight:700;color:rgba(255,255,255,0.5)">🖨️ PC/Browser print:</span>
+          <select class="bt-paper-sel" id="pr-paper" onchange="setPrintPrefs()"><option value="58">58mm</option><option value="80">80mm</option><option value="a4">A4 / Normal</option></select>
+          <select class="bt-paper-sel" id="pr-fs" onchange="setPrintPrefs()"><option value="12">Font: Normal</option><option value="14">Font: Large</option><option value="16">Font: X-Large</option><option value="18">Font: XX-Large</option></select>
         </div>
         <div class="bt-print-btns" id="bt-print-btns" style="display:none">
           <button class="btn btn-outline" style="color:#fff" onclick="btPrintSalesReport()">📊 Sales Report</button>
@@ -5352,7 +5358,7 @@ function htOpenStay(id){
       + '<button class="btn btn-outline" onclick="htDiscountModal(\'' + id + '\')">🏷️ Discount</button></div>'
       + '<button class="btn btn-primary btn-full" style="margin-bottom:8px" onclick="htCheckoutModal(\'' + id + '\')">🧾 Check-out & Invoice</button>'
     : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-      + '<button class="btn btn-primary" onclick="htPrintInvoice(\'' + id + '\')">🖨️ Print Invoice</button>'
+      + '<button class="btn btn-primary" onclick="htPrintInvoice(\'' + id + '\')">🖨️ Print A4 Invoice</button><button class="btn btn-outline" onclick="htPrintInvoice(\'' + id + '\',\'80\')">🧾 80mm Slip</button>'
       + '<button class="btn btn-green" onclick="htWhatsApp(\'' + id + '\')">📲 WhatsApp</button></div>'
       + (b.balance > 0.5 ? '<button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="htPayModal(\'' + id + '\')">💰 Receive Due ' + fmt(b.balance) + '</button>' : '');
   document.getElementById('modal-body').innerHTML = '<div class="modal-handle"></div><div class="modal-title">🏨 Stay Details</div>' + head
@@ -5518,13 +5524,14 @@ function htInvoiceModal(id){
   var s = htStay(id); if (!s) return;
   document.getElementById('modal-body').innerHTML = '<div class="modal-handle"></div><div class="modal-title">🧾 Invoice ' + esc(s.invoiceNo || '') + '</div>'
     + '<div class="card" style="margin-bottom:10px"><div class="card-body">' + htBillRows(s, htBill(s)) + '</div></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><button class="btn btn-primary" onclick="htPrintInvoice(\'' + id + '\')">🖨️ Print Invoice</button><button class="btn btn-green" onclick="htWhatsApp(\'' + id + '\')">📲 WhatsApp</button></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><button class="btn btn-primary" onclick="htPrintInvoice(\'' + id + '\')">🖨️ Print A4 Invoice</button><button class="btn btn-outline" onclick="htPrintInvoice(\'' + id + '\',\'80\')">🧾 80mm Slip</button><button class="btn btn-green" onclick="htWhatsApp(\'' + id + '\')">📲 WhatsApp</button></div>'
     + '<button class="btn btn-outline btn-full" onclick="closeModal()">Close</button>';
   openModal();
 }
 
 // ── Invoice (print) & WhatsApp ───────────────────────────
-function htInvoiceHtml(s){
+function htInvoiceHtml(s, mode){
+  var thermal = (mode === '80');
   var b = htBill(s), info = (db.settings && db.settings.restInfo) || {}, c = htCfg();
   var hname = c.name || info.name || 'Hotel', g = s.guest, half = ht2(b.gstPct / 2);
   var lines = [];
@@ -5537,7 +5544,7 @@ function htInvoiceHtml(s){
   Object.keys(b.taxByPct).forEach(function(p){ var t = b.taxByPct[p], hp = ht2(p / 2); if (t) taxHtml += '<tr><td colspan="4" style="text-align:right">CGST @ ' + hp + '% (Room)</td><td style="text-align:right">' + fmt(t / 2) + '</td></tr><tr><td colspan="4" style="text-align:right">SGST @ ' + hp + '% (Room)</td><td style="text-align:right">' + fmt(t / 2) + '</td></tr>'; });
   if (b.extTax) taxHtml += '<tr><td colspan="4" style="text-align:right">GST on extra charges (CGST + SGST)</td><td style="text-align:right">' + fmt(b.extTax) + '</td></tr>';
   var payHtml = (s.payments || []).map(function(p){ return '<tr><td colspan="4" style="text-align:right">Received — ' + esc(p.note || 'Payment') + ' (' + esc(p.mode) + ', ' + htD(p.date) + ')</td><td style="text-align:right">-' + fmt(p.amount) + '</td></tr>'; }).join('');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ' + esc(s.invoiceNo || '') + '</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px;color:#1A2B3C;padding:20px;max-width:760px;margin:0 auto}.h{text-align:center;border-bottom:2px solid #1A2B3C;padding-bottom:10px;margin-bottom:12px}.hn{font-size:20px;font-weight:800}.t{font-size:14px;font-weight:800;color:#2563EB;margin-top:6px}.g{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap}.g>div{flex:1;min-width:220px;background:#F7F9FF;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse}th{background:#1A2B3C;color:#fff;padding:7px;text-align:left;font-size:11px}td{padding:6px 7px;border-bottom:1px solid #E5E7EB}.tot td{font-weight:800;font-size:14px;border-top:2px solid #1A2B3C}.f{text-align:center;color:#9CA3AF;font-size:10px;margin-top:18px;border-top:1px solid #E5E7EB;padding-top:8px}@media print{@page{margin:8mm}button{display:none}}</style></head><body>'
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ' + esc(s.invoiceNo || '') + '</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>' + (thermal ? '@page{size:auto;margin:3mm}body{width:72mm!important;max-width:72mm!important;padding:0!important;font-size:12px!important;font-weight:600}.g{display:block!important}.g>div{min-width:0!important;margin-bottom:6px}th,td{padding:3px 2px!important;font-size:11px!important}.hn{font-size:16px!important}' : '@page{size:A4;margin:12mm}') + '*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px;color:#1A2B3C;padding:20px;max-width:760px;margin:0 auto}.h{text-align:center;border-bottom:2px solid #1A2B3C;padding-bottom:10px;margin-bottom:12px}.hn{font-size:20px;font-weight:800}.t{font-size:14px;font-weight:800;color:#2563EB;margin-top:6px}.g{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap}.g>div{flex:1;min-width:220px;background:#F7F9FF;border-radius:8px;padding:10px}table{width:100%;border-collapse:collapse}th{background:#1A2B3C;color:#fff;padding:7px;text-align:left;font-size:11px}td{padding:6px 7px;border-bottom:1px solid #E5E7EB}.tot td{font-weight:800;font-size:14px;border-top:2px solid #1A2B3C}.f{text-align:center;color:#9CA3AF;font-size:10px;margin-top:18px;border-top:1px solid #E5E7EB;padding-top:8px}@media print{@page{margin:8mm}button{display:none}}</style></head><body>'
     + '<div class="h"><div class="hn">' + esc(hname) + '</div><div>' + esc(info.addr || '') + (info.city ? ', ' + esc(info.city) : '') + '</div><div>' + (info.phone ? 'Ph: ' + esc(info.phone) : '') + (info.gst ? ' · GSTIN: ' + esc(info.gst) : '') + '</div><div class="t">TAX INVOICE</div></div>'
     + '<div class="g"><div><b>Guest</b><br>' + esc(g.name) + '<br>' + esc(g.phone) + (g.address ? '<br>' + esc(g.address) : '') + (g.idNo ? '<br>' + esc(g.idType) + ': ' + esc(g.idNo) : '') + (g.gstin ? '<br>GSTIN: ' + esc(g.gstin) : '') + '</div>'
     + '<div><b>Invoice No:</b> ' + esc(s.invoiceNo || '—') + '<br><b>Date:</b> ' + htD(s.checkOut ? htDateStr(s.checkOut) : htToday()) + '<br><b>Room:</b> ' + esc(s.roomName) + '<br><b>Check-in:</b> ' + htD(htInDate(s)) + '<br><b>Check-out:</b> ' + htD(s.checkOut ? htDateStr(s.checkOut) : s.expectedOut) + '<br><b>Guests:</b> ' + (g.pax || 1) + '</div></div>'
@@ -5547,10 +5554,10 @@ function htInvoiceHtml(s){
     + '<div class="f">Thank you for staying with us! This is a computer generated invoice. Powered by BillBlitz</div>'
     + '<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>';
 }
-function htPrintInvoice(id){
+function htPrintInvoice(id, mode){
   var s = htStay(id); if (!s) return;
   var w = window.open('', '_blank'); if (!w) { toast('Allow popups to print!', '#FF6B35'); return; }
-  w.document.write(htInvoiceHtml(s)); w.document.close();
+  w.document.write(htInvoiceHtml(s, mode)); w.document.close();
 }
 function htWhatsApp(id){
   var s = htStay(id); if (!s) return;
@@ -13993,11 +14000,25 @@ async function btConnect() {
         '00001101-0000-1000-8000-00805f9b34fb',
         '0000fff0-0000-1000-8000-00805f9b34fb',
         '0000fee7-0000-1000-8000-00805f9b34fb',
+        '0000ffe5-0000-1000-8000-00805f9b34fb',
+        '0000ae00-0000-1000-8000-00805f9b34fb',
+        '0000ae30-0000-1000-8000-00805f9b34fb',
+        '0000fe59-0000-1000-8000-00805f9b34fb',
+        '0000ff12-0000-1000-8000-00805f9b34fb',
+        '0000fff6-0000-1000-8000-00805f9b34fb',
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+        'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
+        '0000180a-0000-1000-8000-00805f9b34fb',
       ])
     });
 
     btDevice.addEventListener('gattserverdisconnected', btDisconnected);
-    var server = await btDevice.gatt.connect();
+    var server = null, connErr = null;
+    for (var tryN = 0; tryN < 3 && !server; tryN++) {
+      try { server = await btDevice.gatt.connect(); }
+      catch (ce) { connErr = ce; btSetUI('connecting', btDevice.name||'Printer', 'Retry ' + (tryN + 1) + '/3...'); await new Promise(function(r){ setTimeout(r, 700); }); }
+    }
+    if (!server) throw connErr || new Error('GATT connect nahi hua');
     btSetUI('connecting', btDevice.name||'Printer','Getting service...');
 
     // Try each service/char combo
@@ -14049,7 +14070,10 @@ async function btConnect() {
     btConnected = false; btChar = null;
     if(err.name==='NotFoundError') btSetUI('','No printer selected','Tap Connect to scan');
     else if(err.name==='SecurityError') { btSetUI('error','Permission denied','HTTPS required'); toast('❌ HTTPS chahiye!','#FF6B35'); }
-    else { btSetUI('error','Failed',''+err.message); toast('❌ '+err.message,'#FF6B35'); }
+    else {
+      btSetUI('error','Failed',''+err.message); toast('❌ '+err.message,'#FF6B35');
+      try { showBtHelp(); } catch (e2) {}
+    }
   }
 }
 
@@ -14268,10 +14292,29 @@ function showPrinterModal() {
     + '</select>'
     + '<button class="btn btn-sm btn-outline" onclick="showBtHelp()" style="color:#fff">❓</button>'
     + '</div>'
+    + '<div class="bt-paper-row"><span style="font-size:0.8rem;font-weight:700;color:rgba(255,255,255,0.5)">🖨️ PC print:</span>'
+    + '<select class="bt-paper-sel" id="pr-paper" onchange="setPrintPrefs()"><option value="58">58mm</option><option value="80">80mm</option><option value="a4">A4 / Normal</option></select>'
+    + '<select class="bt-paper-sel" id="pr-fs" onchange="setPrintPrefs()"><option value="12">Font: Normal</option><option value="14">Font: Large</option><option value="16">Font: X-Large</option><option value="18">Font: XX-Large</option></select></div>'
     + '</div>'
     + '<button class="btn btn-outline btn-full" onclick="closeModal()">Close</button>';
-  openModal();
+  openModal(); syncPrintPrefsUi();
 }
+
+// ── Browser/PC receipt print size (paper width + font) ──────
+var PR_W = {'58':'48mm','80':'72mm','a4':'110mm'};
+function getPrintPrefs(){ var p = '80', f = '14'; try { p = localStorage.getItem('bb-pr-paper') || '80'; f = localStorage.getItem('bb-pr-fs') || '14'; } catch(e){} return {paper: p, fs: f}; }
+function applyPrintPrefs(){
+  var pr = getPrintPrefs(), r = document.documentElement.style;
+  r.setProperty('--pb-w', PR_W[pr.paper] || '72mm'); r.setProperty('--pb-fs', pr.fs + 'px'); r.setProperty('--pb-fw', '600');
+}
+function syncPrintPrefsUi(){ var pr = getPrintPrefs(); ['pr-paper','pr-fs'].forEach(function(id){ var e = document.getElementById(id); if (e) e.value = id === 'pr-paper' ? pr.paper : pr.fs; }); }
+function setPrintPrefs(){
+  var a = document.getElementById('pr-paper'), b = document.getElementById('pr-fs');
+  try { if (a) localStorage.setItem('bb-pr-paper', a.value); if (b) localStorage.setItem('bb-pr-fs', b.value); } catch(e){}
+  applyPrintPrefs(); toast('🖨️ Print size saved', '#00A878');
+}
+applyPrintPrefs();
+document.addEventListener('DOMContentLoaded', syncPrintPrefsUi);
 
 function btSetPaper(w) {
   btPaper=parseInt(w);
@@ -14427,6 +14470,14 @@ function showBtHelp() {
     '<div style="font-size:0.83rem;line-height:1.8">'+
     '✅ Android phone or laptop<br>✅ Chrome browser<br>'+
     '✅ HTTPS URL (GitHub Pages ✅)<br>✅ Bluetooth ON<br>✅ ESC/POS thermal printer</div></div>'+
+    '<div style="background:#FEF2F2;border-radius:12px;padding:14px;margin-bottom:12px">'+
+    '<div style="font-weight:700;color:#B91C1C;margin-bottom:6px">💻 PC par connect nahi ho raha?</div>'+
+    '<div style="font-size:0.8rem;line-height:1.7">'+
+    '• Sirf <b>BLE (Bluetooth 4.0+)</b> printers connect hote hain. Purane "Classic Bluetooth" printers browser mein dikhte hi nahi.<br>'+
+    '• Windows Settings → Bluetooth ON rakhein. Printer ko Windows se pehle <b>Remove</b> karein (agar pair hai), phir app se Connect dabayein.<br>'+
+    '• Printer ON ho aur kisi aur phone/PC se connected na ho.<br>'+
+    '• Sirf Chrome/Edge chalta hai (Firefox/Safari nahi).<br>'+
+    '• <b>USB ya Windows-installed printer</b> ho to Bluetooth ki zaroorat nahi: Bill par normal 🖨️ Print dabayein, aur Print Size Settings se Paper (58/80mm) + Font chunein. Chrome print box mein Margins = Default/None, Scale = 100% rakhein.</div></div>'+
     '<div style="background:#EEF2FF;border-radius:12px;padding:14px;margin-bottom:12px">'+
     '<div style="font-weight:700;color:#2563EB;margin-bottom:6px">🖨️ Recommended Printers</div>'+
     '<div style="font-size:0.83rem;line-height:1.8">'+
