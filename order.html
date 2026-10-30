@@ -39,6 +39,16 @@ body{font-family:'Poppins',sans-serif;background:#F5F7FB;color:#1A2B3C;padding-b
 @keyframes osbpulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 .osb-text{flex:1;color:#475569;font-weight:600;}
 .osb-text b{color:#1A2B3C;}
+.osb-items{font-size:.72rem;color:#64748B;font-weight:500;margin-top:3px;line-height:1.4;}
+.osb-bill{margin:8px 0 6px;border:1.5px solid #00C896;border-radius:12px;background:#F0FDF9;padding:10px 12px;font-size:.78rem;color:#1A2B3C;}
+.osb-bill summary{cursor:pointer;font-weight:800;list-style:none;display:flex;justify-content:space-between;gap:8px;}
+.osb-bill summary::-webkit-details-marker{display:none;}
+.osb-bill table{width:100%;border-collapse:collapse;margin-top:8px;min-width:0;}
+.osb-bill td{padding:3px 0;font-size:.76rem;border:none;vertical-align:top;}
+.osb-bill td:last-child{text-align:right;white-space:nowrap;}
+.osb-bill .osb-tot td{border-top:1px dashed #94D3C2;padding-top:6px;font-weight:800;font-size:.85rem;}
+.osb-bill .osb-meta{margin-top:6px;color:#64748B;font-size:.7rem;}
+
 
 /* CATEGORY TABS */
 .cat-tabs{display:flex;gap:8px;overflow-x:auto;padding:12px 16px;background:#fff;border-bottom:1px solid #EEF1F6;position:sticky;top:82px;z-index:40;scrollbar-width:none;}
@@ -254,21 +264,34 @@ function loadScript(src, cb) {
   document.head.appendChild(s);
 }
 
+// ── Firebase App Check (anti-bot / anti-script protection) ──────
+// Paste the reCAPTCHA v3 SITE key from Firebase Console → App Check here.
+// Empty = App Check off (app works exactly as before).
+var BB_APPCHECK_SITE_KEY = '';
+function bbAppCheck(base, done){
+  if (!BB_APPCHECK_SITE_KEY) { done(); return; }
+  var s = document.createElement('script');
+  s.src = base + 'firebase-app-check-compat.js';
+  s.onload = function(){ try { firebase.appCheck().activate(BB_APPCHECK_SITE_KEY, true); } catch (e) { console.log('AppCheck', e); } done(); };
+  s.onerror = function(){ done(); };
+  document.head.appendChild(s);
+}
+
 function initFirebase() {
   if(!restaurantId) { showError('Invalid QR code — restaurant ID missing.'); return; }
   var base = 'https://www.gstatic.com/firebasejs/10.7.1/';
   loadScript(base + 'firebase-app-compat.js', function(){
     loadScript(base + 'firebase-firestore-compat.js', function(){
       loadScript(base + 'firebase-auth-compat.js', function(){
-        try {
-          firebase.initializeApp(FIREBASE_CONFIG);
+        try { firebase.initializeApp(FIREBASE_CONFIG); } catch(e){ showError('Setup error: '+e.message); return; }
+        bbAppCheck(base, function(){ try {
           firestoreDb = firebase.firestore();
           fbAuth = firebase.auth();
           fbAuth.signInAnonymously().then(function(){
             isReady = true;
             loadRestaurantData();
           }).catch(function(e){ showError('Connection error: '+e.message); });
-        } catch(e){ showError('Setup error: '+e.message); }
+        } catch(e){ showError('Setup error: '+e.message); } });
       });
     });
   });
@@ -314,6 +337,7 @@ async function loadRestaurantData() {
     document.getElementById('hdr').style.display = 'block';
     document.getElementById('cat-tabs').style.display = 'flex';
     document.getElementById('menu-search-wrap').style.display = 'block';
+    restoreMyOrders();
 
     if(!menu.length) {
       document.getElementById('menu-wrap').innerHTML =
@@ -602,24 +626,60 @@ async function confirmPayment(){
 // Previously only ONE order's status was ever tracked (via a single
 // statusUnsub), and going back to the menu meant losing all visibility
 // into orders already placed.
-var myOrders = []; // {id, status, unsub}
+var myOrders = []; // {id, status, unsub, ts}
 
-function trackOrderStatus(orderId) {
-  var entry = { id: orderId, status: 'pending', unsub: null };
+// Remember this device's orders so status survives closing the tab /
+// reopening the table link. Stored per restaurant + table, kept 12 hours.
+var MYORD_KEEP_MS = 12 * 3600 * 1000;
+function myOrdersKey(){ return 'bb-myorders-' + restaurantId + '-' + (tableId || 'takeaway'); }
+function saveMyOrders(){
+  try { localStorage.setItem(myOrdersKey(), JSON.stringify(myOrders.map(function(o){ return { id:o.id, ts:o.ts }; }))); } catch(e){}
+}
+function dropMyOrder(id){
+  for (var i = 0; i < myOrders.length; i++) {
+    if (myOrders[i].id === id) {
+      try { if (myOrders[i].unsub) myOrders[i].unsub(); } catch(e){}
+      myOrders.splice(i, 1);
+      break;
+    }
+  }
+  saveMyOrders();
+  renderOrderStatusBar();
+}
+function restoreMyOrders(){
+  var saved = [];
+  try { saved = JSON.parse(localStorage.getItem(myOrdersKey()) || '[]'); } catch(e){}
+  if (!Array.isArray(saved)) return;
+  var cutoff = Date.now() - MYORD_KEEP_MS;
+  saved.forEach(function(x){
+    if (x && typeof x.id === 'string' && x.ts > cutoff) trackOrderStatus(x.id, x.ts);
+  });
+  saveMyOrders(); // also prunes expired entries
+}
+
+function trackOrderStatus(orderId, ts) {
+  for (var k = 0; k < myOrders.length; k++) if (myOrders[k].id === orderId) return;
+  var entry = { id: orderId, status: 'pending', unsub: null, ts: ts || Date.now() };
   myOrders.push(entry);
+  saveMyOrders();
   entry.unsub = firestoreDb.collection('restaurants').doc(restaurantId)
     .collection('qrOrders').doc(orderId)
     .onSnapshot(function(doc){
-      if(!doc.exists) return;
+      if(!doc.exists) { dropMyOrder(orderId); return; }
       var data = doc.data();
       entry.status = data.status || 'pending';
       entry.pay = data.paymentStatus || '';
+      entry.items = Array.isArray(data.items) ? data.items : [];
+      entry.total = Number(data.total) || 0;
+      entry.bill = (data.bill && typeof data.bill === 'object') ? data.bill : null;
       renderOrderStatusBar();
       // Keep the full-screen confirmation view in sync too, if it's
       // currently showing for this exact order.
       if (currentOrderId === orderId && document.getElementById('confirm-screen').classList.contains('show')) {
         var statusEl = document.getElementById('confirm-status');
-        if(entry.status === 'accepted') {
+        if(entry.status === 'billed') {
+          statusEl.innerHTML = '<span style="color:#00C896">🧾</span><span>Bill ready hai — neeche dekhein.</span>';
+        } else if(entry.status === 'accepted') {
           statusEl.innerHTML = '<span style="color:#00C896">✅</span><span>Order accepted! Ban raha hai...</span>';
         } else if(entry.status === 'declined') {
           statusEl.innerHTML = '<span style="color:#EF476F">✕</span><span>Order decline ho gaya. Staff se baat karein.</span>';
@@ -631,25 +691,59 @@ function trackOrderStatus(orderId) {
           statusEl.innerHTML = '<div class="pulse-dot"></div><span>Waiting for confirmation...</span>';
         }
       }
-    });
+    }, function(){ dropMyOrder(orderId); });
 }
 
 // Persistent status bar — visible on the menu-browsing screen too, not
 // just right after placing an order.
+function fmtMoney(n){ n = Number(n)||0; return '₹' + (Math.round(n*100)/100).toFixed(2).replace(/\.00$/,''); }
+var PAY_LABEL = { cash:'Cash', upi:'UPI', card:'Card', mixed:'Split payment', room:'Added to room bill', other:'Other' };
+
 function renderOrderStatusBar() {
   var bar = document.getElementById('order-status-bar');
   if (!bar) return;
   if (!myOrders.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   bar.style.display = 'block';
-  bar.innerHTML = myOrders.map(function(o, i){
-    var dotClass = o.status==='accepted' ? 'accepted' : (o.status==='declined' ? 'declined' : 'waiting');
-    var label = o.status==='accepted' ? 'Accepted — ban raha hai'
+  // Keep an open bill open across live re-renders.
+  var openBills = {};
+  Array.prototype.forEach.call(bar.querySelectorAll('details.osb-bill'), function(d){ openBills[d.getAttribute('data-bn')] = d.open; });
+  var html = myOrders.map(function(o, i){
+    var billed = o.status==='billed';
+    var dotClass = (o.status==='accepted' || billed) ? 'accepted' : (o.status==='declined' ? 'declined' : 'waiting');
+    var label = billed ? 'Billed ✅ — bill neeche hai'
+              : o.status==='accepted' ? 'Accepted — ban raha hai'
               : o.status==='declined' ? 'Declined — staff se baat karein'
               : o.pay==='verified' ? 'Payment mil gaya ✅'
               : o.pay==='awaiting_verification' ? 'Payment verify ho raha hai...'
               : 'Waiting for confirmation...';
-    return '<div class="osb-row"><div class="osb-dot '+dotClass+'"></div><div class="osb-text">Order #'+(i+1)+' — <b>'+label+'</b></div></div>';
+    var items = (o.items || []).map(function(it){ return (Number(it.qty)||1) + '× ' + esc(it.name); }).join(', ');
+    return '<div class="osb-row"><div class="osb-dot '+dotClass+'"></div><div class="osb-text">Order #'+(i+1)+' — <b>'+label+'</b>'
+      + (items ? '<div class="osb-items">'+items+(o.total ? ' · <b>'+fmtMoney(o.total)+'</b>' : '')+'</div>' : '')
+      + '</div></div>';
   }).join('');
+  // One bill card per distinct bill (several orders of a table share a bill).
+  var seen = {};
+  myOrders.forEach(function(o){
+    var bl = o.bill;
+    if (!bl || !bl.no || seen[bl.no]) return;
+    seen[bl.no] = true;
+    var rows = (Array.isArray(bl.items) ? bl.items : []).map(function(it){
+      var q = Number(it.qty)||0, pr = Number(it.price)||0;
+      return '<tr><td>'+q+' × '+esc(it.name)+'</td><td>'+fmtMoney(q*pr)+'</td></tr>';
+    }).join('');
+    var extra = '';
+    if (Number(bl.discount) > 0) extra += '<tr><td>Discount</td><td>− '+fmtMoney(bl.discount)+'</td></tr>';
+    if (Number(bl.tax) > 0) extra += '<tr><td>GST'+(Number(bl.taxPct)>0 ? ' ('+esc(String(bl.taxPct))+'%)' : '')+'</td><td>'+fmtMoney(bl.tax)+'</td></tr>';
+    var when = ''; try { when = new Date(bl.date).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){}
+    html += '<details class="osb-bill" data-bn="'+esc(bl.no)+'"'+(openBills[bl.no] !== false ? ' open' : '')+'>'
+      + '<summary><span>🧾 Bill '+esc(bl.no)+'</span><span>'+fmtMoney(bl.total)+'</span></summary>'
+      + '<table>'+rows
+      + '<tr><td>Subtotal</td><td>'+fmtMoney(bl.subtotal)+'</td></tr>'+extra
+      + '<tr class="osb-tot"><td>Total</td><td>'+fmtMoney(bl.total)+'</td></tr></table>'
+      + '<div class="osb-meta">'+esc(when)+(bl.payment ? ' · '+esc(PAY_LABEL[bl.payment] || bl.payment) : '')+'</div>'
+      + '</details>';
+  });
+  bar.innerHTML = html;
 }
 
 function showConfirmation(orderId) {

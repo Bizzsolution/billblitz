@@ -809,6 +809,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
 <script>
 // ═══════════════════════════════════════════════════
 // BILLBLITZ ADMIN PANEL
@@ -833,6 +834,10 @@ let adminData = {
 
 // ══ INIT ══════════════════════════════════════════
 firebase.initializeApp(FIREBASE_CONFIG);
+// Firebase App Check — paste the reCAPTCHA v3 SITE key (Firebase Console →
+// App Check) to turn it on. Empty = off.
+var BB_APPCHECK_SITE_KEY = '';
+try { if (BB_APPCHECK_SITE_KEY && firebase.appCheck) firebase.appCheck().activate(BB_APPCHECK_SITE_KEY, true); } catch (eAc) { console.log('AppCheck', eAc); }
 db_admin = firebase.firestore();
 
 function save() {
@@ -992,6 +997,7 @@ async function syncFromFirebase() {
     save();
     renderDashboard();
     toast('☁️ Synced!','#00C896');
+    sweepExpiredClientDevices().catch(function(){});
   } catch(e) {
     console.log('Firebase sync:', e);
   }
@@ -1095,8 +1101,8 @@ function showClientKeyResult(client) {
     <div class="key-display">${esc(client.key)}</div>
     <div style="font-size:0.82rem;color:rgba(255,255,255,0.5);margin-bottom:14px">Expiry: ${fmtDate(client.expiry)} · Plan: ${client.plan}</div>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-gold btn-full" onclick="whatsappKey('${client.key}','${esc(client.name)}','${fmtDate(client.expiry)}','${client.phone}')">📲 Share on WhatsApp</button>
-      <button class="btn btn-outline btn-full" onclick="copyKey('${client.key}')">📋 Copy Key</button>
+      <button class="btn btn-gold btn-full" onclick="whatsappKey(${jsArg(client.key)},${jsArg(client.name)},${jsArg(fmtDate(client.expiry))},${jsArg(client.phone)})">📲 Share on WhatsApp</button>
+      <button class="btn btn-outline btn-full" onclick="copyKey(${jsArg(client.key)})">📋 Copy Key</button>
       <button class="btn btn-outline btn-full" onclick="closeModal('modal-view-client');renderClients()">✅ Done</button>
     </div>`;
   document.getElementById('modal-view-client').classList.add('open');
@@ -1209,7 +1215,7 @@ function viewClient(clientId) {
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-gold btn-full" onclick="closeModal('modal-view-client');extendClient('${c.id}')">🔄 Extend / Renew</button>
       <button class="btn btn-blue btn-full" data-id="${esc(c.id)}" onclick="newInvoiceForClient(this.dataset.id)">🧾 Create Invoice</button>
-      <button class="btn btn-outline btn-full" onclick="whatsappKey('${c.key}','${esc(c.name)}','${fmtDate(c.expiry)}','${c.phone}')">📲 Send Key WhatsApp</button>
+      <button class="btn btn-outline btn-full" onclick="whatsappKey(${jsArg(c.key)},${jsArg(c.name)},${jsArg(fmtDate(c.expiry))},${jsArg(c.phone)})">📲 Send Key WhatsApp</button>
       <button class="btn btn-outline btn-full" onclick="closeModal('modal-view-client')">Close</button>
     </div>`;
   document.getElementById('modal-view-client').classList.add('open');
@@ -1267,12 +1273,18 @@ function saveExtend(clientId) {
   toast('✅ Extended to '+fmtDate(c.expiry),'#00C896');
 }
 
-function toggleBlock(clientId) {
+async function toggleBlock(clientId) {
   const c = adminData.clients.find(x=>x.id===clientId); if(!c) return;
   c.status = c.status==='blocked' ? 'active' : 'blocked';
   if(c.key) {
-    pushToFirebase('licenses', c.key, {status:c.status});
-    pushToFirebase('admin_clients', c.id, {status:c.status});
+    // License first, so a removed device can't re-join in between.
+    await pushToFirebase('licenses', c.key, {status:c.status});
+    await pushToFirebase('admin_clients', c.id, {status:c.status});
+    // SECURITY: the cloud rules only check "is this device a member", so a
+    // blocked client's already-joined devices would keep full cloud access.
+    // Removing their member docs cuts that off instantly; on Unblock they
+    // re-join by themselves the next time the app opens.
+    if (c.status === 'blocked') await purgeClientDevices(c);
   }
   save(); renderClients();
   toast((c.status==='blocked'?'🚫 Blocked: ':'✅ Unblocked: ')+c.name);
@@ -1293,12 +1305,20 @@ function generateRestaurantId() {
   return 'r_' + hex;
 }
 
+// Cryptographically secure random index (license / group keys are passwords;
+// Math.random() is predictable). 256 % 32 === 0, so no modulo bias.
+function bbRandIndex(n) {
+  var b = new Uint8Array(1);
+  (window.crypto || window.msCrypto).getRandomValues(b);
+  return b[0] % n;
+}
+
 function generateLicenseKey() {
   const prefix = adminData.settings.prefix || 'BB';
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let key = prefix+'-';
   for(let seg=0;seg<3;seg++){
-    for(let i=0;i<4;i++) key+=chars[Math.floor(Math.random()*chars.length)];
+    for(let i=0;i<4;i++) key+=chars[bbRandIndex(chars.length)];
     if(seg<2) key+='-';
   }
   return key;
@@ -1343,8 +1363,8 @@ function generateKey() {
   document.getElementById('gen-key-result').innerHTML = `
     <div class="key-display">${key}</div>
     <div style="text-align:center;margin-bottom:10px;font-size:0.82rem;color:rgba(255,255,255,0.5)">Expiry: ${fmtDate(expiry)}</div>
-    <button class="btn btn-outline btn-full" onclick="copyKey('${key}')">📋 Copy Key</button>
-    ${c?`<button class="btn btn-gold btn-full" style="margin-top:6px" onclick="whatsappKey('${key}','${esc(c.name)}','${fmtDate(expiry)}','${c.phone||''}')">📲 WhatsApp</button>`:''}`;
+    <button class="btn btn-outline btn-full" onclick="copyKey(${jsArg(key)})">📋 Copy Key</button>
+    ${c?`<button class="btn btn-gold btn-full" style="margin-top:6px" onclick="whatsappKey(${jsArg(key)},${jsArg(c.name)},${jsArg(fmtDate(expiry))},${jsArg(c.phone||'')})">📲 WhatsApp</button>`:''}`;
   
   toast('✅ Key generated!','#00C896');
   logActivity('Key generated for '+(c?c.name:'unknown'));
@@ -1542,6 +1562,9 @@ function fmtDate(d) {
   try { return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
   catch(e){ return d; }
 }
+// Safe value for an inline onclick="fn(...)" argument (quotes in a name like
+// "Raju's Dhaba" used to break the button / allow script injection).
+function jsArg(s) { return esc(JSON.stringify(String(s == null ? '' : s))); }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function copyKey(key) {
   navigator.clipboard.writeText(key).then(()=>toast('📋 Key copied!','#00C896')).catch(()=>{
@@ -1643,6 +1666,34 @@ function computeRestaurantId(licenseKey) {
 // fall back to the legacy derivation. Admin tools (menu updater, PIN reset)
 // MUST use this, otherwise they'd read/write the wrong path for any client
 // created after the random-id change.
+// Removes every joined device of a client (members/*). Not a "revoke": the
+// devices can re-join automatically once the license is active again.
+async function purgeClientDevices(c) {
+  try {
+    if (!c || !c.key) return 0;
+    var rid = await resolveRestaurantIdAdmin(c.key);
+    if (!rid) return 0;
+    var n = await deleteCollectionInBatches(db_admin.collection('restaurants').doc(rid).collection('members'));
+    logActivity('Devices disconnected (' + n + '): ' + c.name);
+    return n;
+  } catch (e) { console.log('purgeClientDevices', e); return 0; }
+}
+// Expired (past the 3-day grace) clients: disconnect their devices once per
+// expiry date. Runs quietly after each admin sync.
+async function sweepExpiredClientDevices() {
+  var now = Date.now();
+  for (var i = 0; i < adminData.clients.length; i++) {
+    var c = adminData.clients[i];
+    if (!c.key || !c.expiry || c.devicesPurgedFor === c.expiry) continue;
+    var exp = new Date(c.expiry).getTime();
+    if (!(exp + 3 * 86400000 < now)) continue;
+    await purgeClientDevices(c);
+    c.devicesPurgedFor = c.expiry;
+    pushToFirebase('admin_clients', c.id, { devicesPurgedFor: c.expiry });
+  }
+  save();
+}
+
 async function resolveRestaurantIdAdmin(licenseKey) {
   try {
     var doc = await db_admin.collection('licenses').doc(licenseKey).get();
@@ -1899,7 +1950,7 @@ async function executeClientDeletion() {
 
       if (restaurantId) {
         var restRef = db_admin.collection('restaurants').doc(restaurantId);
-        var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts', 'members', 'revoked'];
+        var subcollections = ['orders', 'customers', 'meta', 'qrOrders', 'kitchenOrders', 'ownerAlerts', 'members', 'revoked', 'expenseMonths', 'purchaseMonths', 'stayMonths'];
         for (var i = 0; i < subcollections.length; i++) {
           var name = subcollections[i];
           log('🗑️ ' + name + ' delete ho raha hai...');
@@ -3767,7 +3818,7 @@ async function rcpApply() {
 // normal client (own license, restaurantId, plan, features).
 function ogGenKey() {
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k = 'BBG-';
-  for (var s = 0; s < 2; s++) { for (var i = 0; i < 4; i++) k += chars[Math.floor(Math.random() * chars.length)]; if (s < 1) k += '-'; }
+  for (var s = 0; s < 2; s++) { for (var i = 0; i < 4; i++) k += chars[bbRandIndex(chars.length)]; if (s < 1) k += '-'; }
   return k;
 }
 function ogFind(key) { return (adminData.groups || []).find(function(g){ return g.key === key; }); }
