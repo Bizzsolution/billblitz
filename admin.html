@@ -349,7 +349,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
           <div class="card-hdr"><div class="card-title">🛠️ Client Support Tools</div></div>
           <div class="card-body">
             <div style="font-size:0.78rem;color:rgba(255,255,255,0.5);margin-bottom:10px">Jab client PIN bhool jaaye ya locked ho jaaye, yahan se reset karein.</div>
-            <button class="btn btn-outline btn-full" onclick="resetClientPins()">🔑 Reset Owner/Cashier PIN (default: 1234/0000)</button>
+            <button class="btn btn-outline btn-full" onclick="resetClientPins()">🔑 Reset Client Login (Owner: owner / 1234)</button>
           </div>
         </div>
 
@@ -1169,6 +1169,7 @@ function renderClients() {
       + '<button class="btn btn-sm btn-blue" data-id="'+cid+'" onclick="viewClient(this.dataset.id)">View</button>'
       + '<button class="btn btn-sm btn-gold" data-id="'+cid+'" onclick="extendClient(this.dataset.id)">Extend</button>'
       + '<button class="btn btn-sm '+blockBtnClass+'" data-id="'+cid+'" onclick="toggleBlock(this.dataset.id)">'+blockBtnText+'</button>'
+      + '<button class="btn btn-sm btn-outline" data-id="'+cid+'" onclick="resetClientLoginById(this.dataset.id)" title="Client ka login reset karein">🔑 Login Reset</button>'
       + '</div></td></tr>';
   }).join('');
 }
@@ -2032,20 +2033,31 @@ function saveAdminAiKeys() {
   toast('✅ Keys saved! Provider: ' + (provider === 'groq' ? 'Groq' : 'Gemini'), '#00C896');
 }
 
-async function resetClientPins() {
-  if (!muCurrentRestaurantId) { toast('Pehle client select karein!', '#FF6B35'); return; }
-  if (!confirm('Is client ka Owner PIN 1234 aur Cashier PIN 0000 (default) pe reset karna hai?')) return;
+// Reset straight from the Clients list (no need to open Menu Upload first).
+async function resetClientLoginById(clientId) {
+  var c = adminData.clients.find(function(x){ return x.id === clientId; });
+  if (!c) return;
+  if (!c.key) { toast('Is client ki license key nahi mili!', '#FF6B35'); return; }
+  var rid = await resolveRestaurantIdAdmin(c.key);
+  if (!rid) { toast('Client ka restaurant data nahi mila (app abhi activate nahi hua?)', '#FF6B35'); return; }
+  return resetClientPins(rid, c.name);
+}
+
+async function resetClientPins(ridArg, nameArg) {
+  var rid = (typeof ridArg === 'string' && ridArg) ? ridArg : muCurrentRestaurantId;
+  if (!rid) { toast('Pehle client select karein!', '#FF6B35'); return; }
+  if (!confirm((nameArg ? nameArg + ': ' : '') + 'Is client ke saare login (User ID/Password + PIN) reset karne hain? Owner phir User ID "owner" aur Password "1234" se login karke naye accounts banayega.')) return;
   try {
-    var docRef = db_admin.collection('restaurants').doc(muCurrentRestaurantId).collection('meta').doc('settings');
+    var docRef = db_admin.collection('restaurants').doc(rid).collection('meta').doc('settings');
     var doc = await docRef.get();
     if (doc.exists && doc.data().data) {
       // Clear ONLY the pins field via dot-path update — leaves printer mode,
       // location, attendance rules etc untouched.
-      await docRef.update({ 'data.pins': {}, _updatedAt: new Date().toISOString() });
+      await docRef.update({ 'data.pins': {}, 'data.logins': {}, _updatedAt: new Date().toISOString() });
     } else {
-      await docRef.set({ data: { pins: {} }, _updatedAt: new Date().toISOString() }, { merge: true });
+      await docRef.set({ data: { pins: {}, logins: {} }, _updatedAt: new Date().toISOString() }, { merge: true });
     }
-    toast('✅ PIN reset ho gaya! Client ka Owner PIN ab 1234, Cashier PIN 0000 hai.', '#00C896');
+    toast('✅ Login reset ho gaya! Client ab User ID "owner" + Password "1234" se login karke naye accounts banayega.', '#00C896');
   } catch (e) {
     toast('Reset fail hua: ' + e.message, '#FF6B35');
   }
