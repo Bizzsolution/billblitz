@@ -976,6 +976,44 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
  #login-screen .lg-hero h1,#login-screen .lg-hero p{text-shadow:0 2px 14px rgba(0,0,0,.45)}
  #login-screen .lg-feats div{background:rgba(10,15,28,.45);border-color:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 }
+</style><style id="bb-logo-theme">
+/* logo mark (shared) */
+#login-screen .lg-mark{position:relative;display:inline-flex;align-items:center;justify-content:center}
+#login-screen .lg-mark img{display:block;border-radius:22%;position:relative;z-index:1}
+#login-screen .lg-mark-panel{margin:0 auto 10px}
+#login-screen .lg-mark-panel img{width:92px;height:92px}
+#login-screen .lg-hero-top{display:flex;align-items:center;gap:14px}
+#login-screen .lg-mark-hero img{width:60px;height:60px}
+#login-screen .lg-brand b{display:block;font-size:1.35rem;font-weight:800;letter-spacing:-.3px;color:#fff}
+#login-screen .lg-brand span{display:block;font-size:.76rem;color:#FCD34D;font-weight:700;letter-spacing:.6px;text-transform:uppercase}
+#login-screen .login-logo{font-size:1.9rem;letter-spacing:-.4px}
+@keyframes lgGlow{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
+@media(prefers-reduced-motion:reduce){#login-screen .lg-mark:before{animation:none!important}}
+
+#login-screen .lg-mark:before{content:"";position:absolute;inset:-40px;border-radius:50%;background:radial-gradient(circle,rgba(255,215,0,.6) 0%,rgba(255,193,7,.2) 40%,transparent 70%);animation:lgGlow 3.2s ease-in-out infinite}
+#login-screen .lg-mark:after{content:"";position:absolute;width:260px;height:260px;border-radius:50%;border:1px solid rgba(255,215,0,.25);box-shadow:0 0 0 30px rgba(255,215,0,.05),0 0 0 62px rgba(255,215,0,.03)}
+#login-screen .lg-mark-panel{margin:6px auto 18px}
+#login-screen .lg-mark-panel img{width:110px;height:110px;box-shadow:0 14px 40px rgba(0,0,0,.55)}
+#login-screen .lg-mark-panel:after{width:170px;height:170px}
+#login-screen .login-logo{color:#FFD700;font-size:2.1rem}
+#login-screen .lg-submit{background:linear-gradient(135deg,#FFD700,#F5B400);color:#1A1405;box-shadow:0 8px 22px rgba(245,180,0,.35)}
+#login-screen .lg-field:focus-within{border-color:#E0A800;box-shadow:0 0 0 4px rgba(255,215,0,.22)}
+#login-screen .lg-links a{color:#B07D00}
+@media(min-width:900px){
+ #login-screen .lg-hero{align-items:center;text-align:center}
+ #login-screen .lg-hero-top{flex-direction:column;gap:22px;margin-top:26px}
+ #login-screen .lg-mark-hero img{width:150px;height:150px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+ #login-screen .lg-brand b{font-size:2.3rem}
+ #login-screen .lg-brand span{font-size:.85rem}
+ #login-screen .lg-hero-mid{display:flex;flex-direction:column;align-items:center}
+ #login-screen .lg-eyebrow{display:none}
+ #login-screen .lg-hero h1{font-size:1.6rem;margin-top:0}
+ #login-screen .lg-hero p{margin-left:auto;margin-right:auto}
+ #login-screen .lg-feats{grid-template-columns:repeat(4,1fr);max-width:none;width:100%}
+ #login-screen .lg-feats div{padding:12px 8px}
+ #login-screen .lg-feats span{display:none}
+ #login-screen .lg-mark-panel{display:none}
+}
 </style></head>
 <body>
 
@@ -1046,7 +1084,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
 <!-- LOGIN SCREEN -->
 <div class="login-screen" id="login-screen" style="display:none"><button class="pwa-float" data-notr onclick="bbInstallApp()">📥 Install App</button><div class="lang-float" data-notr><button class="lang-pill" data-lang-btn="en" onclick="setLang('en')">English</button><button class="lang-pill" data-lang-btn="hi" onclick="setLang('hi')">हिन्दी</button></div>
   <div class="lg-shell"><aside class="lg-hero" data-notr>
-    <div class="lg-hero-top"><span class="lg-badge">⚡ BillBlitz</span></div>
+    <div class="lg-hero-top"><div class="lg-mark lg-mark-hero"><img src="icon-512.png" alt="BillBlitz logo" width="64" height="64"/></div><div class="lg-brand"><b>BillBlitz</b><span>Smart Restaurant POS</span></div></div>
     <div class="lg-hero-mid">
       <div class="lg-eyebrow">RESTAURANT MANAGEMENT SYSTEM</div>
       <h1>Fast, simple billing<br>for busy restaurants</h1>
@@ -1059,7 +1097,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
       </div>
     </div>
     <div class="lg-hero-bot">Powered by <b>Vrindam Automation Solution</b></div>
-  </aside><main class="lg-panel"><div class="login-logo">⚡ BillBlitz</div>
+  </aside><main class="lg-panel"><div class="lg-mark lg-mark-panel"><img src="icon-512.png" alt="BillBlitz logo" width="96" height="96"/></div><div class="login-logo">BillBlitz</div>
   <div class="login-sub">Restaurant Management System</div>
   <div class="login-card">
     <div class="login-title">Welcome Back 👋</div>
