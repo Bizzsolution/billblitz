@@ -884,6 +884,98 @@ body.mode-hotel .header [onclick="quickBill()"],body.mode-hotel .desktop-header 
 html[lang="hi"] body{line-height:1.5}
 html[lang="hi"] .bnav{font-size:.58rem}
 html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
+</style>
+<style id="bb-login-v2">
+#login-screen{background:#EEF3FB;padding:0;align-items:stretch;justify-content:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#login-screen .lg-shell{display:flex;width:100%;min-height:100%}
+#login-screen .lg-hero{display:none}
+#login-screen .lg-panel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:58px 14px 22px;min-width:0}
+#login-screen .login-logo{color:#0F1923;font-family:inherit;font-size:1.7rem;font-weight:800;letter-spacing:-.3px;margin-bottom:2px}
+#login-screen .login-sub{color:#5B6B86;font-size:.8rem;margin-bottom:14px}
+#login-screen .login-card{max-width:400px;width:100%;background:#fff;border-radius:22px;padding:22px 20px 18px;box-shadow:0 12px 40px rgba(15,25,35,.10),0 0 0 1px #E3EAF6}
+#login-screen .login-title{font-family:inherit;font-size:1.35rem;font-weight:800;color:#0F1923;letter-spacing:-.2px}
+#login-screen .login-hint{font-size:.78rem;color:#5B6B86;margin:2px 0 14px}
+#login-screen .role-btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;background:#EEF3FB;padding:5px;border-radius:14px}
+#login-screen .role-btn{flex:1 1 calc(50% - 8px);min-width:120px;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 10px;border-radius:11px;border:none;background:transparent;box-shadow:none;text-align:left}
+#login-screen .role-btn .rb-icon{font-size:1.15rem;margin:0}
+#login-screen .role-btn .rb-name{font-size:.84rem;font-weight:700;color:#334155;line-height:1.1}
+#login-screen .role-btn .rb-desc{display:none}
+#login-screen .role-btn.selected{background:#0F1923;box-shadow:0 4px 12px rgba(15,25,35,.25)}
+#login-screen .role-btn.selected .rb-name{color:#fff}
+#login-screen .pin-dots{gap:14px;margin:16px 0;padding:14px;background:#EEF3FB;border-radius:14px}
+#login-screen .pin-dot{width:14px;height:14px;background:#C5D0E4}
+#login-screen .pin-dot.filled{background:#0F766E;transform:scale(1.1)}
+#login-screen .pin-pad{gap:9px}
+#login-screen .pin-key{padding:16px 0;border-radius:14px;border:none;background:#DCE8FB;box-shadow:none;font-size:1.35rem;font-weight:700;color:#0F1923;-webkit-tap-highlight-color:transparent}
+#login-screen .pin-key:active{background:#C3D6F5;transform:scale(.97)}
+#login-screen .pin-key.zero{grid-column:auto}
+#login-screen .pin-key.clr{background:#EEF3FB;color:#5B6B86;font-size:.82rem;font-weight:700}
+#login-screen .pin-key.del{background:#FFE9E3;color:#D9480F}
+#login-screen .login-error{min-height:18px;text-align:center;color:#D92D20;font-weight:600;font-size:.8rem;margin-top:10px}
+#login-screen .lang-float .lang-pill,#login-screen .pwa-float{box-shadow:0 2px 8px rgba(15,25,35,.12)}
+@media(min-width:900px){
+ #login-screen .lg-shell{max-width:1240px;margin:0 auto;padding:60px 36px 28px;gap:28px;align-items:stretch}
+ #login-screen .lg-hero{display:flex;flex-direction:column;justify-content:space-between;flex:1.2;border-radius:24px;padding:30px;color:#fff;position:relative;overflow:hidden;background:radial-gradient(900px 420px at 85% -10%,rgba(15,118,110,.55),transparent 60%),radial-gradient(600px 400px at -10% 110%,rgba(255,107,53,.22),transparent 60%),linear-gradient(160deg,#0B1220 0%,#111C2E 55%,#16263D 100%);box-shadow:0 18px 50px rgba(11,18,32,.28)}
+ #login-screen .lg-hero:before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1px);background-size:22px 22px;pointer-events:none}
+ #login-screen .lg-hero>*{position:relative}
+ #login-screen .lg-badge{display:inline-block;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);padding:6px 12px;border-radius:999px;font-weight:800;font-size:.85rem;letter-spacing:.2px}
+ #login-screen .lg-badge.ghost{background:transparent;border-color:transparent;font-weight:600;color:#B7C4DB;margin-left:8px}
+ #login-screen .lg-eyebrow{color:#5EEAD4;font-weight:800;font-size:.72rem;letter-spacing:1.4px;margin-bottom:12px}
+ #login-screen .lg-hero h1{font-size:2.5rem;line-height:1.12;font-weight:800;letter-spacing:-.8px;margin:0 0 14px;color:#fff}
+ #login-screen .lg-hero p{color:#C4D0E4;font-size:1rem;line-height:1.55;max-width:460px;margin:0 0 24px}
+ #login-screen .lg-feats{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px}
+ #login-screen .lg-feats div{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px}
+ #login-screen .lg-feats i{font-style:normal;font-size:1.3rem;display:block;margin-bottom:6px}
+ #login-screen .lg-feats b{display:block;font-size:.92rem}
+ #login-screen .lg-feats span{display:block;color:#A9B8D0;font-size:.76rem;margin-top:2px}
+ #login-screen .lg-hero-bot{color:#8FA1BF;font-size:.78rem;font-weight:600}
+ #login-screen .lg-panel{padding:0}
+ #login-screen .login-logo,#login-screen .login-sub{display:none}
+ #login-screen .login-card{max-width:440px;padding:28px 26px 22px;border-radius:24px}
+ #login-screen .pin-key{padding:19px 0}
+}
+@media(prefers-reduced-motion:reduce){#login-screen *{transition:none!important}}
+
+#login-screen .lg-form{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+#login-screen .lg-label{font-size:.74rem;font-weight:700;color:#334155;margin-top:6px}
+#login-screen .lg-field{display:flex;align-items:center;gap:8px;background:#EEF3FB;border:1.5px solid #E1E8F4;border-radius:14px;padding:0 12px;transition:border-color .15s,background .15s}
+#login-screen .lg-field:focus-within{border-color:#0F766E;background:#fff;box-shadow:0 0 0 4px rgba(15,118,110,.12)}
+#login-screen .lg-ic{font-size:1rem;opacity:.7}
+#login-screen .lg-field input{flex:1;min-width:0;border:none;background:transparent;outline:none;padding:14px 0;font-size:1rem;color:#0F1923;font-family:inherit}
+#login-screen .lg-eye{border:none;background:transparent;font-size:1rem;cursor:pointer;padding:6px;opacity:.65}
+#login-screen .lg-submit{margin-top:14px;border:none;border-radius:14px;padding:15px;font-size:1rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#0F766E,#115E59);box-shadow:0 8px 20px rgba(15,118,110,.28);cursor:pointer;letter-spacing:.2px}
+#login-screen .lg-submit:active{transform:scale(.98)}
+#login-screen .lg-submit:disabled{opacity:.6}
+#login-screen .lg-first{margin-top:10px;background:#FFF7E6;border:1px solid #FDE2B3;color:#8A5300;border-radius:12px;padding:10px 12px;font-size:.74rem;line-height:1.5}
+#login-screen .lg-links{text-align:center;margin-top:10px}
+#login-screen .lg-links a{font-size:.8rem;color:#0F766E;font-weight:700;text-decoration:none}
+.lg-support{margin-top:14px;padding-top:12px;border-top:1px dashed #DCE4F2;text-align:center;font-size:.72rem;color:#5B6B86}
+.lg-support:empty{display:none}
+.lg-support .sup-t{font-weight:700;margin-bottom:7px}
+.lg-support .sup-row{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.lg-support a{display:inline-flex;align-items:center;gap:5px;background:#E8F8EF;color:#0E7A43;border:1px solid #BFE9D2;border-radius:999px;padding:6px 11px;font-weight:700;font-size:.76rem;text-decoration:none}
+.lg-support a.teams{background:#EEF0FF;color:#4B53BC;border-color:#D3D6FA}
+.lic-sup{border-top-color:rgba(255,255,255,.18);color:#C9D3E3}
+#login-screen .lg-powered{margin-top:14px;text-align:center;font-size:.72rem;color:#7A8AA5}
+#login-screen .lg-powered b{color:#334155}
+@media(min-width:900px){#login-screen .lg-hero-bot b{color:#E2E8F0}}
+/* ── Photo background (login-bg.webp, falls back to the gradient if missing/offline) ── */
+#login-screen{background:linear-gradient(180deg,rgba(8,12,22,.50) 0%,rgba(8,12,22,.72) 45%,rgba(8,12,22,.90) 100%),url(login-bg.webp) center/cover no-repeat,linear-gradient(160deg,#0B1220,#16263D)}
+#login-screen .login-logo{color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.4)}
+#login-screen .login-sub{color:#CBD5E1}
+#login-screen .lg-powered{color:#AEB9CC}
+#login-screen .lg-powered b{color:#fff}
+#login-screen .login-card{box-shadow:0 24px 60px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06)}
+@media(min-width:900px){
+ #login-screen{background:#EEF3FB}
+ #login-screen .lg-powered{color:#7A8AA5}
+ #login-screen .lg-powered b{color:#334155}
+ #login-screen .login-card{box-shadow:0 12px 40px rgba(15,25,35,.10),0 0 0 1px #E3EAF6}
+ #login-screen .lg-hero{background:linear-gradient(180deg,rgba(8,12,22,.30) 0%,rgba(8,12,22,.50) 38%,rgba(8,12,22,.93) 100%),url(login-bg.webp) center/cover no-repeat,linear-gradient(160deg,#0B1220,#16263D)}
+ #login-screen .lg-hero:before{display:none}
+ #login-screen .lg-hero h1,#login-screen .lg-hero p{text-shadow:0 2px 14px rgba(0,0,0,.45)}
+ #login-screen .lg-feats div{background:rgba(10,15,28,.45);border-color:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+}
 </style></head>
 <body>
 
@@ -941,7 +1033,7 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
         <div class="lic-checking"><span class="lic-spinner"></span>Please wait...</div>
       </div>
     </div>
-
+    <div class="lg-support lic-sup" id="lic-support"></div>
   </div>
 </div>
 
@@ -953,11 +1045,33 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
 
 <!-- LOGIN SCREEN -->
 <div class="login-screen" id="login-screen" style="display:none"><button class="pwa-float" data-notr onclick="bbInstallApp()">📥 Install App</button><div class="lang-float" data-notr><button class="lang-pill" data-lang-btn="en" onclick="setLang('en')">English</button><button class="lang-pill" data-lang-btn="hi" onclick="setLang('hi')">हिन्दी</button></div>
-  <div class="login-logo">⚡ BillBlitz</div>
+  <div class="lg-shell"><aside class="lg-hero" data-notr>
+    <div class="lg-hero-top"><span class="lg-badge">⚡ BillBlitz</span></div>
+    <div class="lg-hero-mid">
+      <div class="lg-eyebrow">RESTAURANT MANAGEMENT SYSTEM</div>
+      <h1>Fast, simple billing<br>for busy restaurants</h1>
+      <p>Bill, KOT, tables, stock and QR menu — everything your team needs, in one app.</p>
+      <div class="lg-feats">
+        <div><i>🧾</i><b>Quick Billing</b><span>GST bills in seconds</span></div>
+        <div><i>🍳</i><b>Kitchen KOT</b><span>Orders reach the kitchen live</span></div>
+        <div><i>📱</i><b>QR Menu</b><span>Customers order from the table</span></div>
+        <div><i>📊</i><b>Reports</b><span>Sales, expenses &amp; stock</span></div>
+      </div>
+    </div>
+    <div class="lg-hero-bot">Powered by <b>Vrindam Automation Solution</b></div>
+  </aside><main class="lg-panel"><div class="login-logo">⚡ BillBlitz</div>
   <div class="login-sub">Restaurant Management System</div>
   <div class="login-card">
     <div class="login-title">Welcome Back 👋</div>
-    <div class="login-hint">Select your role and enter PIN to continue</div>
+    <div class="login-hint">Apni User ID aur Password se login karein</div>
+    <form id="login-form" class="lg-form" onsubmit="doLogin();return false;" autocomplete="on" novalidate>
+      <label class="lg-label" for="login-user">User ID</label>
+      <div class="lg-field"><span class="lg-ic">👤</span><input id="login-user" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="40" placeholder="Apni User ID"/></div>
+      <label class="lg-label" for="login-pass">Password</label>
+      <div class="lg-field"><span class="lg-ic">🔒</span><input id="login-pass" type="password" name="password" autocomplete="current-password" maxlength="64" placeholder="Password"/><button type="button" class="lg-eye" id="login-eye" onclick="toggleLoginPw()" aria-label="Password dikhayein">👁</button></div>
+      <button type="submit" class="lg-submit" id="login-submit">Login →</button>
+    </form>
+    <div id="legacy-pin-ui" style="display:none" aria-hidden="true">
     <div class="role-btns">
       <button class="role-btn selected" id="role-owner" onclick="selectRole('owner')">
         <div class="rb-icon">👑</div>
@@ -999,12 +1113,14 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
       <button class="pin-key zero" onclick="pinKey('0')">0</button>
       <button class="pin-key del" onclick="pinDel()">⌫</button>
     </div>
-    <div class="login-error" id="login-error"></div>
-    <div style="text-align:center;margin-top:10px;font-size:0.68rem;color:#6B7A99">Default PIN — Owner: <b>1234</b> · Cashier: <b>0000</b></div>
-    <div style="text-align:center;margin-top:8px">
-      <a href="#" onclick="showForgotPinInfo();return false;" style="font-size:0.75rem;color:#2563EB;text-decoration:underline">PIN Bhool Gaye?</a>
     </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="lg-first" id="login-first-hint" style="display:none"></div>
+    <div class="lg-links"><a href="#" onclick="showForgotPinInfo();return false;">Password bhool gaye?</a></div>
+    <div class="lg-support" id="login-support"></div>
   </div>
+  <div class="lg-powered">Powered by <b>Vrindam Automation Solution</b></div>
+</main></div>
 </div>
 
 <!-- HEADER -->
@@ -1453,29 +1569,24 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
       </div>
     </div>
 
-    <!-- Change PINs -->
+    <!-- Login Accounts (User ID + Password per role) -->
     <div class="card" style="margin-bottom:10px">
-      <div class="card-header"><div class="card-title">🔐 Change PINs</div></div>
+      <div class="card-header"><div class="card-title">🔐 Login Accounts</div></div>
       <div class="card-body">
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">👑 Owner PIN</label>
-            <input class="form-inp" id="set-owner-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
-          </div>
-          <div class="form-group">
-            <label class="form-label">🧾 Cashier PIN</label>
-            <input class="form-inp" id="set-cashier-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
-          </div>
+        <div style="font-size:0.76rem;color:#6B7A99;margin-bottom:10px;line-height:1.5">Har role ki apni User ID aur Password. Password badalna ho to naya likhein, warna khaali chhod dein. User ID badalne par naya password bhi daalna hoga.</div>
+          <div style="border:1.5px solid #E8EEFF;border-radius:12px;padding:10px 12px;margin-bottom:10px"><div style="font-weight:800;font-size:0.85rem;margin-bottom:6px">👑 Owner</div><div class="form-row"><div class="form-group" style="margin-bottom:0"><label class="form-label">User ID</label><input class="form-inp" id="set-u-owner" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="30" placeholder="User ID"/></div><div class="form-group" style="margin-bottom:0"><label class="form-label">Naya Password</label><input class="form-inp" id="set-p-owner" type="password" autocomplete="new-password" maxlength="64" placeholder="Khaali = same rahega"/></div></div></div>
+          <div style="border:1.5px solid #E8EEFF;border-radius:12px;padding:10px 12px;margin-bottom:10px"><div style="font-weight:800;font-size:0.85rem;margin-bottom:6px">🧾 Cashier</div><div class="form-row"><div class="form-group" style="margin-bottom:0"><label class="form-label">User ID</label><input class="form-inp" id="set-u-cashier" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="30" placeholder="User ID"/></div><div class="form-group" style="margin-bottom:0"><label class="form-label">Naya Password</label><input class="form-inp" id="set-p-cashier" type="password" autocomplete="new-password" maxlength="64" placeholder="Khaali = same rahega"/></div></div></div>
+        <div id="set-kitchen-pin-group" style="display:none">
+          <div style="border:1.5px solid #E8EEFF;border-radius:12px;padding:10px 12px;margin-bottom:10px"><div style="font-weight:800;font-size:0.85rem;margin-bottom:6px">🍳 Kitchen <span style="font-weight:400;color:#9CA3AF;font-size:0.72rem">kitchen device — sirf Kitchen tab</span></div><div class="form-row"><div class="form-group" style="margin-bottom:0"><label class="form-label">User ID</label><input class="form-inp" id="set-u-kitchen" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="30" placeholder="User ID"/></div><div class="form-group" style="margin-bottom:0"><label class="form-label">Naya Password</label><input class="form-inp" id="set-p-kitchen" type="password" autocomplete="new-password" maxlength="64" placeholder="Khaali = same rahega"/></div></div></div>
         </div>
-        <div class="form-group" id="set-kitchen-pin-group" style="display:none">
-          <label class="form-label">🍳 Kitchen PIN <span style="font-weight:400;color:#9CA3AF">(kitchen device ke liye — sirf Kitchen tab dikhega)</span></label>
-          <input class="form-inp" id="set-kitchen-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
+        <div id="set-om-pin-group" style="display:none">
+          <div style="border:1.5px solid #E8EEFF;border-radius:12px;padding:10px 12px;margin-bottom:10px"><div style="font-weight:800;font-size:0.85rem;margin-bottom:6px">📝 Order Manager <span style="font-weight:400;color:#9CA3AF;font-size:0.72rem">sirf KOT + Bill generate</span></div><div class="form-row"><div class="form-group" style="margin-bottom:0"><label class="form-label">User ID</label><input class="form-inp" id="set-u-order_manager" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="30" placeholder="User ID"/></div><div class="form-group" style="margin-bottom:0"><label class="form-label">Naya Password</label><input class="form-inp" id="set-p-order_manager" type="password" autocomplete="new-password" maxlength="64" placeholder="Khaali = same rahega"/></div></div></div>
         </div>
-        <div class="form-group" id="set-om-pin-group" style="display:none">
-          <label class="form-label">📝 Order Manager PIN <span style="font-weight:400;color:#9CA3AF">(sirf KOT + Bill generate kar sakega)</span></label>
-          <input class="form-inp" id="set-order_manager-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN"/>
+        <div class="form-group">
+          <label class="form-label">👑 Owner Approval PIN (4-digit) <span style="font-weight:400;color:#9CA3AF">— discount / delete approve karne ke liye</span></label>
+          <input class="form-inp" id="set-owner-pin" type="password" inputmode="numeric" maxlength="4" placeholder="Khaali = same rahega"/>
         </div>
-        <button class="btn btn-primary btn-full" onclick="savePINs()">Save PINs</button>
+        <button class="btn btn-primary btn-full" onclick="savePINs()">Save Login Accounts</button>
       </div>
     </div>
 
@@ -2979,11 +3090,77 @@ function listenToCustomersSync() {
 // so there is zero chance of pushing empty/stale local data before the
 // real cloud data has actually arrived (the exact bug that caused data
 // loss after a fresh install / cleared browsing data).
+// ── Admin "Selected Data Reset" ─────────────────────────────────────
+// Admin panel writes meta/resetSignal {id, at, scopes[]} and then clears
+// those records in the cloud. Every device applies the same signal ONCE
+// to its own local copy — otherwise a device that was offline (or kept
+// older bills locally) would quietly upload the old records again.
+// Applied at the very START of hydration (before cloud data is pulled),
+// so records added on other devices after the reset are never touched.
+function bbResetSeenKey(){ return 'bb-reset-seen-' + restaurantId; }
+function bbClearBucketed(key){
+  db[key] = [];
+  try { if (_bucketData[key]) _bucketData[key] = {}; if (_bucketSig[key]) _bucketSig[key] = {}; } catch(e) {}
+  _lastPushedSnapshot[key] = '[]';
+}
+function bbApplyResetSignal(sig, fromHydrate){
+  if (!sig || typeof sig.id !== 'string' || !Array.isArray(sig.scopes)) return false;
+  var seen = ''; try { seen = localStorage.getItem(bbResetSeenKey()) || ''; } catch(e) {}
+  if (seen === sig.id) return false;
+  var S = sig.scopes; function has(x){ return S.indexOf(x) >= 0; }
+  if (has('sales')) {
+    db.orders = []; db.kitchenOrders = []; db.qrOrders = [];
+    Object.keys(_docSig).forEach(function(k){ if (k.indexOf('orders/') === 0) delete _docSig[k]; });
+    Object.keys(tableOrders).forEach(function(k){ delete tableOrders[k]; });
+    _lastPushedSnapshot.tableOrders = '{}';
+    (db.tables || []).forEach(function(t){ t.status = 'empty'; t.orderId = null; });
+    (db.rooms || []).forEach(function(r){ r.status = 'empty'; r.orderId = null; });
+    if (order) { order.items = []; order.tableId = null; order.tableName = ''; order.kotSent = {}; order.kotRound = 0; order.kotHistory = []; }
+  }
+  if (has('expenses'))  bbClearBucketed('expenses');
+  if (has('purchases')) bbClearBucketed('purchases');
+  if (has('hotel'))     bbClearBucketed('hotelStays');
+  if (has('customers')) { db.customers = []; Object.keys(_docSig).forEach(function(k){ if (k.indexOf('customers/') === 0) delete _docSig[k]; }); }
+  if (has('banquet'))   { db.banquetBookings = []; _lastPushedSnapshot.banquetBookings = '[]'; }
+  if (has('staffRecords')) (db.staff || []).forEach(function(st){ delete st.attendance; delete st.advances; delete st.payments; });
+  if (has('stock'))     (db.inventory || []).forEach(function(it){ it.qty = 0; });
+  if (has('alerts'))    db.ownerAlerts = [];
+  if (has('billNo'))    { if (!db.settings) db.settings = {}; db.settings.billSeries = { prefix: ((db.settings.billSeries || {}).prefix) || '', nextNumber: 1 }; }
+  try { localStorage.setItem(bbResetSeenKey(), sig.id); } catch(e) {}
+  try { localStorage.setItem('bb-db-v1', JSON.stringify(db)); } catch(e) {}
+  if (!fromHydrate) {
+    // staff / stock edits must reach the cloud like any normal edit
+    if (has('staffRecords') || has('stock')) { try { scheduleSharedDataPush(); } catch(e) {} }
+    try {
+      ['dashboard','reports','tables','rooms','billing','manage','inventory','expenses','purchases','staff','loyalty','banquet','hdash','hstays','hrooms','kitchen'].forEach(function(pg){
+        var el = document.getElementById('page-' + pg);
+        if (el && el.classList.contains('active')) setPage(pg);
+      });
+      if (typeof renderOrderItems === 'function') renderOrderItems();
+    } catch(e) {}
+    toast('🧹 Admin ne data reset kiya — chune hue records saaf ho gaye', '#7C3AED');
+  }
+  return true;
+}
+function listenToResetSignal(){
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var ref = firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('resetSignal');
+  var unsub = ref.onSnapshot(function(doc){
+    if (doc.exists) bbApplyResetSignal(doc.data(), false);
+  }, function(){});
+  cloudListeners.push(unsub);
+}
+
 async function hydrateAllFromCloud() {
   if (!isFirebaseReady || !firestoreDb || !restaurantId) { hasHydratedFromCloud = true; return; }
   var restRef = firestoreDb.collection('restaurants').doc(restaurantId);
   var metaKeys = ['tables','rooms','expenses','purchases','inventory','staff','menu','banquetBookings','banquetMenu','recipes','hotelStays'];
   var maxAttempts = 3;
+  // Admin data reset: clean stale local records BEFORE pulling cloud data.
+  try {
+    var rsDoc = await restRef.collection('meta').doc('resetSignal').get();
+    if (rsDoc && rsDoc.exists) bbApplyResetSignal(rsDoc.data(), true);
+  } catch (eRs) {}
 
   for (var attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -3050,6 +3227,7 @@ async function hydrateAllFromCloud() {
 
       persistLocalOnly();
       hasHydratedFromCloud = true;
+      try { refreshLoginHint(); } catch(eRh) {}
       // Refresh whatever page is currently visible so pulled data shows immediately
       refreshIfActive('dashboard', renderDashboard);
       refreshIfActive('tables', renderTables);
@@ -3070,6 +3248,7 @@ async function hydrateAllFromCloud() {
   // All attempts failed (e.g., genuinely offline). Allow the app to keep working
   // locally rather than blocking forever, but sync will retry on next reconnect.
   hasHydratedFromCloud = true;
+  try { refreshLoginHint(); } catch(eRh) {}
   toast('⚠️ Cloud data load nahi ho paya (offline?). Internet check karke app reload karein.', '#FF6B35');
 }
 
@@ -3087,6 +3266,7 @@ function startAllRealtimeSync() {
   listenToOrdersSync();
   listenToCustomersSync();
   listenToSettingsSync();
+  listenToResetSignal();
   listenToKitchenOrdersSync();
   listenToOwnerAlertsSync();
   listenToLiveOrdersSync();
@@ -3446,11 +3626,135 @@ const ACCESS_LABELS = {
 function getPin(role){ return (db.settings&&db.settings.pins&&db.settings.pins[role]) || DEFAULT_PINS[role]; }
 function getCashierAccess(){ return (db.settings&&db.settings.cashierAccess) || {menu:false,inventory:true,purchases:false,reports:false,loyalty:true,discount:false}; }
 
+// ── USER ID + PASSWORD LOGIN (one account per role) ─────────────
+// db.settings.logins = { owner:{u:'ramesh', h:'P1$…'}, cashier:{…}, … }
+// The role is decided by WHICH account's ID/password matches. Old clients
+// can still sign in once with User ID = role name (owner / cashier …) and
+// Password = their old PIN; the Owner is then made to create real accounts.
+// The small 4-digit Owner PIN (db.settings.pins.owner) stays only for
+// in-app approvals (discount override, delete …).
+var BB_SUPPORT = {
+  whatsapp: ['918447992260', '919315660112'],   // WhatsApp helpline (with country code)
+  teams: ''                                      // paste Microsoft Teams link here later
+};
+var LOGIN_ID_ALIAS = { owner:'owner', cashier:'cashier', kitchen:'kitchen', order_manager:'order_manager', ordermanager:'order_manager', 'order-manager':'order_manager' };
+var WEAK_PASSWORDS = ['password','password1','passw0rd','abc123','abcd1234','admin123','qwerty1','qwerty123','pass123','pass1234','billblitz','billblitz1','123abc','welcome1','india123','test123','111aaa'];
+function normLoginId(u){ return String(u || '').trim().toLowerCase(); }
+function hashPwd(u, p){
+  var h = normLoginId(u) + '|' + String(p) + '|bb-pwd-v1';
+  for (var i = 0; i < PIN_HASH_ROUNDS; i++) h = sha256Hex(h + '|bb-pwd-v1');
+  return 'P1$' + h;
+}
+function verifyPwd(u, p, stored){ return !!stored && stored === hashPwd(u, p); }
+function getLogins(){ return (db.settings && db.settings.logins && typeof db.settings.logins === 'object') ? db.settings.logins : {}; }
+function loginIdError(u, role, others){
+  if (!/^[a-z0-9._@-]{3,30}$/.test(u)) return 'User ID 3–30 akshar ki ho (a-z, 0-9, . _ - @), bina space';
+  var al = LOGIN_ID_ALIAS[u];
+  if (al && al !== role) return '"' + u + '" User ID ' + PIN_ROLE_LABEL[al] + ' ke liye reserved hai — koi aur chunein';
+  if (others && others.indexOf(u) >= 0) return '"' + u + '" User ID pehle se kisi aur role ki hai';
+  return '';
+}
+function passwordPolicyError(u, p){
+  p = String(p || '');
+  if (p.length < 6) return 'Password kam se kam 6 akshar ka ho';
+  if (p.length > 64) return 'Password 64 akshar se chhota ho';
+  if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return 'Password mein letter aur number dono hon (jaise ramesh@45)';
+  if (p.toLowerCase() === normLoginId(u)) return 'Password User ID jaisa nahi ho sakta';
+  if (WEAK_PASSWORDS.indexOf(p.toLowerCase()) >= 0) return 'Ye password bahut aasaan hai — koi aur chunein';
+  return '';
+}
+function rolesMissingLogin(){ var L = getLogins(); return pinRolesEnabled().filter(function(r){ return !(L[r] && L[r].u && L[r].h); }); }
+
+function resolveLogin(u, p){
+  var roles = pinRolesEnabled(), L = getLogins();
+  for (var i = 0; i < roles.length; i++) {
+    var A = L[roles[i]];
+    if (A && A.u === u && verifyPwd(u, p, A.h)) return { role: roles[i] };
+  }
+  var r = LOGIN_ID_ALIAS[u];
+  if (r && roles.indexOf(r) >= 0 && !(L[r] && L[r].h)) {
+    // Same safety as before: a fresh device has no real PINs until cloud
+    // sync, so the factory default must not work there yet.
+    var noStored = !(db.settings && db.settings.pins && db.settings.pins[r]);
+    if (noStored && licenseState.status === 'active' && !hasHydratedFromCloud) return { wait: true };
+    if (verifyPin(p, getPin(r))) return { role: r, legacy: true };
+  }
+  if (licenseState.status === 'active' && !hasHydratedFromCloud && !Object.keys(L).length) return { wait: true };
+  return {};
+}
+
+function doLogin(){
+  var uEl = document.getElementById('login-user'), pEl = document.getElementById('login-pass');
+  var errEl = document.getElementById('login-error');
+  var u = normLoginId(uEl && uEl.value), p = (pEl && pEl.value) || '';
+  if (!u || !p) { errEl.textContent = 'User ID aur Password dono daalein'; return; }
+  var wait = pinLockRemaining('login');
+  if (wait > 0) { errEl.textContent = '🔒 Bahut zyada galat attempts. ' + fmtLockWait(wait) + ' baad try karein.'; return; }
+  var btn = document.getElementById('login-submit');
+  if (btn) btn.disabled = true;
+  setTimeout(function(){
+    var res = resolveLogin(u, p);
+    if (btn) btn.disabled = false;
+    if (res.wait) { errEl.textContent = '☁️ Cloud se login details aa rahi hain — internet ON rakhein aur 5 second baad try karein.'; return; }
+    if (res.role) {
+      pinLockReset('login');
+      if (res.legacy) upgradeRolePinIfLegacy(res.role, p);
+      try { localStorage.setItem('bb-last-login-id', u); } catch(e){}
+      pEl.value = '';
+      errEl.textContent = '';
+      selectedLoginRole = res.role;
+      finishLogin(res.role);
+      return;
+    }
+    var lw = pinLockFail('login', 'Login');
+    errEl.textContent = lw > 0 ? '🔒 Bahut zyada galat attempts. ' + fmtLockWait(lw) + ' baad try karein.' : '❌ User ID ya Password galat hai.';
+    pEl.value = ''; pEl.focus();
+  }, 30);
+}
+function toggleLoginPw(){
+  var p = document.getElementById('login-pass'), e = document.getElementById('login-eye');
+  if (!p) return;
+  p.type = p.type === 'password' ? 'text' : 'password';
+  if (e) e.textContent = p.type === 'password' ? '👁' : '🙈';
+}
+function resetLoginForm(){
+  var u = document.getElementById('login-user'), p = document.getElementById('login-pass');
+  if (p) { p.value = ''; p.type = 'password'; }
+  var e = document.getElementById('login-eye'); if (e) e.textContent = '👁';
+  if (u && !u.value) { try { u.value = localStorage.getItem('bb-last-login-id') || ''; } catch(e2){} }
+  refreshLoginHint();
+  renderSupportLinks();
+}
+function refreshLoginHint(){
+  var el = document.getElementById('login-first-hint');
+  if (!el) return;
+  var L = getLogins(), pins = (db.settings && db.settings.pins) || {};
+  var html = '';
+  if (!(L.owner && L.owner.h) && !pins.owner) {
+    html = '👋 <b>Pehli baar login?</b> User ID: <b>owner</b> · Password: <b>1234</b><br>Login ke baad apni nayi User ID aur Password banana hoga.';
+  } else if (rolesMissingLogin().length) {
+    html = 'ℹ️ <b>Purane staff:</b> User ID mein role ka naam (<b>owner</b> / <b>cashier</b>) aur Password mein apna purana PIN daalein.';
+  }
+  el.innerHTML = html;
+  el.style.display = html ? '' : 'none';
+}
+function renderSupportLinks(){
+  var msg = encodeURIComponent('Namaste, mujhe BillBlitz support chahiye.');
+  var nums = (BB_SUPPORT.whatsapp || []).map(function(n){
+    var d = String(n).replace(/\D/g, ''); var local = d.slice(-10);
+    return '<a href="https://wa.me/' + d + '?text=' + msg + '" target="_blank" rel="noopener">💬 ' + local.slice(0,5) + ' ' + local.slice(5) + '</a>';
+  });
+  if (BB_SUPPORT.teams && /^https:\/\//.test(BB_SUPPORT.teams)) nums.push('<a class="teams" href="' + esc(BB_SUPPORT.teams) + '" target="_blank" rel="noopener">👥 Teams Support</a>');
+  var html = nums.length ? '<div class="sup-t">Help chahiye? WhatsApp Support</div><div class="sup-row">' + nums.join('') + '</div>' : '';
+  ['login-support', 'lic-support', 'forgot-support'].forEach(function(id){ var el = document.getElementById(id); if (el) el.innerHTML = html; });
+}
+
 function selectRole(r){
   selectedLoginRole = r;
   pinBuffer = '';
   updatePinDots();
   document.getElementById('login-error').textContent = '';
+  try { resetLoginForm(); } catch(eRf) {}
   document.getElementById('role-owner').classList.toggle('selected', r==='owner');
   document.getElementById('role-cashier').classList.toggle('selected', r==='cashier');
   var rk=document.getElementById('role-kitchen'); if(rk) rk.classList.toggle('selected', r==='kitchen');
@@ -3752,20 +4056,24 @@ function showForgotPinInfo(){
   if (!hasCode) {
     document.getElementById('modal-body').innerHTML =
       '<div class="modal-handle"></div>'
-      + '<div class="modal-title">🔑 PIN Bhool Gaye?</div>'
-      + '<div style="background:#FEF3C7;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#92400E;line-height:1.6">'
-      + 'Is device pe Owner Recovery Code set nahi hai. Security ke liye PIN reset ab sirf BillBlitz Support se hota hai — apne BillBlitz support contact ko message karein, woh turant reset kar denge.'
+      + '<div class="modal-title">🔑 Password Bhool Gaye?</div>'
+      + '<div style="background:#EFF6FF;border-radius:10px;padding:12px;margin-bottom:10px;font-size:0.8rem;color:#1D4ED8;line-height:1.6"><b>Staff (Cashier / Kitchen / Order Manager):</b> Owner se kahein — woh Settings → Login Accounts mein naya password set kar denge.</div>'
+      + '<div style="background:#FEF3C7;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#92400E;line-height:1.6"><b>Owner:</b> '
+      + 'Is device pe Owner Recovery Code set nahi hai. Security ke liye Owner login reset sirf BillBlitz Support se hota hai — neeche WhatsApp par message karein, woh turant reset kar denge.'
       + '<br><br>Aage ke liye: login karke <b>Settings → Owner Recovery Code</b> zaroor bana lein, taaki khud reset kar sakein.'
       + '</div>'
+      + '<div class="lg-support" id="forgot-support" style="margin:0 0 12px"></div>'
       + '<button class="btn btn-outline btn-full" onclick="closeModal()">Theek Hai</button>';
     openModal();
+    renderSupportLinks();
     return;
   }
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
-    + '<div class="modal-title">🔑 PIN Bhool Gaye?</div>'
+    + '<div class="modal-title">🔑 Password Bhool Gaye?</div>'
+    + '<div style="background:#EFF6FF;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:0.78rem;color:#1D4ED8;line-height:1.5"><b>Staff:</b> Owner se Settings → Login Accounts mein naya password set karwayein.</div>'
     + '<div style="background:#EFF6FF;border-radius:10px;padding:12px;margin-bottom:14px;font-size:0.82rem;color:#1D4ED8;line-height:1.6">'
-    + 'Apna <b>Owner Recovery Code</b> daalein (jo Settings mein banate waqt aapne note kiya tha).'
+    + '<b>Owner:</b> apna <b>Owner Recovery Code</b> daalein (jo Settings mein banate waqt aapne note kiya tha).'
     + '</div>'
     + '<div class="form-group"><label class="form-label">Recovery Code</label>'
     + '<input class="form-inp" id="forgot-pin-key" placeholder="XXXX-XXXX-XXXX" autocomplete="off" style="text-align:center;font-weight:700;letter-spacing:1px;text-transform:uppercase"/></div>'
@@ -3867,39 +4175,46 @@ function renderRecoveryCodeStatus() {
 }
 
 function showSetNewPinScreen(){
+  var L = getLogins();
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
-    + '<div class="modal-title">🔑 Naya PIN Set Karein</div>'
-    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px">Recovery Code verify ho gaya ✅ — ab naya Owner PIN set karein.</div>'
-    + '<div class="form-group"><label class="form-label">Naya Owner PIN (4-digit)</label>'
-    + '<input class="form-inp" id="new-owner-pin" type="password" maxlength="4" inputmode="numeric" placeholder="4-digit PIN" style="text-align:center;font-size:1.3rem;letter-spacing:6px"/></div>'
-    + '<div class="form-group"><label class="form-label">PIN Confirm Karein</label>'
-    + '<input class="form-inp" id="confirm-owner-pin" type="password" maxlength="4" inputmode="numeric" placeholder="Dobara PIN daalein" style="text-align:center;font-size:1.3rem;letter-spacing:6px"/></div>'
-    + '<div id="new-pin-err" style="color:#DC2626;font-size:0.78rem;margin-bottom:10px;display:none">PIN match nahi hua ya 4-digit nahi hai!</div>'
-    + '<button class="btn btn-primary btn-full" onclick="saveNewOwnerPinFromReset()">✅ PIN Set Karein</button>';
+    + '<div class="modal-title">🔑 Owner Login Reset</div>'
+    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px">Recovery Code verify ho gaya ✅ — ab Owner ki User ID aur naya Password set karein.</div>'
+    + '<div class="form-group"><label class="form-label">Owner User ID</label>'
+    + '<input class="form-inp" id="new-owner-id" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="30" value="' + esc((L.owner && L.owner.u) || '') + '" placeholder="User ID"/></div>'
+    + '<div class="form-group"><label class="form-label">Naya Password</label>'
+    + '<input class="form-inp" id="new-owner-pass" type="password" autocomplete="new-password" maxlength="64" placeholder="Letter + number, min 6"/></div>'
+    + '<div class="form-group"><label class="form-label">Password Confirm Karein</label>'
+    + '<input class="form-inp" id="confirm-owner-pass" type="password" autocomplete="new-password" maxlength="64" placeholder="Dobara password"/></div>'
+    + '<div id="new-pin-err" style="color:#DC2626;font-size:0.78rem;margin-bottom:10px;display:none"></div>'
+    + '<button class="btn btn-primary btn-full" onclick="saveNewOwnerPinFromReset()">✅ Save Karein</button>';
   openModal();
 }
 
 function saveNewOwnerPinFromReset(){
-  var pin = (document.getElementById('new-owner-pin').value || '').trim();
-  var confirmPin = (document.getElementById('confirm-owner-pin').value || '').trim();
-  if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
-    var err = document.getElementById('new-pin-err');
-    if (err) err.style.display = 'block';
-    return;
-  }
+  var err = document.getElementById('new-pin-err');
+  function fail(m){ if (err) { err.textContent = '❌ ' + m; err.style.display = 'block'; } }
+  var u = normLoginId(document.getElementById('new-owner-id').value);
+  var p = document.getElementById('new-owner-pass').value || '';
+  var c = document.getElementById('confirm-owner-pass').value || '';
   if (!_pinResetAuthorized) { closeModal(); toast('Pehle Recovery Code verify karein!', '#FF6B35'); return; }
+  var L = Object.assign({}, getLogins());
+  var others = Object.keys(L).filter(function(r){ return r !== 'owner' && L[r] && L[r].u; }).map(function(r){ return L[r].u; });
+  var e = loginIdError(u, 'owner', others) || passwordPolicyError(u, p);
+  if (e) return fail(e);
+  if (p !== c) return fail('Dono password match nahi hue');
   _pinResetAuthorized = false;
+  L.owner = { u: u, h: hashPwd(u, p) };
   if (!db.settings) db.settings = {};
-  if (!db.settings.pins) db.settings.pins = {};
-  db.settings.pins.owner = hashPin(pin);
+  db.settings.logins = L;
   // Single-use: a used recovery code is retired, so a code that was ever
   // seen by anyone else can't be used a second time.
   delete db.settings.ownerRecoveryHash;
   save();
-  try { createOwnerAlert('pin_reset', '🔑 Owner PIN Reset Hua', 'Recovery Code se Owner PIN reset kiya gaya. Agar yeh aapne nahi kiya, turant BillBlitz support se contact karein.'); } catch(e){}
+  try { createOwnerAlert('pin_reset', '🔑 Owner Login Reset Hua', 'Recovery Code se Owner ka password reset kiya gaya. Agar yeh aapne nahi kiya, turant BillBlitz support se contact karein.'); } catch(e3){}
   closeModal();
-  toast('✅ Naya Owner PIN set! Settings mein naya Recovery Code zaroor bana lein.', '#00A878');
+  try { var lu = document.getElementById('login-user'); if (lu) lu.value = u; } catch(e4){}
+  toast('✅ Owner password set! Ab login karein, aur Settings mein naya Recovery Code bana lein.', '#00A878');
 }
 
 function finishLogin(role){
@@ -4863,6 +5178,7 @@ function renderSettingsPage(){
   if(omChk) omChk.checked = !!(db.settings && db.settings.orderManagerCanClearTable);
   // Same treatment for Kitchen PIN — only shown when the client's plan
   // includes the Kitchen Display feature.
+  try { fillLoginAccountFields(); } catch(eFl) {}
   var kitchenPinGroup = document.getElementById('set-kitchen-pin-group');
   if(kitchenPinGroup) kitchenPinGroup.style.display = hasFeature('kitchen_display') ? '' : 'none';
   var banquetCard = document.getElementById('banquet-config-card');
@@ -5097,52 +5413,98 @@ function maybeForcePinChange(tries){
     if ((tries || 0) < 40) setTimeout(function(){ maybeForcePinChange((tries || 0) + 1); }, 3000);
     return;
   }
-  var need = defaultPinRoles();
-  if (!need.length) return;
+  var need = rolesMissingLogin();
+  var needPin = !(db.settings && db.settings.pins && db.settings.pins.owner);
+  if (!need.length && !needPin) return;
+  var L = getLogins();
   var box = document.createElement('div');
   box.id = 'force-pin-screen';
-  box.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(15,25,35,0.97);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto';
-  box.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:20px">'
-    + '<div style="font-size:1.1rem;font-weight:800;margin-bottom:6px">🔐 Default PIN badalna zaroori hai</div>'
-    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px;line-height:1.5">Factory PIN (1234 / 0000 …) sabko pata hote hain. Suraksha ke liye neeche naye 4-digit PIN set karein. Owner PIN staff ke PIN se alag rakhein.</div>'
-    + need.map(function(r){ return '<div class="form-group"><label class="form-label">' + PIN_ROLE_LABEL[r] + ' — naya PIN</label><input class="form-inp" id="fp-' + r + '" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" style="text-align:center;font-size:1.2rem;letter-spacing:6px"/></div>'; }).join('')
+  box.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(15,25,35,0.97);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto';
+  box.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;padding:20px;margin:auto">'
+    + '<div style="font-size:1.1rem;font-weight:800;margin-bottom:6px">🔐 Login Accounts banayein</div>'
+    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px;line-height:1.5">Ab login <b>User ID + Password</b> se hoga. Har role ki apni ID banayein — jo ID se login hoga, sirf wahi role khulega. Password mein letter aur number dono hon (kam se kam 6 akshar).</div>'
+    + need.map(function(r){
+        return '<div style="border:1.5px solid #E8EEFF;border-radius:12px;padding:10px 12px;margin-bottom:10px">'
+          + '<div style="font-weight:800;font-size:0.85rem;margin-bottom:6px">' + PIN_ROLE_LABEL[r] + '</div>'
+          + '<input class="form-inp" id="fp-u-' + r + '" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="30" placeholder="User ID (jaise ' + (r === 'owner' ? 'ramesh' : r.replace('_','') + '1') + ')" style="margin-bottom:6px"/>'
+          + '<input class="form-inp" id="fp-p-' + r + '" type="password" autocomplete="new-password" maxlength="64" placeholder="Password"/>'
+          + '</div>';
+      }).join('')
+    + (needPin ? '<div class="form-group"><label class="form-label">👑 Owner Approval PIN (4-digit) <span style="font-weight:400;color:#9CA3AF">— discount/delete approve karne ke liye</span></label><input class="form-inp" id="fp-owner-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" style="text-align:center;letter-spacing:6px"/></div>' : '')
     + '<div id="fp-err" style="color:#DC2626;font-size:0.8rem;min-height:18px;margin-bottom:8px"></div>'
-    + '<button class="btn btn-primary btn-full" onclick="saveForcedPins()">✅ PIN Save Karein</button></div>';
+    + '<button class="btn btn-primary btn-full" onclick="saveForcedPins()">✅ Save Karein</button></div>';
   document.body.appendChild(box);
 }
 function saveForcedPins(){
-  var need = defaultPinRoles(), np = {};
-  need.forEach(function(r){ var e = document.getElementById('fp-' + r); np[r] = e ? (e.value || '').trim() : ''; });
-  var err = pinPolicyError(np);
-  if (err) { document.getElementById('fp-err').textContent = '❌ ' + err; return; }
+  var need = rolesMissingLogin();
+  var needPin = !(db.settings && db.settings.pins && db.settings.pins.owner);
+  var L = Object.assign({}, getLogins());
+  var taken = Object.keys(L).filter(function(r){ return need.indexOf(r) < 0 && L[r] && L[r].u; }).map(function(r){ return L[r].u; });
+  var errEl = document.getElementById('fp-err');
+  for (var i = 0; i < need.length; i++) {
+    var r = need[i];
+    var u = normLoginId((document.getElementById('fp-u-' + r) || {}).value);
+    var p = (document.getElementById('fp-p-' + r) || {}).value || '';
+    var e1 = loginIdError(u, r, taken) || passwordPolicyError(u, p);
+    if (e1) { errEl.textContent = '❌ ' + PIN_ROLE_LABEL[r] + ': ' + e1; return; }
+    taken.push(u);
+    L[r] = { u: u, h: hashPwd(u, p) };
+  }
+  var op = '';
+  if (needPin) {
+    op = ((document.getElementById('fp-owner-pin') || {}).value || '').trim();
+    var e2 = pinPolicyError({ owner: op });
+    if (e2) { errEl.textContent = '❌ ' + e2; return; }
+  }
   if (!db.settings) db.settings = {};
-  if (!db.settings.pins) db.settings.pins = {};
-  need.forEach(function(r){ db.settings.pins[r] = hashPin(np[r]); });
+  db.settings.logins = L;
+  if (needPin) { if (!db.settings.pins) db.settings.pins = {}; db.settings.pins.owner = hashPin(op); }
   save();
   var b = document.getElementById('force-pin-screen'); if (b) b.remove();
-  toast('🔐 Naye PIN save ho gaye — staff ko bata dein', '#00A878');
+  toast('🔐 Login accounts save ho gaye — staff ko unki User ID aur Password bata dein', '#00A878');
 }
 
+function fillLoginAccountFields(){
+  var L = getLogins();
+  ['owner','cashier','kitchen','order_manager'].forEach(function(r){
+    var u = document.getElementById('set-u-' + r), p = document.getElementById('set-p-' + r);
+    if (u) u.value = (L[r] && L[r].u) || '';
+    if (p) p.value = '';
+  });
+  var op = document.getElementById('set-owner-pin'); if (op) op.value = '';
+}
 function savePINs(){
-  const op = document.getElementById('set-owner-pin').value;
-  const cp = document.getElementById('set-cashier-pin').value;
-  const kp = (document.getElementById('set-kitchen-pin')||{}).value || '';
-  const omp = (document.getElementById('set-order_manager-pin')||{}).value || '';
-  if((op && op.length!==4)||( cp && cp.length!==4)||( kp && kp.length!==4)||( omp && omp.length!==4)){ toast('PINs must be 4 digits','#FF6B35'); return; }
-  var npSet = {}; if (op) npSet.owner = op; if (cp) npSet.cashier = cp; if (kp) npSet.kitchen = kp; if (omp) npSet.order_manager = omp;
-  var pErr = pinPolicyError(npSet); if (pErr) { toast('❌ ' + pErr, '#FF6B35'); return; }
-  if(!db.settings) db.settings = {};
-  if(!db.settings.pins) db.settings.pins = {};
-  if(op) db.settings.pins.owner = hashPin(op);
-  if(cp) db.settings.pins.cashier = hashPin(cp);
-  if(kp) db.settings.pins.kitchen = hashPin(kp);
-  if(omp) db.settings.pins.order_manager = hashPin(omp);
+  if (currentRole !== 'owner') { toast('Sirf Owner yeh kar sakta hai!', '#FF6B35'); return; }
+  var L = Object.assign({}, getLogins());
+  var roles = pinRolesEnabled(), changes = {};
+  for (var i = 0; i < roles.length; i++) {
+    var r = roles[i];
+    var u = normLoginId((document.getElementById('set-u-' + r) || {}).value);
+    var p = (document.getElementById('set-p-' + r) || {}).value || '';
+    var cur = L[r] || {};
+    if (!u && !p) { if (cur.u) { toast('❌ ' + PIN_ROLE_LABEL[r] + ': User ID khaali nahi ho sakti', '#FF6B35'); return; } continue; }
+    if (u === cur.u && !p) continue;
+    if (!p) { toast('❌ ' + PIN_ROLE_LABEL[r] + ': ' + (cur.u ? 'User ID badalne par naya password bhi daalein' : 'Password bhi daalein'), '#FF6B35'); return; }
+    changes[r] = { u: u, p: p };
+  }
+  // final ID list must stay unique
+  var finalIds = {};
+  roles.forEach(function(r){ var x = changes[r] ? changes[r].u : (L[r] && L[r].u); if (x) finalIds[r] = x; });
+  for (var r2 in changes) {
+    var others = Object.keys(finalIds).filter(function(k){ return k !== r2; }).map(function(k){ return finalIds[k]; });
+    var e = loginIdError(changes[r2].u, r2, others) || passwordPolicyError(changes[r2].u, changes[r2].p);
+    if (e) { toast('❌ ' + PIN_ROLE_LABEL[r2] + ': ' + e, '#FF6B35'); return; }
+  }
+  var op = ((document.getElementById('set-owner-pin') || {}).value || '').trim();
+  if (op) { var pe = pinPolicyError({ owner: op }); if (pe) { toast('❌ ' + pe, '#FF6B35'); return; } }
+  if (!Object.keys(changes).length && !op) { toast('Kuch badla nahi', '#6B7A99'); return; }
+  for (var r3 in changes) L[r3] = { u: changes[r3].u, h: hashPwd(changes[r3].u, changes[r3].p) };
+  if (!db.settings) db.settings = {};
+  db.settings.logins = L;
+  if (op) { if (!db.settings.pins) db.settings.pins = {}; db.settings.pins.owner = hashPin(op); }
   save();
-  document.getElementById('set-owner-pin').value = '';
-  document.getElementById('set-cashier-pin').value = '';
-  if(document.getElementById('set-kitchen-pin')) document.getElementById('set-kitchen-pin').value = '';
-  if(document.getElementById('set-order_manager-pin')) document.getElementById('set-order_manager-pin').value = '';
-  toast('PINs updated! 🔐');
+  fillLoginAccountFields();
+  toast('🔐 Login accounts update ho gaye!', '#00A878');
 }
 
 function onGstModeChange() {

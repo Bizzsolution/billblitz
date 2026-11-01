@@ -747,6 +747,9 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
   </div>
 </div>
 
+<div class="modal-bg" id="modal-data-reset" data-sticky="1">
+  <div class="modal-box" id="modal-data-reset-body"></div>
+</div>
 <div class="modal-bg" id="modal-group">
   <div class="modal-box" id="modal-group-body"></div>
 </div>
@@ -1170,6 +1173,7 @@ function renderClients() {
       + '<button class="btn btn-sm btn-gold" data-id="'+cid+'" onclick="extendClient(this.dataset.id)">Extend</button>'
       + '<button class="btn btn-sm '+blockBtnClass+'" data-id="'+cid+'" onclick="toggleBlock(this.dataset.id)">'+blockBtnText+'</button>'
       + '<button class="btn btn-sm btn-outline" data-id="'+cid+'" onclick="resetClientLoginById(this.dataset.id)" title="Client ka login reset karein">🔑 Login Reset</button>'
+      + '<button class="btn btn-sm btn-outline" data-id="'+cid+'" onclick="openDataReset(this.dataset.id)" title="Chuna hua data zero karein">🧹 Data Reset</button>'
       + '</div></td></tr>';
   }).join('');
 }
@@ -2041,6 +2045,121 @@ async function resetClientLoginById(clientId) {
   var rid = await resolveRestaurantIdAdmin(c.key);
   if (!rid) { toast('Client ka restaurant data nahi mila (app abhi activate nahi hua?)', '#FF6B35'); return; }
   return resetClientPins(rid, c.name);
+}
+
+// ── SELECTED DATA RESET (client wants records back to zero) ──────────
+// Only the ticked record types are cleared. Menu, tables, rooms, staff
+// list, settings, logins, license and devices are never touched.
+var DR_SCOPES = [
+  { id:'sales',        icon:'🧾', name:'Bills / Sales',          desc:'Saare bills, KOT, QR orders, chalu table carts, sales stats', def:true },
+  { id:'expenses',     icon:'💸', name:'Expenses',               desc:'Saare kharche', def:true },
+  { id:'purchases',    icon:'🛒', name:'Purchases',              desc:'Saari kharidari entries', def:true },
+  { id:'customers',    icon:'👥', name:'Customers & Loyalty',    desc:'Customer list, stamps, visits', def:false },
+  { id:'hotel',        icon:'🏨', name:'Hotel Stays',            desc:'Check-in / check-out records (rooms khaali ho jayenge)', def:false },
+  { id:'banquet',      icon:'🎪', name:'Banquet Bookings',       desc:'Saari banquet bookings', def:false },
+  { id:'staffRecords', icon:'🗓️', name:'Staff Attendance & Salary', desc:'Attendance, advance, salary payments (staff list rahegi)', def:false },
+  { id:'stock',        icon:'📦', name:'Stock Quantity → 0',     desc:'Inventory items rahenge, sirf quantity 0 hogi', def:false },
+  { id:'alerts',       icon:'🔔', name:'Owner Alerts',           desc:'Notifications list', def:false },
+  { id:'billNo',       icon:'🔢', name:'Bill Number 1 se shuru', desc:'⚠️ Usi financial year mein GST ke liye same bill number dobara aa sakta hai — sirf naye FY ya galti se bane test bills ke liye', def:false }
+];
+var drClient = null, drBusy = false;
+
+function openDataReset(clientId) {
+  var c = adminData.clients.find(function(x){ return x.id === clientId; });
+  if (!c) return;
+  if (!c.key) { toast('Is client ki license key nahi mili!', '#FF6B35'); return; }
+  drClient = c;
+  document.getElementById('modal-data-reset-body').innerHTML =
+    '<div class="modal-title">🧹 Data Reset — ' + esc(c.name) + '</div>'
+    + '<div style="font-size:0.78rem;color:rgba(255,255,255,0.6);margin-bottom:12px;line-height:1.5">Sirf tick kiye hue records delete honge. <b>Menu, tables, rooms, staff list, settings, logins aur license safe rahenge.</b> Ye wapas nahi aa sakta — client se pehle Backup (Settings → Export) le lena behtar hai.</div>'
+    + DR_SCOPES.map(function(sc){
+        return '<label style="display:flex;gap:10px;align-items:flex-start;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px;margin-bottom:6px;cursor:pointer">'
+          + '<input type="checkbox" class="dr-scope" value="' + sc.id + '"' + (sc.def ? ' checked' : '') + ' style="margin-top:3px"/>'
+          + '<span><b style="font-size:0.85rem">' + sc.icon + ' ' + sc.name + '</b><br><span style="font-size:0.72rem;color:rgba(255,255,255,0.5)">' + sc.desc + '</span></span></label>';
+      }).join('')
+    + '<div style="margin:12px 0 6px;font-size:0.78rem">Confirm karne ke liye <b>RESET</b> likhein:</div>'
+    + '<input class="form-inp" id="dr-confirm" autocomplete="off" placeholder="RESET" style="text-transform:uppercase"/>'
+    + '<div id="dr-progress" style="font-size:0.75rem;color:rgba(255,255,255,0.7);margin:10px 0;max-height:180px;overflow:auto"></div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="btn btn-outline" style="flex:1" id="dr-cancel" onclick="closeModal(\'modal-data-reset\')">Cancel</button>'
+    + '<button class="btn btn-red" style="flex:2" id="dr-go" onclick="executeDataReset()">🧹 Reset Karein</button></div>';
+  openModal('modal-data-reset');
+}
+
+async function executeDataReset() {
+  if (drBusy || !drClient) return;
+  var scopes = Array.prototype.map.call(document.querySelectorAll('.dr-scope:checked'), function(x){ return x.value; });
+  if (!scopes.length) { toast('Kam se kam ek cheez chunein', '#FF6B35'); return; }
+  if ((document.getElementById('dr-confirm').value || '').trim().toUpperCase() !== 'RESET') { toast('Confirm ke liye RESET likhein', '#FF6B35'); return; }
+  var names = DR_SCOPES.filter(function(sc){ return scopes.indexOf(sc.id) >= 0; }).map(function(sc){ return sc.name; }).join(', ');
+  if (!confirm(drClient.name + ' ka ye data hamesha ke liye delete hoga:\n\n' + names + '\n\nPakka?')) return;
+  drBusy = true;
+  var go = document.getElementById('dr-go'), cancel = document.getElementById('dr-cancel');
+  go.disabled = true; cancel.disabled = true;
+  var progressEl = document.getElementById('dr-progress');
+  function log(m){ progressEl.innerHTML += '<div>' + m + '</div>'; progressEl.scrollTop = progressEl.scrollHeight; }
+  try {
+    log('🔍 Restaurant dhoond rahe hain...');
+    var rid = await resolveRestaurantIdAdmin(drClient.key);
+    if (!rid) throw new Error('Restaurant data nahi mila (app kabhi activate nahi hua?)');
+    var restRef = db_admin.collection('restaurants').doc(rid);
+    var meta = restRef.collection('meta');
+    var now = new Date().toISOString();
+    // 1) Signal FIRST, so every device cleans its own copy instead of re-uploading it.
+    var sigId = 'rs_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    await meta.doc('resetSignal').set({ id: sigId, at: now, scopes: scopes, by: 'admin' });
+    log('📡 Devices ko reset signal bheja');
+    async function wipe(col){ var n = await deleteCollectionInBatches(restRef.collection(col)); log('&nbsp;&nbsp;✓ ' + col + ': ' + n + ' records delete'); }
+    async function emptyMeta(key){ await meta.doc(key).set({ items: [], _writer: 'admin-reset', _updatedAt: now }); log('&nbsp;&nbsp;✓ ' + key + ' khaali'); }
+    function has(x){ return scopes.indexOf(x) >= 0; }
+    if (has('sales')) {
+      log('🧾 Bills / Sales...');
+      await wipe('orders'); await wipe('kitchenOrders'); await wipe('qrOrders');
+      await meta.doc('tableOrders').set({ data: {}, _updatedAt: now });
+      await meta.doc('stats').delete();
+      var tDoc = await meta.doc('tables').get();
+      if (tDoc.exists && Array.isArray((tDoc.data() || {}).items)) {
+        await meta.doc('tables').set({ items: tDoc.data().items.map(function(t){ return Object.assign({}, t, { status: 'empty', orderId: null }); }), _updatedAt: now }, { merge: true });
+      }
+      log('&nbsp;&nbsp;✓ tables khaali');
+    }
+    if (has('expenses'))  { log('💸 Expenses...');  await emptyMeta('expenses');  await wipe('expenseMonths'); }
+    if (has('purchases')) { log('🛒 Purchases...'); await emptyMeta('purchases'); await wipe('purchaseMonths'); }
+    if (has('hotel'))     { log('🏨 Hotel stays...'); await emptyMeta('hotelStays'); await wipe('stayMonths'); }
+    if (has('customers')) { log('👥 Customers...'); await wipe('customers'); }
+    if (has('banquet'))   { log('🎪 Banquet...');   await emptyMeta('banquetBookings'); }
+    if (has('staffRecords')) {
+      log('🗓️ Staff attendance & salary...');
+      var sDoc = await meta.doc('staff').get();
+      if (sDoc.exists && Array.isArray((sDoc.data() || {}).items)) {
+        var staff = sDoc.data().items.map(function(st){ var x = Object.assign({}, st); delete x.attendance; delete x.advances; delete x.payments; return x; });
+        await meta.doc('staff').set({ items: staff, _updatedAt: now }, { merge: true });
+        log('&nbsp;&nbsp;✓ ' + staff.length + ' staff ke records saaf');
+      }
+    }
+    if (has('stock')) {
+      log('📦 Stock...');
+      var iDoc = await meta.doc('inventory').get();
+      if (iDoc.exists && Array.isArray((iDoc.data() || {}).items)) {
+        var inv = iDoc.data().items.map(function(it){ return Object.assign({}, it, { qty: 0 }); });
+        await meta.doc('inventory').set({ items: inv, _updatedAt: now }, { merge: true });
+        log('&nbsp;&nbsp;✓ ' + inv.length + ' items ki quantity 0');
+      }
+    }
+    if (has('alerts')) { log('🔔 Alerts...'); await wipe('ownerAlerts'); }
+    if (has('billNo')) {
+      var bc = await meta.doc('billCounter').get();
+      await meta.doc('billCounter').set({ counter: 1, prefix: (bc.exists && bc.data().prefix) || '', _updatedAt: now }, { merge: true });
+      log('🔢 Bill number 1 se shuru');
+    }
+    log('<b style="color:#00C896">✅ Reset poora hua.</b> Client ke devices internet par aate hi khud saaf ho jayenge.');
+    toast('✅ ' + drClient.name + ' ka chuna hua data reset ho gaya', '#00C896');
+  } catch (e) {
+    log('<b style="color:#FF6B35">❌ Error: ' + esc(e.message || String(e)) + '</b>');
+    toast('Reset fail hua: ' + (e.message || e), '#FF6B35');
+  } finally {
+    drBusy = false; cancel.disabled = false; go.disabled = false;
+  }
 }
 
 async function resetClientPins(ridArg, nameArg) {
