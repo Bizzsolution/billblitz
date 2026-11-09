@@ -14638,13 +14638,64 @@ var BT_SERVICES = [
   '49535343-fe7d-4ae5-8fa9-9fafd205e455',
   '0000ff00-0000-1000-8000-00805f9b34fb',
   '0000ffe0-0000-1000-8000-00805f9b34fb',
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+  '0000ae30-0000-1000-8000-00805f9b34fb',
+  '0000fff0-0000-1000-8000-00805f9b34fb',
 ];
 var BT_CHARS = [
   '00002af1-0000-1000-8000-00805f9b34fb',
   '49535343-8841-43f4-a8d4-ecbe34729bb3',
   '0000ff02-0000-1000-8000-00805f9b34fb',
   '0000ffe1-0000-1000-8000-00805f9b34fb',
+  'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
+  '6e400002-b5a3-f393-e0a9-e50e24dcca9e',
+  '0000ae01-0000-1000-8000-00805f9b34fb',
+  '0000fff2-0000-1000-8000-00805f9b34fb',
 ];
+// Services Chrome is allowed to look at (Web Bluetooth hides any service
+// not listed here). Covers the common cheap 58/80mm ESC/POS printer chips.
+var BT_EXTRA_SERVICES = [
+  '0000fee7-0000-1000-8000-00805f9b34fb','0000ffe5-0000-1000-8000-00805f9b34fb',
+  '0000ae00-0000-1000-8000-00805f9b34fb','0000fe59-0000-1000-8000-00805f9b34fb',
+  '0000ff12-0000-1000-8000-00805f9b34fb','0000fff6-0000-1000-8000-00805f9b34fb',
+  '0000ff10-0000-1000-8000-00805f9b34fb','0000ff80-0000-1000-8000-00805f9b34fb',
+  '0000ffb0-0000-1000-8000-00805f9b34fb','0000fee9-0000-1000-8000-00805f9b34fb',
+  '0000fef0-0000-1000-8000-00805f9b34fb','0000ffc0-0000-1000-8000-00805f9b34fb',
+  '0000180a-0000-1000-8000-00805f9b34fb'
+];
+var _btLastServices = [];
+
+// Plain-language reason + steps for a failed connect.
+function btFriendlyError(err){
+  var m = String((err && err.message) || err || '');
+  if (/writable|characteristic/i.test(m)) {
+    return 'Printer juda, par print karne ka raasta nahi mila.' + (_btLastServices.length ? ' (Services: ' + _btLastServices.join(', ') + ')' : '');
+  }
+  if (/unknown reason|GATT|NetworkError|disconnected|connection/i.test(m) || (err && err.name === 'NetworkError')) {
+    return 'Printer se connection nahi bana — printer shayad phone mein pehle se pair hai ya kisi aur app se juda hai.';
+  }
+  return m || 'Connect nahi hua';
+}
+
+function showBtConnectHelp(reason){
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">🖨️ Printer connect nahi hua</div>'
+    + '<div style="background:#FEF2F2;border-radius:12px;padding:12px;margin-bottom:12px;font-size:0.8rem;color:#B91C1C;word-break:break-word"><b>Wajah:</b> ' + esc(reason) + '</div>'
+    + '<div style="background:#EEF2FF;border-radius:12px;padding:14px;margin-bottom:12px;font-size:0.82rem;line-height:1.8">'
+    + '<b>Ye karke dobara Connect dabayein:</b><br>'
+    + '1️⃣ Phone <b>Settings → Bluetooth</b> mein printer dikh raha ho to ⚙️ dabakar <b>Unpair / Forget</b> karein.<br>'
+    + '2️⃣ Printer ka koi aur app (RawBT, printer ka apna app) <b>band</b> karein — printer ek time par ek hi app se judta hai.<br>'
+    + '3️⃣ Printer ko <b>OFF karke ON</b> karein, 5 second rukein.<br>'
+    + '4️⃣ Phone ki <b>Location ON</b> rakhein (Android ko Bluetooth scan ke liye chahiye).<br>'
+    + '5️⃣ Connect dabakar printer chunein. List mein ek hi naam 2 baar dikhe to <b>doosra</b> wala try karein.'
+    + '</div>'
+    + '<div style="font-size:0.75rem;color:#6B7A99;margin-bottom:12px">Phir bhi na chale to is screen ka screenshot WhatsApp support par bhejein.</div>'
+    + '<button class="btn btn-primary btn-full" onclick="closeModal();btConnect()">🔄 Dobara Connect</button>'
+    + '<button class="btn btn-outline btn-full" style="margin-top:8px" onclick="closeModal()">Band Karein</button>';
+  openModal();
+}
 
 // ESC/POS Commands
 var ESC = 0x1B, GS = 0x1D, LF = 0x0A;
@@ -14705,20 +14756,7 @@ async function btConnect() {
     // Show ALL devices — user selects their printer
   btDevice = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
-      optionalServices: BT_SERVICES.concat([
-        '00001101-0000-1000-8000-00805f9b34fb',
-        '0000fff0-0000-1000-8000-00805f9b34fb',
-        '0000fee7-0000-1000-8000-00805f9b34fb',
-        '0000ffe5-0000-1000-8000-00805f9b34fb',
-        '0000ae00-0000-1000-8000-00805f9b34fb',
-        '0000ae30-0000-1000-8000-00805f9b34fb',
-        '0000fe59-0000-1000-8000-00805f9b34fb',
-        '0000ff12-0000-1000-8000-00805f9b34fb',
-        '0000fff6-0000-1000-8000-00805f9b34fb',
-        'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-        'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
-        '0000180a-0000-1000-8000-00805f9b34fb',
-      ])
+      optionalServices: BT_SERVICES.concat(BT_EXTRA_SERVICES)
     });
 
     btDevice.addEventListener('gattserverdisconnected', btDisconnected);
@@ -14750,6 +14788,7 @@ async function btConnect() {
     if(!found) {
       try {
         var svcs = await server.getPrimaryServices();
+        _btLastServices = svcs.map(function(x){ return String(x.uuid).replace(/^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/i, '$1'); });
         for(var i=0; i<svcs.length && !found; i++) {
           try {
             var chs = await svcs[i].getCharacteristics();
@@ -14780,8 +14819,10 @@ async function btConnect() {
     if(err.name==='NotFoundError') btSetUI('','No printer selected','Tap Connect to scan');
     else if(err.name==='SecurityError') { btSetUI('error','Permission denied','HTTPS required'); toast('❌ HTTPS chahiye!','#FF6B35'); }
     else {
-      btSetUI('error','Failed',''+err.message); toast('❌ '+err.message,'#FF6B35');
-      try { showBtHelp(); } catch (e2) {}
+      var why = btFriendlyError(err);
+      btSetUI('error','Connect nahi hua', why); toast('❌ ' + why,'#FF6B35');
+      try { if (btDevice && btDevice.gatt && btDevice.gatt.connected) btDevice.gatt.disconnect(); } catch (e3) {}
+      try { showBtConnectHelp(why + (err && err.name ? ' [' + err.name + ']' : '')); } catch (e2) {}
     }
   }
 }
@@ -14918,10 +14959,25 @@ async function btDisconnect() {
   toast('Printer disconnected');
 }
 
+var btChunk = 64;
+try { btChunk = parseInt(localStorage.getItem('bb-bt-chunk') || '64') || 64; } catch(e){}
 async function btSend(data) {
   if(!btConnected||!btChar) { toast('❌ Printer connect nahi hai!','#FF6B35'); return false; }
-  try {
-    var CHUNK = 64; // Small chunks = reliable on all printers
+  try { return await btSendChunks(data, btChunk); }
+  catch (e1) {
+    if (btChunk > 20) {
+      // Many cheap BLE printers take max 20 bytes per packet — retry smaller and remember it.
+      try { btChunk = 20; localStorage.setItem('bb-bt-chunk', '20'); } catch(e){}
+      try { return await btSendChunks(data, 20); } catch (e2) { e1 = e2; }
+    }
+    toast('Print failed: '+e1.message,'#FF6B35');
+    btConnected=false;
+    btSetUI('error','Error',e1.message);
+    return false;
+  }
+}
+async function btSendChunks(data, CHUNK) {
+  {
     for(var i=0; i<data.length; i+=CHUNK) {
       var chunk = data.slice(i, i+CHUNK);
       try {
@@ -14933,14 +14989,9 @@ async function btSend(data) {
       } catch(ce) {
         await btChar.writeValue(chunk);
       }
-      await new Promise(function(r){setTimeout(r,40);});
+      await new Promise(function(r){setTimeout(r, CHUNK <= 20 ? 25 : 40);});
     }
     return true;
-  } catch(e) {
-    toast('Print failed: '+e.message,'#FF6B35');
-    btConnected=false;
-    btSetUI('error','Error',e.message);
-    return false;
   }
 }
 
