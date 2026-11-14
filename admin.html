@@ -166,7 +166,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
 .mu-review-fields input,.mu-review-fields select{padding:6px 8px;border:1px solid rgba(255,255,255,0.12);border-radius:7px;font-size:0.78rem;font-family:inherit;background:rgba(0,0,0,0.2);color:#fff;}
 .mu-review-row2{display:flex;gap:6px;}
 .mu-review-row2 input:first-child{flex:1;}
-.mu-review-row2 input:last-child{width:80px;}
+.mu-review-row2 input:not(:first-child){width:80px;}
 .mu-existing-badge{background:rgba(17,138,178,0.15);color:#60C5E0;font-size:0.68rem;font-weight:700;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:10px;}
 
 /* ══ BILLING & INVOICES ═══════════════ */
@@ -1639,13 +1639,14 @@ var ALL_FEATURES = [
   {id:'table_manage', name:'Table/Room Manage (Add / Edit / Delete)', tier:'premium', always:false, desc:'Tables aur Rooms page par "✏️ Manage" (edit / delete) aur "➕ Add New Table/Room" — OFF karte hi ye options client ke app se hide ho jate hain, ON karte hi wapas aa jate hain.'},
   {id:'inventory_auto', name:'Auto Stock Deduction (Recipe/Direct)', tier:'premium', always:false, desc:'Bill banne par inventory apne aap kat'+'ti hai — dish ke recipe (ingredients) ke hisaab se, aur Pepsi/ice-cream jaise seedhe bikne wale items seedha. Consumption report + food-cost. Requires Inventory.'},
   {id:'gst_reports', name:'GST Reports (GSTR-1/2/3B)', tier:'premium', always:false, desc:'Reports me GST filing summary — GSTR-1 (sales/outward), GSTR-2 (purchase/inward), GSTR-3B summary, rate-wise breakup, CSV export. Requires Basic Reports.'},
+  {id:'half_full', name:'Half / Full Price', tier:'premium', always:false, desc:'Menu item ka Half aur Full price — billing aur QR menu par Half/Full chunne ka option. Sirf jis client ke liye ON karein usi par chalega.'},
 ];
 
 var TIER_FEATURES = {
   none:     [],
   basic:    ['billing','menu','loyalty','wa_bill','reports'],
   standard: ['billing','menu','loyalty','wa_bill','reports','tables','inventory','purchases','pdf_reports','cloud_sync'],
-  premium:  ALL_FEATURES.map(function(f){return f.id;})
+  premium:  ALL_FEATURES.map(function(f){return f.id;}).filter(function(id){ return id !== 'half_full'; })
 };
 
 var currentFeatClientId = null;
@@ -2334,7 +2335,7 @@ async function extractMenuWithAI() {
   var actionArea = document.getElementById('mu-action-area');
   actionArea.innerHTML = '<div class="mu-progress"><div class="mu-spinner"></div><div style="font-size:0.82rem;color:#FFD700;font-weight:600">AI (' + (provider === 'groq' ? 'Groq' : 'Gemini') + ') menu padh raha hai...</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:4px">10-20 second lag sakte hain</div></div>';
 
-  var promptText = 'Yeh restaurant menu card ki photo(s) hain. In sabhi images se HAR menu item nikaalo. Return STRICTLY valid JSON array only, no markdown, no explanation, no backticks. Format:\n[{"name":"Item Name","price":150,"category":"Food","description":""}]\n\nRules:\n- price sirf number ho (currency symbol na ho)\n- category in mein se choose karo: Food, Beverage, Dessert, Snacks, Special (best guess)\n- description khaali chhod do agar nahi pata\n- Agar price range hai to average ya smaller value lo\n- Duplicate items skip karo\n- Sirf JSON array return karo, kuch aur nahi';
+  var promptText = 'Yeh restaurant menu card ki photo(s) hain. In sabhi images se HAR menu item nikaalo. Return STRICTLY valid JSON array only, no markdown, no explanation, no backticks. Format:\n[{"name":"Item Name","price":150,"halfPrice":0,"category":"Food","description":""}]\n\nRules:\n- price sirf number ho (currency symbol na ho)\n- Agar item ke 2 rate hain (Half/Full, H/F, Half Plate/Full Plate) to "price" = FULL rate aur "halfPrice" = HALF rate. Item ke naam mein Half/Full mat jodo. Sirf ek rate ho to halfPrice 0 rakho\n- category in mein se choose karo: Food, Beverage, Dessert, Snacks, Special (best guess)\n- description khaali chhod do agar nahi pata\n- Agar price range hai to average ya smaller value lo\n- Duplicate items skip karo\n- Sirf JSON array return karo, kuch aur nahi';
 
   try {
     var text;
@@ -2355,6 +2356,7 @@ async function extractMenuWithAI() {
       return {
         name: it.name || 'Unknown Item',
         price: parseFloat(it.price) || 0,
+        halfPrice: parseFloat(it.halfPrice) > 0 ? parseFloat(it.halfPrice) : 0,
         category: ['Food', 'Beverage', 'Dessert', 'Snacks', 'Special'].indexOf(it.category) !== -1 ? it.category : 'Food',
         description: it.description || '',
         include: true
@@ -2380,7 +2382,8 @@ function renderMuReview() {
           + '<div class="mu-review-fields">'
           + '<div class="mu-review-row2">'
           + '<input value="' + esc(it.name) + '" data-idx="' + i + '" data-field="name" oninput="updateMuReviewField(this.dataset.idx,this.dataset.field,this.value)"/>'
-          + '<input type="number" value="' + it.price + '" data-idx="' + i + '" data-field="price" oninput="updateMuReviewField(this.dataset.idx,this.dataset.field,this.value)"/>'
+          + '<input type="number" value="' + it.price + '" title="Full price" data-idx="' + i + '" data-field="price" oninput="updateMuReviewField(this.dataset.idx,this.dataset.field,this.value)"/>'
+          + '<input type="number" value="' + (it.halfPrice || '') + '" placeholder="Half" title="Half price (optional)" data-idx="' + i + '" data-field="halfPrice" oninput="updateMuReviewField(this.dataset.idx,this.dataset.field,this.value)"/>'
           + '</div>'
           + '<select data-idx="' + i + '" data-field="category" onchange="updateMuReviewField(this.dataset.idx,this.dataset.field,this.value)">'
           + ['Food', 'Beverage', 'Dessert', 'Snacks', 'Special'].map(function(cat) { return '<option' + (cat === it.category ? ' selected' : '') + '>' + cat + '</option>'; }).join('')
@@ -2402,7 +2405,7 @@ function toggleMuReviewItem(idx, checked) {
 
 function updateMuReviewField(idx, field, value) {
   var i = parseInt(idx);
-  if (field === 'price') muExtractedItems[i][field] = parseFloat(value) || 0;
+  if (field === 'price' || field === 'halfPrice') muExtractedItems[i][field] = parseFloat(value) || 0;
   else muExtractedItems[i][field] = value;
 }
 
@@ -2413,11 +2416,13 @@ async function pushMenuToClient() {
 
   var iconMap = { Food: '🍽️', Beverage: '🥤', Dessert: '🍰', Snacks: '🍟', Special: '⭐' };
   var newItems = toAdd.map(function(it) {
-    return {
+    var row = {
       id: 'mu' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       name: it.name, price: it.price, category: it.category,
       icon: iconMap[it.category] || '🍽️', description: it.description || ''
     };
+    if (Number(it.halfPrice) > 0) row.halfPrice = Number(it.halfPrice);
+    return row;
   });
 
   var finalMenu = muExistingItems.concat(newItems);

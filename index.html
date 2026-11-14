@@ -3900,7 +3900,7 @@ function hasFeature(f) {
   }
   // Paid add-ons: only for clients the admin has explicitly switched ON
   // (the "default to allowed" rule below is for core tabs, not add-ons).
-  if(['qr_payment','gst_reports','qr_logo','inventory_auto','table_manage','hotel_module'].indexOf(f) !== -1) return clientFeatures[f] === true;
+  if(['qr_payment','gst_reports','qr_logo','inventory_auto','table_manage','hotel_module','half_full'].indexOf(f) !== -1) return clientFeatures[f] === true;
   if(Object.keys(clientFeatures).length === 0) return true;
   // If this specific feature key was never explicitly configured by admin
   // (e.g. a newer feature added after this client's last Feature save, or
@@ -4006,7 +4006,21 @@ function applySettingsFeatureGating() {
   }
 }
 
+// Keeps meta/info.halfFull in step with the admin's feature switch, so the
+// customer QR menu shows Half/Full only for clients who have it.
+function bbSyncHalfFullFlag(){
+  if (!isFirebaseReady || !firestoreDb || !restaurantId) return;
+  var on = hasFeature('half_full'), k = 'bb-halffull-pushed-' + restaurantId, last = null;
+  try { last = localStorage.getItem(k); } catch(e) {}
+  if (last === String(on)) return;
+  firestoreDb.collection('restaurants').doc(restaurantId).collection('meta').doc('info')
+    .set({ halfFull: on }, { merge: true })
+    .then(function(){ try { localStorage.setItem(k, String(on)); } catch(e) {} })
+    .catch(function(){});
+}
+
 function applyFeatureGating() {
+  try { bbSyncHalfFullFlag(); } catch(eHf) {}
   // Order Manager and Kitchen are OPTIONAL roles — their login buttons only
   // show for clients whose plan has the matching feature enabled. Runs every
   // time features are (re)loaded, including live admin toggles, so it
@@ -5304,7 +5318,8 @@ function pushRestaurantInfo(clearLogo){
     phone: info.phone || '',
     upi: payOn ? info.upi.trim() : '',
     payeeName: info.name || 'Restaurant',
-    qrPayEnabled: payOn
+    qrPayEnabled: payOn,
+    halfFull: hasFeature('half_full')
   };
   // Small (≤200px, round) logo — shown in the header of the customer's QR menu.
   // Only written when there IS one (or the owner explicitly removed it), so a
@@ -6758,6 +6773,47 @@ function clearPosSearch(){
   renderPOSMenu();
 }
 
+// ── HALF / FULL PRICE (paid add-on 'half_full') ─────────────────────
+// A menu item may carry halfPrice. When the feature is ON, tapping it asks
+// Half or Full. The Half cart line uses its own id (menuId + '__half') so
+// qty, KOT rounds and table merges keep working untouched; stock code maps
+// it back to the dish and deducts half the recipe.
+var BB_HALF_SUFFIX = '__half';
+function halfFullOn(){ return hasFeature('half_full'); }
+function itemHalfPrice(m){ var h = Number(m && m.halfPrice); return (halfFullOn() && h > 0) ? h : 0; }
+function isHalfLineId(id){ id = String(id || ''); return id.length > BB_HALF_SUFFIX.length && id.slice(-BB_HALF_SUFFIX.length) === BB_HALF_SUFFIX; }
+function baseMenuId(id){ return isHalfLineId(id) ? String(id).slice(0, -BB_HALF_SUFFIX.length) : id; }
+function portionFactor(id){ return isHalfLineId(id) ? 0.5 : 1; }
+function menuPriceLabel(m){
+  var h = itemHalfPrice(m);
+  return h ? fmt(h) + ' / ' + fmt(m.price) : fmt(m.price);
+}
+function addPortionToOrder(menuId, portion){
+  var m = db.menu.find(function(x){ return x.id === menuId; }); if (!m) return;
+  var half = portion === 'half' && itemHalfPrice(m) > 0;
+  var lineId = half ? menuId + BB_HALF_SUFFIX : menuId;
+  var name = m.name + (half ? ' (Half)' : ' (Full)');
+  var price = half ? itemHalfPrice(m) : m.price;
+  var existing = order.items.find(function(i){ return i.menuId === lineId; });
+  if (existing) existing.qty++;
+  else order.items.push({ menuId: lineId, name: name, price: price, qty: 1 });
+  try { closeModal(); } catch(e) {}
+  renderOrderItems();
+  toast(name + ' added!');
+}
+function showPortionPicker(m){
+  var h = itemHalfPrice(m);
+  document.getElementById('modal-body').innerHTML =
+    '<div class="modal-handle"></div>'
+    + '<div class="modal-title">' + esc(m.icon && m.icon.indexOf('data:') !== 0 ? m.icon : '🍽️') + ' ' + esc(m.name) + '</div>'
+    + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px">Half ya Full chunein</div>'
+    + '<div style="display:flex;gap:10px">'
+    + '<button class="btn btn-outline" style="flex:1;padding:18px 8px;font-size:1rem;font-weight:800" data-mid="' + esc(m.id) + '" onclick="addPortionToOrder(this.dataset.mid,\'half\')">Half<br><span style="font-size:0.9rem;color:#FF6B35">' + fmt(h) + '</span></button>'
+    + '<button class="btn btn-primary" style="flex:1;padding:18px 8px;font-size:1rem;font-weight:800" data-mid="' + esc(m.id) + '" onclick="addPortionToOrder(this.dataset.mid,\'full\')">Full<br><span style="font-size:0.9rem">' + fmt(m.price) + '</span></button>'
+    + '</div>';
+  openModal();
+}
+
 function renderPOSMenu(){
   var searchQ = (document.getElementById('pos-search')||{}).value || '';
   var clearBtn = document.getElementById('pos-search-clear');
@@ -6767,19 +6823,19 @@ function renderPOSMenu(){
   var base = searchQ.trim() ? db.menu : (posCat==='All' ? db.menu : db.menu.filter(m=>m.category===posCat));
   const items = searchMenuItems(base, searchQ);
   document.getElementById('pos-menu-grid').innerHTML=items.map(function(m){
-    const inOrder = order.items.find(function(i){return i.menuId===m.id;});
-    const qty = inOrder ? inOrder.qty : 0;
+    const qty = order.items.reduce(function(s, i){ return s + ((i.menuId === m.id || i.menuId === m.id + BB_HALF_SUFFIX) ? i.qty : 0); }, 0);
     return '<div class="menu-item-btn'+(qty>0?' in-order':'')+'" onclick="addToOrder(\''+m.id+'\')">'
       + (qty>0?'<span class="mi-qty-badge" style="display:flex">'+qty+'</span>':'')
       + '<div class="mi-icon">'+esc(m.icon||'🍽️')+'</div>'
       + '<div class="mi-name">'+esc(m.name)+'</div>'
-      + '<div class="mi-price">'+fmt(m.price)+'</div>'
+      + '<div class="mi-price">'+menuPriceLabel(m)+'</div>'
       + '</div>';
   }).join('')||'<div style="grid-column:1/-1;text-align:center;padding:1.5rem;color:#6B7A99;opacity:0.6">'+(searchQ.trim()?'"'+esc(searchQ)+'" ke liye koi item nahi mila.':'No items in this category.')+'</div>';
 }
 
 function addToOrder(menuId){
   const m=db.menu.find(x=>x.id===menuId); if(!m) return;
+  if (itemHalfPrice(m)) { showPortionPicker(m); return; }
   const existing=order.items.find(i=>i.menuId===menuId);
   if(existing){ existing.qty++; }
   else{ order.items.push({menuId,name:m.name,price:m.price,qty:1}); }
@@ -8361,7 +8417,7 @@ function renderMenuPage(){
         <div class="list-sub"><span class="badge badge-blue">${esc(m.category)}</span> ${esc(m.description||'')} ${stockBadgeHtml(m.id)}</div>
       </div>
       <div class="list-right">
-        <div style="font-weight:800;color:#FF6B35;font-size:0.95rem">${fmt(m.price)}</div>
+        <div style="font-weight:800;color:#FF6B35;font-size:0.95rem">${itemHalfPrice(m) ? 'Half ' + fmt(itemHalfPrice(m)) + ' / Full ' + fmt(m.price) : fmt(m.price)}</div>
         <div style="display:flex;gap:4px;margin-top:4px">
           <button class="btn btn-sm btn-outline" onclick="openMenuModal('${m.id}')">✏️</button>
           <button class="btn btn-sm btn-red" onclick="deleteMenu('${m.id}')">🗑️</button>
@@ -8420,6 +8476,8 @@ function openMenuModal(id){
     + '<div class="form-row">'
     + '<div class="form-group"><label class="form-label">Price (Rs.) *</label>'
     + '<input class="form-inp" id="mi-price" type="number" step="0.01" value="'+(m?.price||'')+'" placeholder="0.00" oninput="stkCostUpdate()"/></div>'
+    + (halfFullOn() ? '<div class="form-group"><label class="form-label">Half Price (Rs.) <span style="font-weight:400;opacity:0.6">khaali = sirf Full</span></label>'
+      + '<input class="form-inp" id="mi-half" type="number" step="0.01" value="'+(Number(m?.halfPrice)>0?m.halfPrice:'')+'" placeholder="optional"/></div>' : '')
     + '<div class="form-group"><label class="form-label">Category</label>'
     + '<select class="form-select" id="mi-cat" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#fff">'
     + ['Food','Beverage','Dessert','Snacks','Special'].map(function(c){return '<option'+(m?.category===c?' selected':'')+'>'+c+'</option>';}).join('')
@@ -8554,9 +8612,16 @@ function saveMenu(id){
     linkEntry = stockLinkCollect();
     if (linkEntry === false) return; // validation message already shown
   }
+  var halfEl = document.getElementById('mi-half'); // only present when Half/Full is ON
+  var halfVal = halfEl ? parseFloat(halfEl.value) : NaN;
+  if (halfEl && halfEl.value.trim() && !(halfVal > 0)) { toast('Half price sahi number daalein','#FF6B35'); return; }
   var savedId = id;
   if(id){ Object.assign(db.menu.find(x=>x.id===id),data); toast('Menu item updated!'); }
   else{ savedId = uid(); db.menu.push({id:savedId,...data}); toast('Menu item added!'); }
+  if (halfEl) {
+    var mSaved = db.menu.find(function(x){ return x.id === savedId; });
+    if (mSaved) { if (halfVal > 0) mSaved.halfPrice = halfVal; else delete mSaved.halfPrice; }
+  }
   if (autoStockOn()) saveRecipeFor(savedId, linkEntry);
   save(); cloudSave('meta','menu',{items:db.menu}); closeModal(); renderMenuPage();
 }
@@ -8714,7 +8779,8 @@ function stockBadgeHtml(menuId) {
 }
 
 function stockUsageFor(menuId, qty) {
-  var r = getRecipeFor(menuId);
+  qty = qty * portionFactor(menuId);
+  var r = getRecipeFor(baseMenuId(menuId));
   if (!r) return [];
   if (r.mode === 'direct' && r.direct && r.direct.invId) return [{ invId: r.direct.invId, qty: (Number(r.direct.qty) || 1) * qty }];
   if (r.mode === 'recipe') return (r.ingredients || []).filter(function(i){ return i.invId && Number(i.qty) > 0; })
@@ -8749,10 +8815,10 @@ function restoreStockForReturns(o, returns) {
   var usedIds = {}; o.stockUsed.forEach(function(u){ usedIds[u.invId] = 1; });
   var back = [];
   (returns || []).forEach(function(r) {
-    var rc = getRecipeFor(r.menuId);
+    var rc = getRecipeFor(baseMenuId(r.menuId));
     if (!rc || rc.mode !== 'direct' || !rc.direct || !usedIds[rc.direct.invId]) return;
     var inv = findInv(rc.direct.invId); if (!inv) return;
-    var q = r3((Number(rc.direct.qty) || 1) * (Number(r.qty) || 0));
+    var q = r3((Number(rc.direct.qty) || 1) * (Number(r.qty) || 0) * portionFactor(r.menuId));
     inv.qty = r3((Number(inv.qty) || 0) + q);
     o.stockRestored = (o.stockRestored || []).concat([{ invId: inv.id, qty: q, date: new Date().toISOString() }]);
     back.push(q + ' ' + (inv.unit || '') + ' ' + inv.name);
@@ -8883,7 +8949,7 @@ function stockConsumptionData(range) {
       a.qty -= rs.qty; a.cost -= rs.qty * unitCost;
     });
     (o.items || []).forEach(function(it) {
-      if (!it.menuId || getRecipeFor(it.menuId)) return;
+      if (!it.menuId || getRecipeFor(baseMenuId(it.menuId))) return;
       unlinked[it.name] = (unlinked[it.name] || 0) + (Number(it.qty) || 0);
     });
   });
@@ -13921,10 +13987,17 @@ function showQROrdersModal() {
 function sanitizeQROrderItems(items) {
   var clean = [], dropped = 0;
   (items || []).forEach(function(it) {
-    var m = (db.menu || []).find(function(x){ return x.id === it.menuId; });
+    var half = isHalfLineId(it.menuId);
+    var m = (db.menu || []).find(function(x){ return x.id === baseMenuId(it.menuId); });
     var qty = parseInt(it.qty, 10);
     if (!m || !(qty >= 1)) { dropped++; return; }
-    clean.push({ menuId: m.id, name: m.name, price: Number(m.price) || 0, qty: Math.min(qty, 99) });
+    var hp = itemHalfPrice(m);
+    if (half) {
+      if (!hp) { dropped++; return; } // half not offered (anymore) — never guess a price
+      clean.push({ menuId: m.id + BB_HALF_SUFFIX, name: m.name + ' (Half)', price: hp, qty: Math.min(qty, 99) });
+    } else {
+      clean.push({ menuId: m.id, name: m.name + (hp ? ' (Full)' : ''), price: Number(m.price) || 0, qty: Math.min(qty, 99) });
+    }
   });
   return { items: clean, dropped: dropped };
 }

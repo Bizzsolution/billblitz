@@ -244,7 +244,20 @@ var pendingOrder = null; // {items,total,note} held while the customer pays
 
 // ── STATE ───────────────────────────────────────────────────
 var menu = [];
-var cart = {}; // {menuId: qty}
+var cart = {}; // {lineId: qty} — lineId = menuId, or menuId + '__half'
+var halfFullOn = false;
+var HALF_SFX = '__half';
+function itemHalf(m){ var h = Number(m && m.halfPrice); return (halfFullOn && h > 0) ? h : 0; }
+// Resolve a cart line id to {m, name, price}; null if it no longer exists.
+function lineInfo(lid){
+  var half = lid.length > HALF_SFX.length && lid.slice(-HALF_SFX.length) === HALF_SFX;
+  var mid = half ? lid.slice(0, -HALF_SFX.length) : lid;
+  var m = menu.find(function(x){ return x.id === mid; });
+  if (!m) return null;
+  var h = itemHalf(m);
+  if (half) return h ? { m: m, name: m.name + ' (Half)', price: h } : null;
+  return { m: m, name: m.name + (h ? ' (Full)' : ''), price: m.price };
+}
 var activeCat = 'All';
 var firestoreDb = null, fbAuth = null, isReady = false;
 var currentOrderId = null;
@@ -325,6 +338,7 @@ async function loadRestaurantData() {
       }
     }
     document.getElementById('rest-sub').textContent  = locationType==='room' ? 'Room Service' : 'Digital Menu & Ordering';
+    halfFullOn = info.halfFull === true;
     payInfo.enabled = !!info.qrPayEnabled && !!info.upi;
     payInfo.upi = info.upi || '';
     payInfo.payeeName = info.payeeName || info.restaurantName || 'Restaurant';
@@ -392,8 +406,29 @@ function renderMenu() {
     return;
   }
 
+  function qtyCtl(lid, label){
+    var q = cart[lid] || 0;
+    return q > 0
+      ? '<div class="qty-ctrl"><button class="qty-btn" data-mid="'+esc(lid)+'" onclick="changeQty(this.dataset.mid,-1)">−</button><span class="qty-num">'+q+'</span><button class="qty-btn" data-mid="'+esc(lid)+'" onclick="changeQty(this.dataset.mid,1)">+</button></div>'
+      : '<button class="add-btn" data-mid="'+esc(lid)+'" onclick="changeQty(this.dataset.mid,1)">+ '+label+'</button>';
+  }
   el.innerHTML = items.map(function(m){
     var qty = cart[m.id] || 0;
+    var hp = itemHalf(m);
+    if (hp) {
+      var isVeg2 = m.veg !== false;
+      return '<div class="menu-item">'
+        +'<div class="mi-info">'
+        +'<div class="mi-name"><span class="mi-veg '+(isVeg2?'':'nonveg')+'"></span>'+esc(m.name)+'</div>'
+        +(m.desc ? '<div class="mi-desc">'+esc(m.desc)+'</div>' : '')
+        +'<div class="mi-price">Half '+fmt(hp)+' · Full '+fmt(m.price)+'</div>'
+        +'</div>'
+        +'<div class="mi-add" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">'
+        +'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:0.7rem;font-weight:700;color:#64748B">Half</span>'+qtyCtl(m.id + HALF_SFX, 'Add')+'</div>'
+        +'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:0.7rem;font-weight:700;color:#64748B">Full</span>'+qtyCtl(m.id, 'Add')+'</div>'
+        +'</div>'
+        +'</div>';
+    }
     var isVeg = m.veg !== false;
     return '<div class="menu-item">'
       +'<div class="mi-info">'
@@ -423,8 +458,8 @@ function changeQty(menuId, delta) {
 function updateCartBar() {
   var count = 0, total = 0;
   Object.keys(cart).forEach(function(mid){
-    var m = menu.find(function(x){ return x.id === mid; });
-    if(m) { count += cart[mid]; total += cart[mid] * m.price; }
+    var li = lineInfo(mid);
+    if(li) { count += cart[mid]; total += cart[mid] * li.price; }
   });
   var bar = document.getElementById('cart-bar');
   if(count > 0) {
@@ -442,13 +477,13 @@ function updateCartBar() {
 function openCart() {
   var rows = '', total = 0;
   Object.keys(cart).forEach(function(mid){
-    var m = menu.find(function(x){ return x.id === mid; });
-    if(!m) return;
-    var lineTotal = cart[mid] * m.price;
+    var li = lineInfo(mid);
+    if(!li) return;
+    var lineTotal = cart[mid] * li.price;
     total += lineTotal;
     rows += '<div class="cart-row">'
       +'<div class="qty-ctrl" style="background:#F5F7FB"><button class="qty-btn" style="background:#1A2B3C;color:#FFD166" data-mid="'+esc(mid)+'" onclick="changeQty(this.dataset.mid,-1);openCart()">−</button><span class="qty-num" style="color:#1A2B3C">'+cart[mid]+'</span><button class="qty-btn" style="background:#1A2B3C;color:#FFD166" data-mid="'+esc(mid)+'" onclick="changeQty(this.dataset.mid,1);openCart()">+</button></div>'
-      +'<div class="cart-row-name">'+esc(m.name)+'</div>'
+      +'<div class="cart-row-name">'+esc(li.name)+'</div>'
       +'<div class="cart-row-price">'+fmt(lineTotal)+'</div>'
       +'</div>';
   });
@@ -470,10 +505,10 @@ async function placeOrder() {
   var items = [];
   var total = 0;
   Object.keys(cart).forEach(function(mid){
-    var m = menu.find(function(x){ return x.id === mid; });
-    if(!m) return;
-    items.push({ menuId: mid, name: m.name, price: m.price, qty: cart[mid] });
-    total += m.price * cart[mid];
+    var li = lineInfo(mid);
+    if(!li) return;
+    items.push({ menuId: mid, name: li.name, price: li.price, qty: cart[mid] });
+    total += li.price * cart[mid];
   });
   if(!items.length) { alert('Kuch items add karein!'); return; }
 
