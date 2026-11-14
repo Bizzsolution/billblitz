@@ -2251,6 +2251,7 @@ function muRenderExistingInfo() {
 
 function meOpen() {
   meSt = { edits: {}, del: {}, sel: {}, q: '', cat: 'All' };
+  meExtraCats = [];
   meRender();
 }
 function meClose() {
@@ -2259,10 +2260,26 @@ function meClose() {
   meSt = null;
   document.getElementById('me-editor').innerHTML = '';
 }
+var meExtraCats = []; // created in this session, before any item uses them
 function meCats() {
   var set = ME_BASE_CATS.slice();
   muExistingItems.forEach(function(it){ var c = String(it.category || '').trim(); if (c && set.indexOf(c) < 0) set.push(c); });
+  meExtraCats.forEach(function(c){ if (set.indexOf(c) < 0) set.push(c); });
   return set;
+}
+function meAddCategory() {
+  var inp = document.getElementById('me-new-cat');
+  var c = String((inp && inp.value) || '').replace(/\s+/g, ' ').trim();
+  if (!c) { toast('Category ka naam likhein (jaise Burger, Pizza)', '#FF6B35'); return; }
+  if (c.length > 30) { toast('Category 30 akshar se chhoti rakhein', '#FF6B35'); return; }
+  if (/[<>"'`\\]/.test(c)) { toast('Category mein < > " \' ` \\ jaise chinh na daalein', '#FF6B35'); return; }
+  var low = c.toLowerCase();
+  var dup = meCats().find(function(x){ return x.toLowerCase() === low; });
+  if (dup) { toast('"' + dup + '" category pehle se hai', '#FF6B35'); return; }
+  meExtraCats.push(c);
+  meRender();
+  var bc = document.getElementById('me-bulk-cat'); if (bc) bc.value = c;
+  toast('✅ "' + c + '" category ban gayi — items chunkar "Apply" dabayein, phir Save', '#00C896');
 }
 function meVal(it, f) {
   var e = meSt.edits[it.id];
@@ -2295,6 +2312,10 @@ function meRender() {
     + '<div class="me-bar">'
     + '<input class="form-inp" placeholder="🔍 Item dhoondein" value="' + esc(meSt.q) + '" oninput="meSt.q=this.value;meRenderList()"/>'
     + '<select class="form-select" onchange="meSt.cat=this.value;meRenderList()"><option value="All">Saari categories</option>' + cats.map(function(c){ return '<option' + (c === meSt.cat ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>'
+    + '</div>'
+    + '<div class="me-bar">'
+    + '<input class="form-inp" id="me-new-cat" maxlength="30" placeholder="➕ Nayi category (jaise Burger, Pizza, Sweets)" onkeydown="if(event.key===\'Enter\')meAddCategory()"/>'
+    + '<button class="btn btn-sm btn-gold" onclick="meAddCategory()">➕ Category Banao</button>'
     + '</div>'
     + '<div class="me-bar" id="me-bulk" style="background:rgba(255,255,255,0.04);border-radius:10px;padding:8px">'
     + '<span style="font-size:0.78rem;font-weight:700">' + selN + ' chune</span>'
@@ -2410,8 +2431,10 @@ async function meSave() {
     try { logActivity('Menu edited for client: ' + muCurrentRestaurantId + ' (' + editIds.length + ' edit, ' + delIds.length + ' delete)'); } catch(e2) {}
     muExistingItems = result;
     toast('✅ Menu save ho gaya — ' + editIds.length + ' badle, ' + delIds.length + ' delete. Client app mein turant dikhega.', '#00C896');
+    var keepCats = meExtraCats.slice();
     muRenderExistingInfo();
     meOpen();
+    meExtraCats = keepCats; meRender();
   } catch (e) {
     toast('Save fail: ' + (e.message || e), '#FF6B35');
     if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
@@ -2518,6 +2541,13 @@ async function callGroqVision(apiKey, promptText, images) {
   return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
 }
 
+// Fixed categories + the custom ones this client already uses (Burger, Pizza…)
+function muAllowedCats() {
+  var set = ['Food', 'Beverage', 'Dessert', 'Snacks', 'Special'];
+  (muExistingItems || []).forEach(function(it){ var c = String(it.category || '').trim(); if (c && set.indexOf(c) < 0) set.push(c); });
+  return set;
+}
+
 async function extractMenuWithAI() {
   var provider = (adminData.settings && adminData.settings.aiProvider) || 'gemini';
   var geminiKey = adminData.settings && adminData.settings.geminiApiKey;
@@ -2529,7 +2559,7 @@ async function extractMenuWithAI() {
   var actionArea = document.getElementById('mu-action-area');
   actionArea.innerHTML = '<div class="mu-progress"><div class="mu-spinner"></div><div style="font-size:0.82rem;color:#FFD700;font-weight:600">AI (' + (provider === 'groq' ? 'Groq' : 'Gemini') + ') menu padh raha hai...</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:4px">10-20 second lag sakte hain</div></div>';
 
-  var promptText = 'Yeh restaurant menu card ki photo(s) hain. In sabhi images se HAR menu item nikaalo. Return STRICTLY valid JSON array only, no markdown, no explanation, no backticks. Format:\n[{"name":"Item Name","price":150,"halfPrice":0,"category":"Food","description":""}]\n\nRules:\n- price sirf number ho (currency symbol na ho)\n- Agar item ke 2 rate hain (Half/Full, H/F, Half Plate/Full Plate) to "price" = FULL rate aur "halfPrice" = HALF rate. Item ke naam mein Half/Full mat jodo. Sirf ek rate ho to halfPrice 0 rakho\n- category in mein se choose karo: Food, Beverage, Dessert, Snacks, Special (best guess)\n- description khaali chhod do agar nahi pata\n- Agar price range hai to average ya smaller value lo\n- Duplicate items skip karo\n- Sirf JSON array return karo, kuch aur nahi';
+  var promptText = 'Yeh restaurant menu card ki photo(s) hain. In sabhi images se HAR menu item nikaalo. Return STRICTLY valid JSON array only, no markdown, no explanation, no backticks. Format:\n[{"name":"Item Name","price":150,"halfPrice":0,"category":"Food","description":""}]\n\nRules:\n- price sirf number ho (currency symbol na ho)\n- Agar item ke 2 rate hain (Half/Full, H/F, Half Plate/Full Plate) to "price" = FULL rate aur "halfPrice" = HALF rate. Item ke naam mein Half/Full mat jodo. Sirf ek rate ho to halfPrice 0 rakho\n- category in mein se choose karo: ' + muAllowedCats().join(', ') + ' (best guess)\n- description khaali chhod do agar nahi pata\n- Agar price range hai to average ya smaller value lo\n- Duplicate items skip karo\n- Sirf JSON array return karo, kuch aur nahi';
 
   try {
     var text;
@@ -2551,7 +2581,7 @@ async function extractMenuWithAI() {
         name: it.name || 'Unknown Item',
         price: parseFloat(it.price) || 0,
         halfPrice: parseFloat(it.halfPrice) > 0 ? parseFloat(it.halfPrice) : 0,
-        category: ['Food', 'Beverage', 'Dessert', 'Snacks', 'Special'].indexOf(it.category) !== -1 ? it.category : 'Food',
+        category: muAllowedCats().indexOf(it.category) !== -1 ? it.category : 'Food',
         description: it.description || '',
         include: true
       };
@@ -2580,7 +2610,7 @@ function renderMuReview() {
           + '<input type="number" value="' + (it.halfPrice || '') + '" placeholder="Half" title="Half price (optional)" data-idx="' + i + '" data-field="halfPrice" oninput="updateMuReviewField(this.dataset.idx,this.dataset.field,this.value)"/>'
           + '</div>'
           + '<select data-idx="' + i + '" data-field="category" onchange="updateMuReviewField(this.dataset.idx,this.dataset.field,this.value)">'
-          + ['Food', 'Beverage', 'Dessert', 'Snacks', 'Special'].map(function(cat) { return '<option' + (cat === it.category ? ' selected' : '') + '>' + cat + '</option>'; }).join('')
+          + muAllowedCats().map(function(cat) { return '<option' + (cat === it.category ? ' selected' : '') + '>' + esc(cat) + '</option>'; }).join('')
           + '</select>'
           + '</div>'
           + '</div>';

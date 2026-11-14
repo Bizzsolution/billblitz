@@ -6712,7 +6712,7 @@ function renderBilling(){
   updateCustStamps();
 
   // cat tabs
-  document.getElementById('pos-cat-tabs').innerHTML=CATS.map(c=>`<button class="cat-tab ${posCat===c?'active':''}" onclick="setPOSCat('${c}')">${c}</button>`).join('');
+  renderPOSCatTabs();
 
   renderPOSMenu();
   renderOrderItems();
@@ -6723,7 +6723,19 @@ function updateCustStamps(){
   document.getElementById('pos-cust-stamps').textContent=(c&&hasFeature('loyalty'))?`${c.stamps||0}/${STAMP_GOAL}☕`:'';
 }
 
-function setPOSCat(c){ posCat=c; document.getElementById('pos-cat-tabs').innerHTML=CATS.map(x=>`<button class="cat-tab ${posCat===x?'active':''}" onclick="setPOSCat('${x}')">${x}</button>`).join(''); renderPOSMenu(); }
+// Fixed categories + any custom ones used in the menu (Burger, Pizza… set by admin).
+function menuCategories(){
+  var set = CATS.filter(function(c){ return c !== 'All'; });
+  (db.menu || []).forEach(function(m){ var c = String(m.category || '').trim(); if (c && set.indexOf(c) < 0) set.push(c); });
+  return set;
+}
+function renderPOSCatTabs(){
+  var el = document.getElementById('pos-cat-tabs'); if (!el) return;
+  var list = ['All'].concat(menuCategories());
+  if (list.indexOf(posCat) < 0) posCat = 'All';
+  el.innerHTML = list.map(function(x){ return '<button class="cat-tab ' + (posCat === x ? 'active' : '') + '" data-cat="' + esc(x) + '" onclick="setPOSCat(this.dataset.cat)">' + esc(x) + '</button>'; }).join('');
+}
+function setPOSCat(c){ posCat=c; renderPOSCatTabs(); renderPOSMenu(); }
 
 // ── SMART MENU SEARCH ────────────────────────────────────────
 // Ranked matching so a single letter or a few letters immediately narrow a
@@ -8480,7 +8492,7 @@ function openMenuModal(id){
       + '<input class="form-inp" id="mi-half" type="number" step="0.01" value="'+(Number(m?.halfPrice)>0?m.halfPrice:'')+'" placeholder="optional"/></div>' : '')
     + '<div class="form-group"><label class="form-label">Category</label>'
     + '<select class="form-select" id="mi-cat" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#fff">'
-    + ['Food','Beverage','Dessert','Snacks','Special'].map(function(c){return '<option'+(m?.category===c?' selected':'')+'>'+c+'</option>';}).join('')
+    + menuCategories().concat(m && m.category && menuCategories().indexOf(m.category) < 0 ? [m.category] : []).map(function(c){return '<option'+(m?.category===c?' selected':'')+'>'+esc(c)+'</option>';}).join('')
     + '</select></div></div>'
     + '<div class="form-group"><label class="form-label">Icon / Image</label>'
     + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
