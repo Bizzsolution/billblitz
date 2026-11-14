@@ -164,6 +164,18 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
 .mu-review-check{width:20px;height:20px;accent-color:#00C896;flex-shrink:0;}
 .mu-review-fields{flex:1;display:flex;flex-direction:column;gap:5px;}
 .mu-review-fields input,.mu-review-fields select{padding:6px 8px;border:1px solid rgba(255,255,255,0.12);border-radius:7px;font-size:0.78rem;font-family:inherit;background:rgba(0,0,0,0.2);color:#fff;}
+.me-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0}
+.me-bar .form-inp,.me-bar .form-select{padding:7px 9px;font-size:0.78rem;width:auto;flex:1;min-width:110px}
+.me-list{max-height:460px;overflow-y:auto;border:1px solid rgba(255,255,255,0.08);border-radius:10px}
+.me-row{display:grid;grid-template-columns:22px 1fr 78px 70px 104px 86px;gap:6px;align-items:center;padding:7px 8px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.me-row.hdr{position:sticky;top:0;background:#1A2235;z-index:1;font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase}
+.me-row input[type=text],.me-row input[type=number],.me-row select{width:100%;min-width:0;padding:6px 7px;font-size:0.78rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff}
+.me-row select option{color:#000}
+.me-row.changed{background:rgba(255,215,0,0.07)}
+.me-row.deleted{opacity:0.45;background:rgba(239,71,111,0.10)}
+.me-row.deleted input[type=text]{text-decoration:line-through}
+.me-row.nohalf{grid-template-columns:22px 1fr 78px 104px 86px}
+@media(max-width:640px){.me-row{grid-template-columns:22px 1fr 70px 64px;}.me-row .me-cat,.me-row .me-veg{grid-column:2/-1}.me-row.nohalf{grid-template-columns:22px 1fr 70px}}
 .mu-review-row2{display:flex;gap:6px;}
 .mu-review-row2 input:first-child{flex:1;}
 .mu-review-row2 input:not(:first-child){width:80px;}
@@ -341,6 +353,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0A0F1A;color:#fff;min-height:
           <div class="card-hdr"><div class="card-title">📋 Current Menu</div></div>
           <div class="card-body">
             <div id="mu-existing-info"></div>
+            <div id="me-editor"></div>
           </div>
         </div>
 
@@ -2211,16 +2224,197 @@ async function loadClientMenu() {
     var doc = await db_admin.collection('restaurants').doc(muCurrentRestaurantId)
       .collection('meta').doc(muMenuTarget).get();
     muExistingItems = (doc.exists && doc.data().items) ? doc.data().items : [];
-    document.getElementById('mu-existing-info').innerHTML =
-      '<div class="mu-existing-badge">' + muExistingItems.length + ' items currently live</div>'
-      + '<div style="font-size:0.75rem;color:rgba(255,255,255,0.4)">Restaurant ID: ' + muCurrentRestaurantId + '</div>'
-      + (muExistingItems.length ? '<div style="margin-top:8px;max-height:120px;overflow-y:auto;font-size:0.75rem;color:rgba(255,255,255,0.55)">'
-          + muExistingItems.slice(0, 8).map(function(it) { return '• ' + esc(it.name) + ' — Rs.' + it.price; }).join('<br>')
-          + (muExistingItems.length > 8 ? '<br>... +' + (muExistingItems.length - 8) + ' more' : '')
-          + '</div>' : '');
+    muRenderExistingInfo();
   } catch (e) {
     document.getElementById('mu-existing-info').innerHTML = '<div style="color:#EF476F;font-size:0.8rem">Error loading: ' + esc(e.message) + '</div>';
     muExistingItems = [];
+    document.getElementById('me-editor').innerHTML = '';
+  }
+}
+
+// ── ADMIN MENU EDITOR: bulk delete / edit / category / Veg ──────────
+// Edits are collected locally and written in ONE save. On save the menu is
+// re-read from the cloud and only the touched items are changed, so items
+// the client added in the meantime are never lost.
+var ME_BASE_CATS = ['Food', 'Beverage', 'Dessert', 'Snacks', 'Special'];
+var meSt = null;
+
+function muRenderExistingInfo() {
+  var n = muExistingItems.length;
+  document.getElementById('mu-existing-info').innerHTML =
+    '<div class="mu-existing-badge">' + n + ' items currently live</div>'
+    + '<div style="font-size:0.75rem;color:rgba(255,255,255,0.4)">Restaurant ID: ' + esc(muCurrentRestaurantId || '') + '</div>'
+    + (n ? '<button class="btn btn-outline btn-full" style="margin-top:10px" onclick="meOpen()">✏️ Menu Edit / Bulk Delete / Category</button>' : '');
+  document.getElementById('me-editor').innerHTML = '';
+  meSt = null;
+}
+
+function meOpen() {
+  meSt = { edits: {}, del: {}, sel: {}, q: '', cat: 'All' };
+  meRender();
+}
+function meClose() {
+  var dirty = meSt && (Object.keys(meSt.edits).length || Object.keys(meSt.del).length);
+  if (dirty && !confirm('Bina save kiye band karein? Badlav chale jayenge.')) return;
+  meSt = null;
+  document.getElementById('me-editor').innerHTML = '';
+}
+function meCats() {
+  var set = ME_BASE_CATS.slice();
+  muExistingItems.forEach(function(it){ var c = String(it.category || '').trim(); if (c && set.indexOf(c) < 0) set.push(c); });
+  return set;
+}
+function meVal(it, f) {
+  var e = meSt.edits[it.id];
+  if (e && Object.prototype.hasOwnProperty.call(e, f)) return e[f];
+  if (f === 'veg') return it.veg !== false;
+  if (f === 'halfPrice') return Number(it.halfPrice) > 0 ? Number(it.halfPrice) : '';
+  return it[f];
+}
+function meVisible() {
+  var q = meSt.q.trim().toLowerCase();
+  return muExistingItems.filter(function(it){
+    if (meSt.cat !== 'All' && (meVal(it, 'category') || '') !== meSt.cat) return false;
+    if (q && String(meVal(it, 'name') || '').toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+}
+function meRender() {
+  if (!meSt) return;
+  var showHalf = muMenuTarget === 'menu';
+  var cats = meCats();
+  var vis = meVisible();
+  var selN = Object.keys(meSt.sel).length;
+  var editN = Object.keys(meSt.edits).length, delN = Object.keys(meSt.del).length;
+  var allSel = vis.length && vis.every(function(it){ return meSt.sel[it.id]; });
+  var catOpts = function(cur){ return cats.map(function(c){ return '<option' + (c === cur ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join(''); };
+  var rowCls = showHalf ? 'me-row' : 'me-row nohalf';
+  var html = '<div style="margin-top:14px;border-top:1px dashed rgba(255,255,255,0.12);padding-top:12px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:0.9rem">✏️ Menu Editor — ' + (muMenuTarget === 'banquetMenu' ? 'Banquet' : 'Restaurant') + '</b>'
+    + '<button class="btn btn-sm btn-outline" onclick="meClose()">✕ Band</button></div>'
+    + '<div class="me-bar">'
+    + '<input class="form-inp" placeholder="🔍 Item dhoondein" value="' + esc(meSt.q) + '" oninput="meSt.q=this.value;meRenderList()"/>'
+    + '<select class="form-select" onchange="meSt.cat=this.value;meRenderList()"><option value="All">Saari categories</option>' + cats.map(function(c){ return '<option' + (c === meSt.cat ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>'
+    + '</div>'
+    + '<div class="me-bar" id="me-bulk" style="background:rgba(255,255,255,0.04);border-radius:10px;padding:8px">'
+    + '<span style="font-size:0.78rem;font-weight:700">' + selN + ' chune</span>'
+    + '<select class="form-select" id="me-bulk-cat"><option value="">Category badlo…</option>' + catOpts('') + '</select>'
+    + '<button class="btn btn-sm btn-outline" onclick="meBulkCat()"' + (selN ? '' : ' disabled') + '>Apply</button>'
+    + '<select class="form-select" id="me-bulk-veg"><option value="">Veg / Non-Veg…</option><option value="1">🟢 Veg</option><option value="0">🔴 Non-Veg</option></select>'
+    + '<button class="btn btn-sm btn-outline" onclick="meBulkVeg()"' + (selN ? '' : ' disabled') + '>Apply</button>'
+    + '<button class="btn btn-sm btn-red" onclick="meBulkDelete()"' + (selN ? '' : ' disabled') + '>🗑️ Delete</button>'
+    + '<button class="btn btn-sm btn-outline" onclick="meBulkUndo()"' + (selN ? '' : ' disabled') + '>↩️ Undo</button>'
+    + '</div>'
+    + '<div class="me-list" id="me-list"></div>'
+    + '<div style="display:flex;gap:8px;margin-top:10px;align-items:center">'
+    + '<div style="flex:1;font-size:0.75rem;color:rgba(255,255,255,0.6)" id="me-summary"></div>'
+    + '<button class="btn btn-gold" id="me-save" onclick="meSave()">💾 Save</button></div>'
+    + (showHalf ? '<div style="font-size:0.7rem;color:rgba(255,255,255,0.4);margin-top:6px">Half price sirf un clients ko dikhega jinka "Half / Full Price" feature ON hai. Khaali = sirf Full.</div>' : '')
+    + '</div>';
+  document.getElementById('me-editor').innerHTML = html;
+  meRenderList();
+}
+function meRenderList() {
+  if (!meSt) return;
+  var showHalf = muMenuTarget === 'menu';
+  var cats = meCats();
+  var vis = meVisible();
+  var rowCls = showHalf ? 'me-row' : 'me-row nohalf';
+  var allSel = vis.length && vis.every(function(it){ return meSt.sel[it.id]; });
+  var html = '<div class="' + rowCls + ' hdr"><input type="checkbox" title="Sab chuno"' + (allSel ? ' checked' : '') + ' onchange="meSelectAll(this.checked)"/><div>Item</div><div>Full ₹</div>' + (showHalf ? '<div>Half ₹</div>' : '') + '<div class="me-cat">Category</div><div class="me-veg">Type</div></div>'
+    + (vis.length ? vis.map(function(it){
+      var id = esc(it.id), del = !!meSt.del[it.id], ch = !!meSt.edits[it.id];
+      var cur = meVal(it, 'category');
+      return '<div class="' + rowCls + (del ? ' deleted' : ch ? ' changed' : '') + '">'
+        + '<input type="checkbox" data-id="' + id + '"' + (meSt.sel[it.id] ? ' checked' : '') + ' onchange="meSel(this.dataset.id,this.checked)"/>'
+        + '<input type="text" maxlength="80" data-id="' + id + '" value="' + esc(meVal(it, 'name') || '') + '" oninput="meEdit(this.dataset.id,\'name\',this.value)"' + (del ? ' disabled' : '') + '/>'
+        + '<input type="number" min="0" step="0.01" data-id="' + id + '" value="' + esc(String(meVal(it, 'price'))) + '" oninput="meEdit(this.dataset.id,\'price\',this.value)"' + (del ? ' disabled' : '') + '/>'
+        + (showHalf ? '<input type="number" min="0" step="0.01" placeholder="—" data-id="' + id + '" value="' + esc(String(meVal(it, 'halfPrice'))) + '" oninput="meEdit(this.dataset.id,\'halfPrice\',this.value)"' + (del ? ' disabled' : '') + '/>' : '')
+        + '<select class="me-cat" data-id="' + id + '" onchange="meEdit(this.dataset.id,\'category\',this.value)"' + (del ? ' disabled' : '') + '>'
+        + cats.map(function(c){ return '<option' + (c === cur ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('')
+        + (cats.indexOf(cur) < 0 ? '<option selected>' + esc(cur || 'Food') + '</option>' : '') + '</select>'
+        + '<select class="me-veg" data-id="' + id + '" onchange="meEdit(this.dataset.id,\'veg\',this.value===\'1\')"' + (del ? ' disabled' : '') + '>'
+        + '<option value="1"' + (meVal(it, 'veg') ? ' selected' : '') + '>🟢 Veg</option><option value="0"' + (meVal(it, 'veg') ? '' : ' selected') + '>🔴 Non-Veg</option></select>'
+        + '</div>';
+    }).join('') : '<div style="padding:14px;text-align:center;font-size:0.8rem;color:rgba(255,255,255,0.4)">Koi item nahi mila</div>');
+  document.getElementById('me-list').innerHTML = html;
+  meSummary();
+}
+function meSummary() {
+  var e = Object.keys(meSt.edits).filter(function(id){ return !meSt.del[id]; }).length, d = Object.keys(meSt.del).length;
+  var el = document.getElementById('me-summary');
+  if (el) el.textContent = (e || d) ? (e + ' badle · ' + d + ' delete honge') : 'Koi badlav nahi';
+}
+function meOrig(id) { return muExistingItems.find(function(x){ return x.id === id; }); }
+function meEdit(id, field, value) {
+  var it = meOrig(id); if (!it) return;
+  var e = meSt.edits[id] || {};
+  e[field] = value;
+  // drop fields that match the original again, so "changed" stays honest
+  var origVal = field === 'veg' ? (it.veg !== false) : field === 'halfPrice' ? (Number(it.halfPrice) > 0 ? String(Number(it.halfPrice)) : '') : String(it[field] == null ? '' : it[field]);
+  var newVal = field === 'veg' ? value : String(value).trim();
+  if (field === 'veg' ? origVal === newVal : String(origVal) === newVal) delete e[field];
+  if (Object.keys(e).length) meSt.edits[id] = e; else delete meSt.edits[id];
+  meSummary();
+}
+function meSel(id, on) { if (on) meSt.sel[id] = true; else delete meSt.sel[id]; meRender(); }
+function meSelectAll(on) { meVisible().forEach(function(it){ if (on) meSt.sel[it.id] = true; else delete meSt.sel[it.id]; }); meRender(); }
+function meBulkCat() {
+  var c = document.getElementById('me-bulk-cat').value; if (!c) { toast('Pehle category chunein', '#FF6B35'); return; }
+  Object.keys(meSt.sel).forEach(function(id){ if (!meSt.del[id]) meEdit(id, 'category', c); });
+  meSt.sel = {}; // done — so a later Delete can't hit these by accident
+  meRender();
+}
+function meBulkVeg() {
+  var v = document.getElementById('me-bulk-veg').value; if (v === '') { toast('Veg ya Non-Veg chunein', '#FF6B35'); return; }
+  Object.keys(meSt.sel).forEach(function(id){ if (!meSt.del[id]) meEdit(id, 'veg', v === '1'); });
+  meSt.sel = {}; // done — so a later Delete can't hit these by accident
+  meRender();
+}
+function meBulkDelete() { Object.keys(meSt.sel).forEach(function(id){ meSt.del[id] = true; }); meSt.sel = {}; meRender(); }
+function meBulkUndo() { Object.keys(meSt.sel).forEach(function(id){ delete meSt.del[id]; delete meSt.edits[id]; }); meSt.sel = {}; meRender(); }
+
+function meApplyEdits(it, e) {
+  var x = Object.assign({}, it);
+  if ('name' in e) x.name = String(e.name).trim().slice(0, 80);
+  if ('price' in e) x.price = Math.round(parseFloat(e.price) * 100) / 100;
+  if ('category' in e) x.category = String(e.category).slice(0, 40);
+  if ('veg' in e) { if (e.veg) delete x.veg; else x.veg = false; }
+  if ('halfPrice' in e) { var h = parseFloat(e.halfPrice); if (h > 0) x.halfPrice = Math.round(h * 100) / 100; else delete x.halfPrice; }
+  return x;
+}
+async function meSave() {
+  if (!meSt || !muCurrentRestaurantId) return;
+  var delIds = Object.keys(meSt.del);
+  var editIds = Object.keys(meSt.edits).filter(function(id){ return !meSt.del[id]; });
+  if (!delIds.length && !editIds.length) { toast('Koi badlav nahi hai', '#6B7A99'); return; }
+  for (var i = 0; i < editIds.length; i++) {
+    var e = meSt.edits[editIds[i]], it = meOrig(editIds[i]);
+    var nm = 'name' in e ? String(e.name).trim() : it.name;
+    var pr = 'price' in e ? parseFloat(e.price) : Number(it.price);
+    if (!nm) { toast('❌ Item ka naam khaali nahi ho sakta', '#FF6B35'); return; }
+    if (!(pr > 0)) { toast('❌ ' + nm + ': Full price sahi daalein', '#FF6B35'); return; }
+    if ('halfPrice' in e && String(e.halfPrice).trim() !== '' && !(parseFloat(e.halfPrice) >= 0)) { toast('❌ ' + nm + ': Half price sahi daalein', '#FF6B35'); return; }
+  }
+  var c = adminData.clients.find(function(x){ return x.id === muCurrentClientId; });
+  if (!confirm((c ? c.name + ' — ' : '') + (muMenuTarget === 'banquetMenu' ? 'Banquet' : 'Restaurant') + ' menu:\n\n✏️ ' + editIds.length + ' items badlenge\n🗑️ ' + delIds.length + ' items delete honge\n\nSave karein?')) return;
+  var btn = document.getElementById('me-save'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    var ref = db_admin.collection('restaurants').doc(muCurrentRestaurantId).collection('meta').doc(muMenuTarget);
+    var fresh = await ref.get();
+    var items = (fresh.exists && Array.isArray(fresh.data().items)) ? fresh.data().items : [];
+    var delSet = {}; delIds.forEach(function(id){ delSet[id] = 1; });
+    var result = items.filter(function(it){ return !delSet[it.id]; })
+      .map(function(it){ return meSt.edits[it.id] ? meApplyEdits(it, meSt.edits[it.id]) : it; });
+    await ref.set({ items: result, updatedBy: 'admin', updatedAt: new Date().toISOString() }, { merge: true });
+    try { logActivity('Menu edited for client: ' + muCurrentRestaurantId + ' (' + editIds.length + ' edit, ' + delIds.length + ' delete)'); } catch(e2) {}
+    muExistingItems = result;
+    toast('✅ Menu save ho gaya — ' + editIds.length + ' badle, ' + delIds.length + ' delete. Client app mein turant dikhega.', '#00C896');
+    muRenderExistingInfo();
+    meOpen();
+  } catch (e) {
+    toast('Save fail: ' + (e.message || e), '#FF6B35');
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
   }
 }
 
@@ -2441,9 +2635,7 @@ async function pushMenuToClient() {
     muImages = [];
     muExtractedItems = [];
     document.getElementById('mu-thumbs').innerHTML = '';
-    document.getElementById('mu-existing-info').innerHTML =
-      '<div class="mu-existing-badge">' + finalMenu.length + ' items currently live</div>'
-      + '<div style="font-size:0.75rem;color:rgba(255,255,255,0.4)">Restaurant ID: ' + muCurrentRestaurantId + '</div>';
+    muRenderExistingInfo();
     document.getElementById('mu-action-area').innerHTML = '';
   } catch (e) {
     toast('Push failed: ' + e.message, '#FF6B35');
