@@ -1014,7 +1014,44 @@ html[lang="hi"] .hdr-btn,html[lang="hi"] .role-badge{white-space:nowrap}
  #login-screen .lg-feats span{display:none}
  #login-screen .lg-mark-panel{display:none}
 }
-</style></head>
+</style>
+<style id="bb-desktop-premium">
+/* ══ Desktop / laptop premium polish (mouse devices ≥1024px only) ══ */
+@media (min-width:1024px){
+ html:not(.bb-touch) body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;background:#F4F6FB}
+ html:not(.bb-touch) .page-title{font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;font-weight:800;letter-spacing:-.6px;color:#0F172A}
+ html:not(.bb-touch) .content>.page{max-width:1480px;margin-left:auto;margin-right:auto}
+ /* top bar: clean white, no glows */
+ html:not(.bb-touch) .desktop-header{background:rgba(255,255,255,.94);-webkit-backdrop-filter:saturate(180%) blur(12px);backdrop-filter:saturate(180%) blur(12px);box-shadow:0 1px 0 #E6EAF2;border-bottom:none;height:60px}
+ html:not(.bb-touch) .dh-page-title{color:#0F172A;font-size:1.02rem;font-weight:800;letter-spacing:-.2px}
+ html:not(.bb-touch) .dh-time,html:not(.bb-touch) #dh-sync{color:#64748B!important}
+ html:not(.bb-touch) .dh-btn{box-shadow:none!important;border-radius:10px;transition:background .15s,transform .1s}
+ html:not(.bb-touch) .dh-btn:active{transform:translateY(1px)}
+ html:not(.bb-touch) .dh-right .dh-btn{background:#F1F4F9!important;border:1px solid #E3E8F0;color:#0F172A}
+ html:not(.bb-touch) .dh-right .dh-btn:hover{background:#E8EDF5!important}
+ html:not(.bb-touch) .dh-right .dh-btn:last-child{background:linear-gradient(135deg,#FF7A3D,#EE5A1C)!important;border-color:transparent;color:#fff;box-shadow:0 1px 2px rgba(16,24,40,.12)!important}
+ html:not(.bb-touch) .dh-role{border:1px solid rgba(0,0,0,.06)}
+ html:not(.bb-touch) .mode-sw button{background:#F1F4F9;color:#0F172A}
+ /* sidebar: crisp, readable */
+ html:not(.bb-touch) .sidebar{background:#0B1220;border-right:1px solid #1B2436}
+ html:not(.bb-touch) .sb-logo-text{text-shadow:none;font-family:'Segoe UI',system-ui,sans-serif;font-weight:800;letter-spacing:-.3px;color:#FFD54A}
+ html:not(.bb-touch) .sb-logo-sub{color:rgba(255,213,74,.62)}
+ html:not(.bb-touch) .sb-section{color:rgba(203,213,225,.45)}
+ html:not(.bb-touch) .sb-item{color:rgba(226,232,240,.80);font-weight:600}
+ html:not(.bb-touch) .sb-item:hover{background:rgba(255,255,255,.06);color:#fff}
+ html:not(.bb-touch) .sb-item.active{background:rgba(255,213,74,.10);color:#FFD54A;box-shadow:inset 3px 0 0 #FFD54A}
+ html:not(.bb-touch) .sb-user{background:rgba(255,255,255,.05);border:1px solid #1B2436}
+ html:not(.bb-touch) .sb-user-role,html:not(.bb-touch) .sb-logout{color:rgba(226,232,240,.6)}
+ /* cards: thin border + soft layered shadow instead of thick borders/glow */
+ html:not(.bb-touch) .card,html:not(.bb-touch) .stat-card,html:not(.bb-touch) .list-row{border:1px solid #E6EAF2;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.05)}
+ html:not(.bb-touch) .stat-card{border-radius:16px;padding:18px}
+ html:not(.bb-touch) .stat-lbl{color:#64748B}
+ html:not(.bb-touch) .btn-primary{box-shadow:0 1px 2px rgba(16,24,40,.08),0 6px 14px rgba(238,90,28,.22)}
+ html:not(.bb-touch) .cat-tab{border-width:1px}
+ html:not(.bb-touch) .list-row:hover{box-shadow:0 2px 4px rgba(16,24,40,.05),0 10px 24px rgba(16,24,40,.08);transform:none}
+}
+</style>
+</head>
 <body>
 
 <!-- Print Overlay -->
@@ -15372,11 +15409,15 @@ function showBtHelp() {
 }
 
 // Force mobile layout on touch devices
-if('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+// Touch laptops/2-in-1s that also have a mouse or trackpad keep the desktop layout.
+var bbHasFinePointer = false;
+try { bbHasFinePointer = window.matchMedia && window.matchMedia('(any-pointer: fine)').matches; } catch(eFp) {}
+if(('ontouchstart' in window || navigator.maxTouchPoints > 0) && !bbHasFinePointer) {
   document.documentElement.style.setProperty('--force-mobile', '1');
+  document.documentElement.classList.add('bb-touch');
   // Override any media query - inject style
   var s = document.createElement('style');
-  s.textContent = '@media (min-width: 1024px) { .bottom-nav { display:flex!important; } .sidebar { display:none!important; } .desktop-header { display:none!important; } .main-content { margin-left:0!important; padding-top:56px!important; } }';
+  s.textContent = '@media (min-width: 1024px) { .bottom-nav { display:flex!important; } .header { display:flex!important; } .sidebar { display:none!important; } .desktop-header { display:none!important; } .content { margin-left:0!important; margin-top:0!important; } }';
   document.head.appendChild(s);
 }
 load();
