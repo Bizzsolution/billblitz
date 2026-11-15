@@ -6854,7 +6854,7 @@ function showPortionPicker(m){
   var h = itemHalfPrice(m);
   document.getElementById('modal-body').innerHTML =
     '<div class="modal-handle"></div>'
-    + '<div class="modal-title">' + esc(m.icon && m.icon.indexOf('data:') !== 0 ? m.icon : '🍽️') + ' ' + esc(m.name) + '</div>'
+    + '<div class="modal-title">' + esc(itemIcon(m)) + ' ' + esc(m.name) + '</div>'
     + '<div style="font-size:0.8rem;color:#6B7A99;margin-bottom:14px">Half ya Full chunein</div>'
     + '<div style="display:flex;gap:10px">'
     + '<button class="btn btn-outline" style="flex:1;padding:18px 8px;font-size:1rem;font-weight:800" data-mid="' + esc(m.id) + '" onclick="addPortionToOrder(this.dataset.mid,\'half\')">Half<br><span style="font-size:0.9rem;color:#FF6B35">' + fmt(h) + '</span></button>'
@@ -6875,7 +6875,7 @@ function renderPOSMenu(){
     const qty = order.items.reduce(function(s, i){ return s + ((i.menuId === m.id || i.menuId === m.id + BB_HALF_SUFFIX) ? i.qty : 0); }, 0);
     return '<div class="menu-item-btn'+(qty>0?' in-order':'')+'" onclick="addToOrder(\''+m.id+'\')">'
       + (qty>0?'<span class="mi-qty-badge" style="display:flex">'+qty+'</span>':'')
-      + '<div class="mi-icon">'+menuIconHtml(m.icon, 52)+'</div>'
+      + '<div class="mi-icon">'+menuItemIconHtml(m, 52)+'</div>'
       + '<div class="mi-name">'+esc(m.name)+'</div>'
       + '<div class="mi-price">'+menuPriceLabel(m)+'</div>'
       + '</div>';
@@ -8460,7 +8460,7 @@ function renderMenuPage(){
   const items = searchMenuItems(db.menu, q);
   document.getElementById('menu-list').innerHTML=items.length?items.map(m=>`
     <div class="list-row">
-      <div class="list-icon" style="background:#F7F9FF;font-size:1.4rem;overflow:hidden">${menuIconHtml(m.icon, 46)}</div>
+      <div class="list-icon" style="background:#F7F9FF;font-size:1.4rem;overflow:hidden">${menuItemIconHtml(m, 46)}</div>
       <div class="list-main">
         <div class="list-title">${esc(m.name)}</div>
         <div class="list-sub"><span class="badge badge-blue">${esc(m.category)}</span> ${esc(m.description||'')} ${stockBadgeHtml(m.id)}</div>
@@ -8675,6 +8675,34 @@ function handleIconUpload(input) {
     toast('✅ Photo set ho gayi (auto crop + resize)','#00A878');
   }).catch(function(e){ toast('❌ ' + e.message,'#FF6B35'); })
     .then(function(){ try { input.value = ''; } catch(e2) {} }); // same photo can be picked again
+}
+// Same picture rule as the QR menu: real photo > specific category icon
+// (Burger 🍔, Pizza 🍕…) > item's own emoji in general categories > category icon.
+var CAT_ICON_RULES = [
+  [/all/,'✨'],[/pizza/,'🍕'],[/burger/,'🍔'],[/sweet|mithai/,'🍬'],[/dessert|ice ?cream|kulfi/,'🍨'],[/cake|bakery|pastry/,'🎂'],
+  [/biryani|rice|pulao/,'🍚'],[/chinese|noodle|chowmein/,'🍜'],[/momo|dimsum/,'🥟'],[/roll|wrap|kathi/,'🌯'],[/sandwich/,'🥪'],
+  [/pasta/,'🍝'],[/soup/,'🍲'],[/salad/,'🥗'],[/thali|combo|meal/,'🍱'],[/roti|naan|bread|paratha/,'🫓'],[/paneer/,'🧀'],
+  [/chicken|tandoor|kebab|kabab/,'🍗'],[/fish|sea ?food|prawn/,'🐟'],[/egg/,'🥚'],[/starter|appetizer|tikka/,'🍢'],
+  [/tea|chai|coffee/,'☕'],[/shake|smoothie|lassi/,'🥤'],[/beverage|drink|juice|mocktail|cold/,'🥤'],[/snack|fries|chaat/,'🍟'],
+  [/breakfast|dosa|idli/,'🥞'],[/special|chef/,'⭐'],[/main|food|curry|veg/,'🍛']
+];
+var GENERIC_CAT = /^(food|foods|main|mains|main course|veg|non ?-?veg|curry|curries|beverages?|drinks?|snacks?|desserts?|specials?|chef'?s special|menu|others?|items?)$/i;
+function catIcon(c){
+  var k = String(c || '').toLowerCase();
+  for (var i = 0; i < CAT_ICON_RULES.length; i++) if (CAT_ICON_RULES[i][0].test(k)) return CAT_ICON_RULES[i][1];
+  var first = (db.menu || []).find(function(m){ return m.category === c && m.icon && !safeImgSrc(m.icon) && m.icon !== '🍽️'; });
+  return first ? first.icon : '🍽️';
+}
+function itemIcon(m){
+  var c = String((m && m.category) || '').trim();
+  var own = (m && m.icon && !safeImgSrc(m.icon) && m.icon !== '🍽️') ? m.icon : '';
+  var specific = c && !GENERIC_CAT.test(c) && CAT_ICON_RULES.some(function(r){ return r[0].test(c.toLowerCase()); });
+  if (specific) return catIcon(c);
+  return own || catIcon(c);
+}
+function menuItemIconHtml(m, size){
+  var u = safeImgSrc(m && m.icon);
+  return u ? menuIconHtml(u, size) : esc(itemIcon(m));
 }
 // Emoji or a safe photo — never raw text of a data URL.
 function menuIconHtml(icon, size){
@@ -11106,7 +11134,7 @@ function renderSmartSuggestions() {
   // Show top 6 menu items as quick-tap chips
   const top = db.menu.slice(0, 6);
   el.innerHTML = top.map(m =>
-    `<button class="smart-sug" onclick="quickAddSmartItem('${m.id}')">${safeImgSrc(m.icon) ? '🍽️' : esc(m.icon||'🍽️')} ${esc(m.name)}</button>`
+    `<button class="smart-sug" onclick="quickAddSmartItem('${m.id}')">${esc(itemIcon(m))} ${esc(m.name)}</button>`
   ).join('');
 }
 
@@ -11116,7 +11144,7 @@ function quickAddSmartItem(menuId) {
   if (existing) { existing.qty++; }
   else { order.items.push({ menuId, name: m.name, price: m.price, qty: 1 }); }
   renderOrderItems();
-  toast(`${safeImgSrc(m.icon) ? '' : (m.icon||'')} ${m.name} added!`);
+  toast(`${itemIcon(m)} ${m.name} added!`);
 }
 
 // ── Parse natural language order text ──────────────────

@@ -459,6 +459,16 @@ function catIcon(c){
   var first = menu.find(function(m){ return m.category === c && m.icon && !safeImg(m.icon); });
   return first ? first.icon : '🍽️';
 }
+// Item tile picture: real photo > specific category icon (Burger 🍔, Pizza 🍕…)
+// > the item's own emoji in general categories (Food, Beverage…) > category icon.
+var GENERIC_CAT = /^(food|foods|main|mains|main course|veg|non ?-?veg|curry|curries|beverages?|drinks?|snacks?|desserts?|specials?|chef'?s special|menu|others?|items?)$/i;
+function itemIcon(m){
+  var c = String(m.category || '').trim();
+  var own = (m.icon && !safeImg(m.icon) && m.icon !== '🍽️') ? m.icon : '';
+  var specific = c && !GENERIC_CAT.test(c) && CAT_ICON_RULES.some(function(r){ return r[0].test(c.toLowerCase()); });
+  if (specific) return catIcon(c);
+  return own || catIcon(c);
+}
 function renderCatTabs() {
   var cats = ['All'];
   menu.forEach(function(m){ if(m.category && cats.indexOf(m.category)===-1) cats.push(m.category); });
@@ -504,7 +514,7 @@ function renderMenu() {
   }
   function mediaHtml(m){
     var im = safeImg(m.icon);
-    return '<div class="mi-img">' + (im ? '<img src="' + esc(im) + '" alt="" loading="lazy"/>' : esc(m.icon || catIcon(m.category))) + '</div>';
+    return '<div class="mi-img">' + (im ? '<img src="' + esc(im) + '" alt="" loading="lazy"/>' : esc(itemIcon(m))) + '</div>';
   }
   function card(m){
     var isVeg = m.veg !== false, hp = itemHalf(m), d = m.desc || m.description || '';
@@ -522,7 +532,7 @@ function renderMenu() {
     var secOrder = [], groups = {};
     items.forEach(function(m){ var c = m.category || 'Menu'; if (!groups[c]) { groups[c] = []; secOrder.push(c); } groups[c].push(m); });
     el.innerHTML = secOrder.map(function(c){
-      return '<div class="q-sec"><h3>' + esc(catIcon(c)) + ' ' + esc(c) + '</h3><span>' + groups[c].length + ' items</span></div>' + groups[c].map(card).join('');
+      return '<div class="q-sec"><h3>' + esc(catIcon(c)) + ' ' + esc(c) + '</h3><span>' + groups[c].length + (groups[c].length === 1 ? ' item' : ' items') + '</span></div>' + groups[c].map(card).join('');
     }).join('');
   } else {
     el.innerHTML = items.map(card).join('');
