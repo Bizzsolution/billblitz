@@ -6838,7 +6838,7 @@ function renderPOSMenu(){
     const qty = order.items.reduce(function(s, i){ return s + ((i.menuId === m.id || i.menuId === m.id + BB_HALF_SUFFIX) ? i.qty : 0); }, 0);
     return '<div class="menu-item-btn'+(qty>0?' in-order':'')+'" onclick="addToOrder(\''+m.id+'\')">'
       + (qty>0?'<span class="mi-qty-badge" style="display:flex">'+qty+'</span>':'')
-      + '<div class="mi-icon">'+esc(m.icon||'🍽️')+'</div>'
+      + '<div class="mi-icon">'+menuIconHtml(m.icon, 52)+'</div>'
       + '<div class="mi-name">'+esc(m.name)+'</div>'
       + '<div class="mi-price">'+menuPriceLabel(m)+'</div>'
       + '</div>';
@@ -8423,7 +8423,7 @@ function renderMenuPage(){
   const items = searchMenuItems(db.menu, q);
   document.getElementById('menu-list').innerHTML=items.length?items.map(m=>`
     <div class="list-row">
-      <div class="list-icon" style="background:#F7F9FF;font-size:1.4rem">${esc(m.icon||'🍽️')}</div>
+      <div class="list-icon" style="background:#F7F9FF;font-size:1.4rem;overflow:hidden">${menuIconHtml(m.icon, 46)}</div>
       <div class="list-main">
         <div class="list-title">${esc(m.name)}</div>
         <div class="list-sub"><span class="badge badge-blue">${esc(m.category)}</span> ${esc(m.description||'')} ${stockBadgeHtml(m.id)}</div>
@@ -8598,19 +8598,52 @@ function showEmojiGroup(gi) {
   }).join('');
 }
 
+// Any gallery/camera photo → centre-cropped square, 256×256, compressed to
+// ~15 KB. The whole menu lives in ONE cloud document (1 MB limit), so photos
+// must stay tiny; the QR menu shows them with object-fit:cover anyway.
+var MENU_IMG_PX = 256, MENU_IMG_MAX_CHARS = 22000;
+function menuImageToDataUrl(file){
+  return new Promise(function(resolve, reject){
+    if (!file || !/^image\//.test(file.type || '')) { reject(new Error('Sirf photo (JPG/PNG/WebP) chunein')); return; }
+    if (file.size > 25 * 1024 * 1024) { reject(new Error('Photo 25MB se chhoti honi chahiye')); return; }
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function(){
+      try {
+        var w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h);
+        var sx = (w - side) / 2, sy = (h - side) / 2;          // centre crop to a square
+        var cv = document.createElement('canvas'); cv.width = cv.height = MENU_IMG_PX;
+        var cx = cv.getContext('2d');
+        cx.fillStyle = '#fff'; cx.fillRect(0, 0, MENU_IMG_PX, MENU_IMG_PX); // transparent PNGs get a white base
+        cx.imageSmoothingQuality = 'high';
+        cx.drawImage(img, sx, sy, side, side, 0, 0, MENU_IMG_PX, MENU_IMG_PX);
+        var webp = cv.toDataURL('image/webp', 0.8).indexOf('data:image/webp') === 0;
+        var type = webp ? 'image/webp' : 'image/jpeg', q = 0.8, out = cv.toDataURL(type, q);
+        while (out.length > MENU_IMG_MAX_CHARS && q > 0.35) { q -= 0.1; out = cv.toDataURL(type, q); }
+        URL.revokeObjectURL(url);
+        resolve(out);
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('Ye photo khul nahi payi — koi aur photo try karein')); };
+    img.src = url;
+  });
+}
 function handleIconUpload(input) {
-  var file = input.files[0];
+  var file = input.files && input.files[0];
   if(!file) return;
-  if(file.size > 500*1024) { toast('Image 500KB se chhoti honi chahiye!','#FF6B35'); return; }
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var dataUrl = e.target.result;
+  toast('Photo set ho rahi hai...','#6B7A99');
+  menuImageToDataUrl(file).then(function(dataUrl){
     document.getElementById('mi-icon').value = dataUrl;
     var preview = document.getElementById('icon-preview');
     if(preview) preview.innerHTML = '<img src="'+dataUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:10px"/>';
-    toast('Image uploaded!','#00A878');
-  };
-  reader.readAsDataURL(file);
+    toast('✅ Photo set ho gayi (auto crop + resize)','#00A878');
+  }).catch(function(e){ toast('❌ ' + e.message,'#FF6B35'); })
+    .then(function(){ try { input.value = ''; } catch(e2) {} }); // same photo can be picked again
+}
+// Emoji or a safe photo — never raw text of a data URL.
+function menuIconHtml(icon, size){
+  var u = safeImgSrc(icon);
+  if (u) return '<img src="'+u+'" alt="" style="width:'+size+'px;height:'+size+'px;object-fit:cover;border-radius:'+Math.round(size/4)+'px;display:block;margin:0 auto">';
+  return esc(icon || '🍽️');
 }
 
 function saveMenu(id){
@@ -8635,6 +8668,10 @@ function saveMenu(id){
     if (mSaved) { if (halfVal > 0) mSaved.halfPrice = halfVal; else delete mSaved.halfPrice; }
   }
   if (autoStockOn()) saveRecipeFor(savedId, linkEntry);
+  var menuSize = JSON.stringify(db.menu).length;
+  if (menuSize > 900000) {
+    toast('⚠️ Menu ki photos ki jagah lagbhag bhar gayi hai — kuch purani photos hata kar emoji lagayein, warna cloud sync ruk sakta hai.','#FF6B35');
+  }
   save(); cloudSave('meta','menu',{items:db.menu}); closeModal(); renderMenuPage();
 }
 
@@ -11032,7 +11069,7 @@ function renderSmartSuggestions() {
   // Show top 6 menu items as quick-tap chips
   const top = db.menu.slice(0, 6);
   el.innerHTML = top.map(m =>
-    `<button class="smart-sug" onclick="quickAddSmartItem('${m.id}')">${m.icon||'🍽️'} ${esc(m.name)}</button>`
+    `<button class="smart-sug" onclick="quickAddSmartItem('${m.id}')">${safeImgSrc(m.icon) ? '🍽️' : esc(m.icon||'🍽️')} ${esc(m.name)}</button>`
   ).join('');
 }
 
@@ -11042,7 +11079,7 @@ function quickAddSmartItem(menuId) {
   if (existing) { existing.qty++; }
   else { order.items.push({ menuId, name: m.name, price: m.price, qty: 1 }); }
   renderOrderItems();
-  toast(`${m.icon||''} ${m.name} added!`);
+  toast(`${safeImgSrc(m.icon) ? '' : (m.icon||'')} ${m.name} added!`);
 }
 
 // ── Parse natural language order text ──────────────────
