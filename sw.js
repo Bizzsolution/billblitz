@@ -23,7 +23,7 @@
 //    the React <script> tags. An opaque (no-cors) cached copy cannot be
 //    used for a CORS/SRI request.
 
-const CACHE = 'atithibook-v5.21.1';
+const CACHE = 'atithibook-v5.37.0';
 const OFFLINE_URLS = [
   '/',
   '/index.html',
@@ -33,6 +33,8 @@ const OFFLINE_URLS = [
   '/jsQR.js',
   '/html2canvas.min.js',
   '/jspdf.umd.min.js',
+  '/zxing-reader.js',
+  '/zxing_reader.wasm',
   'https://unpkg.com/react@18.3.1/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js',
   'https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;600;700&family=Hind:wght@300;400;500;600;700&display=swap',
